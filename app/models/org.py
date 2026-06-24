@@ -14,9 +14,23 @@ class OrgDepartment(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True)
     name: Mapped[str] = mapped_column(Text, nullable=False)
     manager_user_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    parent_id: Mapped[str | None] = mapped_column(
+        String,
+        ForeignKey("org_departments.id"),
+        nullable=True,
+    )
     created_at: Mapped[str] = mapped_column(Text, nullable=False)
     updated_at: Mapped[str] = mapped_column(Text, nullable=False)
 
+    parent: Mapped[OrgDepartment | None] = relationship(
+        "OrgDepartment",
+        remote_side=[id],
+        back_populates="children",
+    )
+    children: Mapped[list[OrgDepartment]] = relationship(
+        "OrgDepartment",
+        back_populates="parent",
+    )
     teams: Mapped[list[OrgTeam]] = relationship(
         "OrgTeam",
         back_populates="department",
