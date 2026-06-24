@@ -103,9 +103,8 @@ bootstrap() {
     sudo useradd --system --home "$GE_HOME" --shell /usr/sbin/nologin "$GE_USER" \
       || sudo useradd --system --home "$GE_HOME" --shell /bin/false "$GE_USER"
   fi
-  sudo mkdir -p "$GE_HOME" "$APP_ROOT"
-  sudo mkdir -p "${HERMES_SHARED_ROOT}/goal-execution/data"
-  sudo chown -R "${GE_USER}:${GE_USER}" "$GE_HOME" "${HERMES_SHARED_ROOT}/goal-execution"
+  sudo mkdir -p "$GE_HOME" "$APP_ROOT" "${GE_HOME}/goal-execution/data"
+  sudo chown -R "${GE_USER}:${GE_USER}" "$GE_HOME"
   sudo mkdir -p /etc/goal-execution
   if [[ ! -f /etc/goal-execution/goal-execution.env ]]; then
     sudo install -m 0600 -o root -g root \
@@ -144,7 +143,7 @@ configure() {
   sudo cp "$GE_ENV" "${GE_ENV}.bak.$(date +%Y%m%d%H%M%S)" 2>/dev/null || true
   set_env_key "$GE_ENV" GOAL_EXECUTION_JWT_SECRET "$jwt"
   set_env_key "$GE_ENV" GOAL_EXECUTION_SERVICE_TOKEN "$ge_token"
-  set_env_key "$GE_ENV" GOAL_EXECUTION_DB_PATH "${HERMES_SHARED_ROOT}/goal-execution/data/ge.db"
+  set_env_key "$GE_ENV" GOAL_EXECUTION_DB_PATH "${GE_HOME}/goal-execution/data/ge.db"
   set_env_key "$GE_ENV" SKSTUDIO_INTERNAL_URL "http://127.0.0.1:8000"
   set_env_key "$GE_ENV" HOST "127.0.0.1"
   set_env_key "$GE_ENV" PORT "$GE_PORT"
@@ -180,7 +179,7 @@ start_service() {
   ensure_sudo
   check_env_file
   sudo chown -R "${GE_USER}:${GE_USER}" "$APP_ROOT" 2>/dev/null || true
-  sudo chown -R "${GE_USER}:${GE_USER}" "${HERMES_SHARED_ROOT}/goal-execution"
+  sudo chown -R "${GE_USER}:${GE_USER}" "${GE_HOME}/goal-execution" 2>/dev/null || true
   sudo systemctl enable goal-execution.service
   sudo systemctl restart goal-execution.service
   sudo systemctl is-active --quiet goal-execution.service || {
