@@ -64,14 +64,15 @@ read_env_value() {
 
 set_env_key() {
   local file=$1 key=$2 value=$3
-  if grep -qE "^${key}=" "$file" 2>/dev/null; then
-    local tmp
-    tmp="$(mktemp)"
-    awk -v k="$key" -v v="$value" 'BEGIN { FS="=" } $1 == k { print k "=" v; next } { print }' "$file" >"$tmp"
-    mv "$tmp" "$file"
+  local tmp
+  tmp="$(mktemp)"
+  if [[ -f "$file" ]]; then
+    grep -vE "^${key}=" "$file" >"$tmp" || true
   else
-    printf '%s=%s\n' "$key" "$value" >>"$file"
+    : >"$tmp"
   fi
+  printf '%s=%s\n' "$key" "$value" >>"$tmp"
+  mv "$tmp" "$file"
 }
 
 check_env_file() {
@@ -80,7 +81,7 @@ check_env_file() {
   if sudo grep -qE '^GOAL_EXECUTION_JWT_SECRET=(替换|change-me|\s*$)' "$GE_ENV" 2>/dev/null; then
     die "请在 $GE_ENV 设置 GOAL_EXECUTION_JWT_SECRET（与 skstudio JWT_SECRET 同值）"
   fi
-  if sudo grep -qE '^GOAL_EXECUTION_SERVICE_TOKEN=(替换|change-me|\s*$)' "$GE_ENV" 2>/dev/null; then
+  if sudo grep -qE '^GOAL_EXECUTION_SERVICE_TOKEN=(替换|change-me)\s*$' "$GE_ENV" 2>/dev/null; then
     die "请在 $GE_ENV 设置 GOAL_EXECUTION_SERVICE_TOKEN（与 skstudio 同值）"
   fi
 }
