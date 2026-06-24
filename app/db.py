@@ -2,16 +2,23 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Generator
 from contextlib import contextmanager
+from pathlib import Path
 
+from alembic import command
+from alembic.config import Config
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.config import get_settings
 
+logger = logging.getLogger(__name__)
+
 _engine = None
 _SessionLocal = None
+_migrations_applied = False
 
 
 class Base(DeclarativeBase):
@@ -50,8 +57,25 @@ def session_scope() -> Generator[Session, None, None]:
         session.close()
 
 
+def run_migrations() -> None:
+    """Apply Alembic revisions (001–003) to the configured DB."""
+    global _migrations_applied
+    if _migrations_applied:
+        return
+    settings = get_settings()
+    db_path = settings.goal_execution_db_path.expanduser().resolve()
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    repo_root = Path(__file__).resolve().parents[1]
+    cfg = Config(str(repo_root / "alembic.ini"))
+    cfg.set_main_option("sqlalchemy.url", f"sqlite:///{db_path}")
+    command.upgrade(cfg, "head")
+    _migrations_applied = True
+    logger.info("Alembic migrations applied (head)")
+
+
 def init_db() -> None:
     get_engine()
+    run_migrations()
 
 
 def db_ok() -> bool:
@@ -65,8 +89,9 @@ def db_ok() -> bool:
 
 
 def reset_engine_cache() -> None:
-    global _engine, _SessionLocal
+    global _engine, _SessionLocal, _migrations_applied
     if _engine is not None:
         _engine.dispose()
     _engine = None
     _SessionLocal = None
+    _migrations_applied = False

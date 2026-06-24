@@ -20,3 +20,6 @@ jobs:
 
       - name: Pytest
         run: pytest -v
+
+      - name: Smoke script (syntax)
+        run: bash -n scripts/ge-smoke.sh

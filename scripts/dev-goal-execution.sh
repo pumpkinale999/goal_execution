@@ -69,21 +69,44 @@ patch_env_key() {
   fi
 }
 
+sync_ge_service_token() {
+  local sk_backend="${SKSTUDIO_BACKEND:-$REPO_ROOT/../skstudio/backend}"
+  local sk_env="$sk_backend/.env"
+  local ge_env="$REPO_ROOT/.env"
+  local default_token="dev-ge-service-token"
+  local sk_token="" ge_token="" final=""
+
+  [[ -f "$sk_env" ]] && sk_token="$(read_env_value "$sk_env" GOAL_EXECUTION_SERVICE_TOKEN)"
+  [[ -f "$ge_env" ]] && ge_token="$(read_env_value "$ge_env" GOAL_EXECUTION_SERVICE_TOKEN)"
+
+  if [[ -n "$sk_token" ]]; then
+    final="$sk_token"
+  elif [[ -n "$ge_token" ]]; then
+    final="$ge_token"
+  else
+    final="$default_token"
+  fi
+
+  patch_env_key "$ge_env" GOAL_EXECUTION_SERVICE_TOKEN "$final"
+  if [[ -f "$sk_env" ]]; then
+    patch_env_key "$sk_env" GOAL_EXECUTION_SERVICE_TOKEN "$final"
+    log "已同步 GOAL_EXECUTION_SERVICE_TOKEN（goal_execution ↔ skstudio）"
+  else
+    log "已设置 GOAL_EXECUTION_SERVICE_TOKEN（skstudio .env 不存在，仅写入 goal_execution）"
+  fi
+}
+
 sync_from_skstudio() {
   local sk_backend="${SKSTUDIO_BACKEND:-$REPO_ROOT/../skstudio/backend}"
-  local src jwt token
-  src="$sk_backend/.env"
+  local src="$sk_backend/.env"
   [[ -f "$src" ]] || return 0
+  local jwt
   jwt="$(read_env_value "$src" JWT_SECRET)"
-  token="$(read_env_value "$src" GOAL_EXECUTION_SERVICE_TOKEN)"
   if [[ -n "$jwt" ]]; then
     patch_env_key "$REPO_ROOT/.env" GOAL_EXECUTION_JWT_SECRET "$jwt"
     log "已从 skstudio 同步 GOAL_EXECUTION_JWT_SECRET"
   fi
-  if [[ -n "$token" ]]; then
-    patch_env_key "$REPO_ROOT/.env" GOAL_EXECUTION_SERVICE_TOKEN "$token"
-    log "已从 skstudio 同步 GOAL_EXECUTION_SERVICE_TOKEN"
-  fi
+  sync_ge_service_token
 }
 
 ensure_dotenv() {
@@ -158,6 +181,12 @@ main() {
   activate_venv
   ensure_pip_deps
   ensure_dotenv
+  set -a
+  # shellcheck disable=SC1091
+  source "$REPO_ROOT/.env"
+  set +a
+  log "运行 Alembic 迁移…"
+  python -m alembic upgrade head
   run_uvicorn
 }
 

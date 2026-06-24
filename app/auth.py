@@ -32,6 +32,8 @@ def decode_jwt_user(token: str) -> AuthUser:
             detail={"detail": "unauthorized"},
         ) from exc
     uid = payload.get("uid") or payload.get("sub")
+    if isinstance(uid, int):
+        uid = str(uid)
     if not isinstance(uid, str) or not uid:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

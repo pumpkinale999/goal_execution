@@ -1,9 +1,600 @@
-"""Goal & execution REST routes (P0b–P1 · §4.2–§4.4)."""
+"""Goal & execution REST routes (P0b–P1 · §4)."""
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from typing import Annotated, Any
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.orm import Session, joinedload
+
+from app.auth import AuthUser
+from app.constants import GE_DEFAULT_OBJECTIVE_ID, GE_DEFAULT_PROGRAM_ID
+from app.deps import get_current_user, get_db, require_service_user
+from app.models.ge import GeObjective, GeProgram, GeProject
+from app.services.ge_access import can_read_project, filter_projects_for_user
+from app.services.ge_bootstrap import ensure_ge_bootstrap
+from app.services.ge_graph import build_project_graph, load_project_graph
+from app.services.ge_graph_edit import (
+    add_gate_item,
+    add_phase,
+    add_prerequisite_link,
+    add_produce_link,
+    add_task,
+    delete_gate_item,
+    delete_phase,
+    delete_task,
+    graph_deletable_flag,
+    graph_editable_flag,
+    patch_gate_item,
+    patch_phase,
+    patch_task,
+    remove_prerequisite_link,
+    remove_produce_link,
+    reorder_phase_tasks,
+)
+from app.services.ge_notifications import list_notifications, mark_all_notifications_read, mark_notification_read
+from app.services.ge_orchestrator import (
+    bind_project_note_id,
+    done_task,
+    patch_project,
+    reject_gate_item,
+    sign_gate_item,
+    soft_delete_project,
+    start_task,
+    submit_gate_item,
+)
+from app.services.ge_strategic import (
+    create_objective,
+    create_program,
+    delete_objective,
+    delete_program,
+    patch_objective,
+    patch_program,
+)
+from app.services.ge_project_create import create_project
+from app.services.ge_queues import build_queues
+from app.services.ge_m12_read import get_gate_item_context, get_task_context, list_audit_events
 
 router = APIRouter(prefix="/ge", tags=["ge"])
 
-# M1: routes land per Milestone M2–M4 (bootstrap · CRUD · orchestrator).
+
+@router.get("/objectives")
+def list_objectives(
+    db: Annotated[Session, Depends(get_db)],
+    _user: Annotated[AuthUser, Depends(get_current_user)],
+) -> list[dict[str, Any]]:
+    ensure_ge_bootstrap(db)
+    objectives = (
+        db.query(GeObjective)
+        .options(joinedload(GeObjective.programs))
+        .order_by(GeObjective.name)
+        .all()
+    )
+
+    def program_meta(program: GeProgram) -> dict[str, Any]:
+        return {
+            "id": program.id,
+            "name": program.name,
+            "objective_id": program.objective_id,
+            "owner_user_id": program.owner_user_id,
+            "is_default": bool(program.is_default),
+        }
+
+    def build_node(obj: GeObjective) -> dict[str, Any]:
+        children = (
+            db.query(GeObjective)
+            .filter(GeObjective.parent_id == obj.id)
+            .order_by(GeObjective.name)
+            .all()
+        )
+        programs = (
+            []
+            if obj.level == "company"
+            else [program_meta(p) for p in obj.programs if p.is_default or p.objective_id == obj.id]
+        )
+        return {
+            "id": obj.id,
+            "name": obj.name,
+            "level": obj.level,
+            "owner_user_id": obj.owner_user_id,
+            "parent_id": obj.parent_id,
+            "is_default": bool(obj.is_default),
+            "programs": programs,
+            "children": [build_node(child) for child in children],
+        }
+
+    return [build_node(obj) for obj in objectives if obj.parent_id is None]
+
+
+@router.get("/programs")
+def list_programs(
+    db: Annotated[Session, Depends(get_db)],
+    _user: Annotated[AuthUser, Depends(get_current_user)],
+) -> list[dict[str, Any]]:
+    ensure_ge_bootstrap(db)
+    programs = db.query(GeProgram).order_by(GeProgram.name).all()
+    return [
+        {
+            "id": p.id,
+            "name": p.name,
+            "objective_id": p.objective_id,
+            "owner_user_id": p.owner_user_id,
+            "is_default": bool(p.is_default),
+        }
+        for p in programs
+    ]
+
+
+@router.get("/programs/{program_id}")
+def get_program(
+    program_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    ensure_ge_bootstrap(db)
+    program = db.get(GeProgram, program_id)
+    if program is None:
+        raise HTTPException(status_code=404, detail={"detail": "not_found"})
+    projects = (
+        db.query(GeProject)
+        .filter(GeProject.program_id == program_id, GeProject.deleted_at.is_(None))
+        .order_by(GeProject.name)
+        .all()
+    )
+    visible = filter_projects_for_user(db, projects, user)
+    return {
+        "id": program.id,
+        "name": program.name,
+        "objective_id": program.objective_id,
+        "owner_user_id": program.owner_user_id,
+        "is_default": bool(program.is_default),
+        "projects": [
+            {
+                "id": p.id,
+                "name": p.name,
+                "status": p.status,
+                "pm_user_id": p.pm_user_id,
+                "program_id": p.program_id,
+            }
+            for p in visible
+        ],
+    }
+
+
+@router.get("/projects")
+def list_projects(
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> list[dict[str, Any]]:
+    projects = (
+        db.query(GeProject)
+        .filter(GeProject.deleted_at.is_(None))
+        .order_by(GeProject.updated_at.desc())
+        .all()
+    )
+    visible = filter_projects_for_user(db, projects, user)
+    return [
+        {
+            "id": p.id,
+            "name": p.name,
+            "status": p.status,
+            "pm_user_id": p.pm_user_id,
+            "program_id": p.program_id,
+            "created_by_user_id": p.created_by_user_id,
+            "project_note_id": p.project_note_id,
+        }
+        for p in visible
+    ]
+
+
+@router.post("/projects", status_code=status.HTTP_201_CREATED)
+def post_project(
+    body: dict[str, Any],
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    if user.auth_method != "jwt":
+        raise HTTPException(status_code=403, detail={"detail": "service_token_required"})
+    return create_project(db, actor_user_id=user.user_id, body=body)
+
+
+@router.get("/projects/{project_id}")
+def get_project(
+    project_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    project = db.get(GeProject, project_id)
+    if project is None or project.deleted_at is not None:
+        raise HTTPException(status_code=404, detail={"detail": "project_not_found"})
+    if not can_read_project(db, project, user):
+        raise HTTPException(status_code=403, detail={"detail": "not_project_participant"})
+    return {
+        "id": project.id,
+        "name": project.name,
+        "status": project.status,
+        "pm_user_id": project.pm_user_id,
+        "program_id": project.program_id,
+        "created_by_user_id": project.created_by_user_id,
+        "project_note_id": project.project_note_id,
+    }
+
+
+@router.get("/projects/{project_id}/graph")
+def get_project_graph(
+    project_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    project = load_project_graph(db, project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail={"detail": "project_not_found"})
+    if not can_read_project(db, project, user):
+        raise HTTPException(status_code=403, detail={"detail": "not_project_participant"})
+    graph = build_project_graph(db, project)
+    graph["graph_editable"] = graph_editable_flag(db, project, user)
+    graph["graph_deletable"] = graph_deletable_flag(db, project, user)
+    return graph
+
+
+@router.patch("/projects/{project_id}")
+def patch_project_route(
+    project_id: str,
+    body: dict[str, Any],
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    return patch_project(db, project_id, user, body)
+
+
+@router.patch("/projects/{project_id}/project-note")
+def bind_project_note_route(
+    project_id: str,
+    body: dict[str, Any],
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(require_service_user)],
+) -> dict[str, Any]:
+    return bind_project_note_id(db, project_id, user, body)
+
+
+@router.delete("/projects/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_project(
+    project_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> None:
+    soft_delete_project(db, project_id, user)
+
+
+@router.post("/projects/{project_id}/phases")
+def post_project_phase(
+    project_id: str,
+    body: dict[str, Any],
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    return add_phase(db, project_id, body, user)
+
+
+@router.patch("/phases/{phase_id}")
+def patch_phase_route(
+    phase_id: str,
+    body: dict[str, Any],
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    return patch_phase(db, phase_id, body, user)
+
+
+@router.delete("/phases/{phase_id}")
+def delete_phase_route(
+    phase_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    return delete_phase(db, phase_id, user)
+
+
+@router.post("/projects/{project_id}/phases/{phase_id}/tasks")
+def post_project_phase_task(
+    project_id: str,
+    phase_id: str,
+    body: dict[str, Any],
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    return add_task(db, project_id, phase_id, body, user)
+
+
+@router.put("/projects/{project_id}/phases/{phase_id}/tasks/order")
+def put_project_phase_task_order(
+    project_id: str,
+    phase_id: str,
+    body: dict[str, Any],
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    return reorder_phase_tasks(db, project_id, phase_id, body, user)
+
+
+@router.post("/projects/{project_id}/phases/{phase_id}/gate-items")
+def post_project_phase_gate_item(
+    project_id: str,
+    phase_id: str,
+    body: dict[str, Any],
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    return add_gate_item(db, project_id, phase_id, body, user)
+
+
+@router.patch("/tasks/{task_id}")
+def patch_task_route(
+    task_id: str,
+    body: dict[str, Any],
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    return patch_task(db, task_id, body, user)
+
+
+@router.delete("/tasks/{task_id}")
+def delete_task_route(
+    task_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    return delete_task(db, task_id, user)
+
+
+@router.post("/tasks/{task_id}/produces")
+def post_task_produce(
+    task_id: str,
+    body: dict[str, Any],
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    gate_item_id = str(body.get("gate_item_id") or "")
+    if not gate_item_id:
+        raise HTTPException(status_code=400, detail={"detail": "invalid_request"})
+    return add_produce_link(db, task_id, gate_item_id, user)
+
+
+@router.delete("/tasks/{task_id}/produces/{gate_item_id}")
+def delete_task_produce(
+    task_id: str,
+    gate_item_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    return remove_produce_link(db, task_id, gate_item_id, user)
+
+
+@router.post("/tasks/{task_id}/prerequisites")
+def post_task_prerequisite(
+    task_id: str,
+    body: dict[str, Any],
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    gate_item_id = str(body.get("gate_item_id") or "")
+    if not gate_item_id:
+        raise HTTPException(status_code=400, detail={"detail": "invalid_request"})
+    return add_prerequisite_link(db, task_id, gate_item_id, user)
+
+
+@router.delete("/tasks/{task_id}/prerequisites/{gate_item_id}")
+def delete_task_prerequisite(
+    task_id: str,
+    gate_item_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    return remove_prerequisite_link(db, task_id, gate_item_id, user)
+
+
+@router.post("/gates/{gate_id}/includes")
+def post_gate_include(
+    gate_id: str,
+    body: dict[str, Any],
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    del gate_id, body, db, user
+    raise HTTPException(status_code=410, detail={"detail": "gate_includes_automatic"})
+
+
+@router.delete("/gates/{gate_id}/includes/{gate_item_id}")
+def delete_gate_include(
+    gate_id: str,
+    gate_item_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    del gate_id, gate_item_id, db, user
+    raise HTTPException(status_code=410, detail={"detail": "gate_includes_automatic"})
+
+
+@router.post("/gate-items/{gate_item_id}/submit")
+def post_submit(
+    gate_item_id: str,
+    body: dict[str, Any],
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    return submit_gate_item(db, gate_item_id, user, body)
+
+
+@router.post("/gate-items/{gate_item_id}/sign")
+def post_sign(
+    gate_item_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    return sign_gate_item(db, gate_item_id, user)
+
+
+@router.patch("/gate-items/{gate_item_id}")
+def patch_gate_item_route(
+    gate_item_id: str,
+    body: dict[str, Any],
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    return patch_gate_item(db, gate_item_id, body, user)
+
+
+@router.delete("/gate-items/{gate_item_id}")
+def delete_gate_item_route(
+    gate_item_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    return delete_gate_item(db, gate_item_id, user)
+
+
+@router.post("/gate-items/{gate_item_id}/reject")
+def post_reject(
+    gate_item_id: str,
+    body: dict[str, Any],
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    return reject_gate_item(db, gate_item_id, user, body)
+
+
+@router.post("/tasks/{task_id}/start")
+def post_start(
+    task_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    return start_task(db, task_id, user)
+
+
+@router.post("/tasks/{task_id}/done")
+def post_done(
+    task_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    return done_task(db, task_id, user)
+
+
+@router.get("/me/queues")
+def get_my_queues(
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    return build_queues(db, user.user_id)
+
+
+@router.get("/me/execution-notifications")
+def get_my_notifications(
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+    unread_only: bool = Query(default=False),
+) -> list[dict[str, Any]]:
+    return list_notifications(db, user.user_id, unread_only=unread_only)
+
+
+@router.post("/me/execution-notifications/read-all")
+def mark_all_my_notifications_read(
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, int]:
+    return mark_all_notifications_read(db, user.user_id)
+
+
+@router.post("/me/execution-notifications/{notification_id}/read")
+def mark_my_notification_read(
+    notification_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    return mark_notification_read(db, user.user_id, notification_id)
+
+
+@router.get("/audit-events")
+def get_audit_events(
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+    entity_type: str = Query(...),
+    entity_id: str = Query(...),
+    limit: int = Query(default=50, ge=1, le=100),
+) -> list[dict[str, Any]]:
+    return list_audit_events(db, entity_type=entity_type, entity_id=entity_id, limit=limit, user=user)
+
+
+@router.get("/tasks/{task_id}")
+def get_task(
+    task_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    return get_task_context(db, task_id, user)
+
+
+@router.get("/gate-items/{gate_item_id}")
+def get_gate_item(
+    gate_item_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    return get_gate_item_context(db, gate_item_id, user)
+
+
+@router.post("/objectives", status_code=status.HTTP_201_CREATED)
+def post_objective(
+    body: dict[str, Any],
+    db: Annotated[Session, Depends(get_db)],
+    _user: Annotated[AuthUser, Depends(require_service_user)],
+) -> dict[str, Any]:
+    return create_objective(db, body)
+
+
+@router.patch("/objectives/{objective_id}")
+def patch_objective_route(
+    objective_id: str,
+    body: dict[str, Any],
+    db: Annotated[Session, Depends(get_db)],
+    _user: Annotated[AuthUser, Depends(require_service_user)],
+) -> dict[str, Any]:
+    return patch_objective(db, objective_id, body)
+
+
+@router.post("/programs", status_code=status.HTTP_201_CREATED)
+def post_program(
+    body: dict[str, Any],
+    db: Annotated[Session, Depends(get_db)],
+    _user: Annotated[AuthUser, Depends(require_service_user)],
+) -> dict[str, Any]:
+    return create_program(db, body)
+
+
+@router.patch("/programs/{program_id}")
+def patch_program_route(
+    program_id: str,
+    body: dict[str, Any],
+    db: Annotated[Session, Depends(get_db)],
+    _user: Annotated[AuthUser, Depends(require_service_user)],
+) -> dict[str, Any]:
+    return patch_program(db, program_id, body)
+
+
+@router.delete("/objectives/{objective_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_objective_route(
+    objective_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    _user: Annotated[AuthUser, Depends(require_service_user)],
+) -> None:
+    delete_objective(db, objective_id)
+
+
+@router.delete("/programs/{program_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_program_route(
+    program_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    _user: Annotated[AuthUser, Depends(require_service_user)],
+) -> None:
+    delete_program(db, program_id)

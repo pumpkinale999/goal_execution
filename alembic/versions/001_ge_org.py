@@ -1,4 +1,4 @@
-"""P0 org tables placeholder (Milestone M1).
+"""P0 org tables (§2.4).
 
 Revision ID: 001_ge_org
 Revises:
@@ -16,9 +16,44 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Milestone M1: org_departments, org_teams, user_org_profiles (§2.4)
-    pass
+    op.execute(
+        """
+        CREATE TABLE IF NOT EXISTS org_departments (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          manager_user_id TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )
+        """
+    )
+    op.execute(
+        """
+        CREATE TABLE IF NOT EXISTS org_teams (
+          id TEXT PRIMARY KEY,
+          department_id TEXT NOT NULL REFERENCES org_departments(id),
+          name TEXT NOT NULL,
+          lead_user_id TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )
+        """
+    )
+    op.execute(
+        """
+        CREATE TABLE IF NOT EXISTS user_org_profiles (
+          user_id TEXT PRIMARY KEY,
+          department_id TEXT REFERENCES org_departments(id),
+          team_id TEXT REFERENCES org_teams(id),
+          manager_user_id TEXT,
+          proficiency_level TEXT,
+          updated_at TEXT NOT NULL
+        )
+        """
+    )
 
 
 def downgrade() -> None:
-    pass
+    op.execute("DROP TABLE IF EXISTS user_org_profiles")
+    op.execute("DROP TABLE IF EXISTS org_teams")
+    op.execute("DROP TABLE IF EXISTS org_departments")

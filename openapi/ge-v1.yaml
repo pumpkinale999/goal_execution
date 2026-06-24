@@ -4,9 +4,14 @@ info:
   description: |
     Normative OpenAPI for P1 project governance domain (v1.1.3 · P1 spec frozen).
     Full spec: docs/目标与执行及其组织支撑(实现与测试).md §4.9
-    Business rules: docs/目标与执行及其组织支撑(需求).md v2.1.3
+    Business rules: docs/目标与执行及其组织支撑(需求).md v2.7.2
+    M20: system lifecycle tasks (启动项目/结项复盘/确认结项) · is_system on Task/GateItem
+    M20b: 结项复盘 auto-seeded PM sign route (确认结项 prerequisite) · system_sign_route_immutable
+    M21: permission simplification · PM=reviewer governance · not_project_governor
+    v1.10.0: gate.includes auto-sync · POST/DELETE includes → 410 · Canvas produce/prerequisite only
+    v1.10.2: end closure sign route auto-seed · protected prerequisite edge
     Out of scope: skstudio BFF /api/v1/org|ge/* and POST /internal/ge/ws-fanout (see impl doc §4.0 · §5.4)
-  version: 1.0.5
+  version: 1.10.2
 servers:
   - url: /api/v1
     description: goal_execution service (JWT participant + service governance via skstudio BFF)
@@ -130,10 +135,16 @@ paths:
           $ref: '#/components/responses/NotFound'
     patch:
       operationId: patchGeProject
-      summary: Update name or pm_user_id
+      summary: Update name or pm_user_id (M19 name syncs project Note title via BFF)
       tags: [ge-projects]
       parameters:
         - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchProjectRequest'
       responses:
         '200':
           description: Updated
@@ -141,9 +152,11 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
     delete:
       operationId: deleteGeProject
-      summary: Soft-delete empty draft project (creator only)
+      summary: Soft-delete empty project (PM or reviewer governance · project_is_empty)
       tags: [ge-projects]
       parameters:
         - $ref: '#/components/parameters/ProjectId'
@@ -156,22 +169,40 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
-  /ge/projects/{project_id}/activate:
-    post:
-      operationId: activateGeProject
-      summary: draft to active (pm only)
+  /ge/projects/{project_id}/project-note:
+    patch:
+      operationId: bindGeProjectNote
+      summary: Bind project_note_id for legacy backfill (service token only · GE-T50)
       tags: [ge-projects]
       parameters:
         - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [project_note_id]
+              properties:
+                project_note_id:
+                  type: string
+                  format: uuid
+                  description: KB note stable id; only when current value is null
       responses:
         '200':
-          description: Activated
+          description: Project with bound note
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          $ref: '#/components/responses/Conflict'
+          description: project_note_already_bound
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
   /ge/projects/{project_id}/graph:
     get:
       operationId: getGeProjectGraph
@@ -190,10 +221,132 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+  /ge/projects/{project_id}/phases/{phase_id}/tasks:
+    post:
+      operationId: addGePhaseTask
+      summary: Add task to phase (pm; assignee_user_id required)
+      description: |
+        Creates a blocked task in the given phase. assignee_user_id is required;
+        the server does not fall back to pm_user_id when omitted or empty.
+      tags: [ge-tasks]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/PhaseId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddPhaseTaskRequest'
+      responses:
+        '200':
+          description: Updated graph
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectGraph'
+        '400':
+          description: invalid_assignee or invalid_request
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /ge/projects/{project_id}/phases/{phase_id}/gate-items:
+    post:
+      operationId: addGePhaseGateItem
+      summary: Add gate item to phase (pm)
+      tags: [ge-gate-items]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/PhaseId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddPhaseGateItemRequest'
+      responses:
+        '200':
+          description: Updated graph
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectGraph'
+        '400':
+          description: invalid_request or schedule validation
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /ge/phases/{phase_id}:
+    patch:
+      operationId: patchGePhase
+      summary: Update business phase name and planned window (pm)
+      tags: [ge-phases]
+      parameters:
+        - $ref: '#/components/parameters/PhaseId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                planned_start:
+                  type: string
+                  format: date
+                  nullable: true
+                planned_end:
+                  type: string
+                  format: date
+                  nullable: true
+      responses:
+        '200':
+          description: Updated graph
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectGraph'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: deleteGePhase
+      summary: Delete empty non-active business phase (pm)
+      tags: [ge-phases]
+      parameters:
+        - $ref: '#/components/parameters/PhaseId'
+      responses:
+        '200':
+          description: Updated graph
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectGraph'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /ge/tasks/{task_id}:
+    get:
+      operationId: getGeTaskContext
+      summary: Task context for deep links (M12)
+      tags: [ge-tasks]
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      responses:
+        '200':
+          description: Task with project_id and phase_id
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
     patch:
       operationId: patchGeTask
-      summary: Update assignee_user_id or title (pm)
+      summary: Update assignee_user_id, title, or phase_id (pm)
       tags: [ge-tasks]
       parameters:
         - $ref: '#/components/parameters/TaskId'
@@ -208,6 +361,9 @@ paths:
                   type: string
                 title:
                   type: string
+                phase_id:
+                  type: string
+                  format: uuid
       responses:
         '200':
           description: Updated task
@@ -215,6 +371,21 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: deleteGeTask
+      summary: Delete blocked task with no links (pm)
+      tags: [ge-tasks]
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      responses:
+        '200':
+          description: Updated graph
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /ge/tasks/{task_id}/start:
     post:
       operationId: startGeTask
@@ -243,6 +414,76 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/WriteOperationResponse'
+  /ge/gate-items/{gate_item_id}:
+    get:
+      operationId: getGeGateItemContext
+      summary: Gate item context for deep links (M12)
+      tags: [ge-gate-items]
+      parameters:
+        - $ref: '#/components/parameters/GateItemId'
+      responses:
+        '200':
+          description: Gate item with project_id, phase_id, gate_id
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      operationId: patchGeGateItem
+      summary: Update gate item name, phase_id, planned_due, form, or definition fields (pm; draft only for form)
+      tags: [ge-gate-items]
+      parameters:
+        - $ref: '#/components/parameters/GateItemId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                phase_id:
+                  type: string
+                  format: uuid
+                planned_due:
+                  type: string
+                  format: date
+                form:
+                  type: string
+                  enum: [material, metric, status]
+                target_value:
+                  oneOf:
+                    - type: number
+                    - type: string
+                    - type: boolean
+                operator:
+                  type: string
+                  enum: ['>=', '<=', '==', '>', '<']
+                target_state:
+                  type: string
+      responses:
+        '200':
+          description: Updated graph
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: deleteGeGateItem
+      summary: Delete draft gate item with no links (pm)
+      tags: [ge-gate-items]
+      parameters:
+        - $ref: '#/components/parameters/GateItemId'
+      responses:
+        '200':
+          description: Updated graph
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /ge/gate-items/{gate_item_id}/submit:
     post:
       operationId: submitGeGateItem
@@ -310,6 +551,36 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/WriteOperationResponse'
+  /ge/audit-events:
+    get:
+      operationId: listGeAuditEvents
+      summary: List audit events for an entity (M12)
+      tags: [ge-audit]
+      parameters:
+        - name: entity_type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [task, gate_item]
+        - name: entity_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 100
+      responses:
+        '200':
+          description: Audit event list
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /ge/me/queues:
     get:
       operationId: getGeMeQueues
@@ -335,6 +606,31 @@ paths:
       responses:
         '200':
           description: Notification list
+  /ge/me/execution-notifications/read-all:
+    post:
+      operationId: markAllGeExecutionNotificationsRead
+      summary: Mark all phase progress notifications read
+      tags: [ge-notifications]
+      responses:
+        '200':
+          description: Updated count
+  /ge/me/execution-notifications/{notification_id}/read:
+    post:
+      operationId: markGeExecutionNotificationRead
+      summary: Mark one notification read
+      tags: [ge-notifications]
+      parameters:
+        - name: notification_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Notification marked read
+        '404':
+          $ref: '#/components/responses/NotFound'
 components:
   parameters:
     ProjectId:
@@ -353,6 +649,13 @@ components:
         format: uuid
     GateItemId:
       name: gate_item_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    PhaseId:
+      name: phase_id
       in: path
       required: true
       schema:
@@ -403,7 +706,15 @@ components:
       properties:
         detail:
           type: string
-          description: e.g. project_not_found, gate_item_orphan_signer
+          description: e.g. project_not_found, gate_item_orphan_signer, note_title_conflict, project_note_required
+    PatchProjectRequest:
+      type: object
+      minProperties: 1
+      properties:
+        name:
+          type: string
+        pm_user_id:
+          type: string
     CreateProjectRequest:
       type: object
       required: [name, pm_user_id, phases]
@@ -415,6 +726,10 @@ components:
         program_id:
           type: string
           format: uuid
+        project_note_id:
+          type: string
+          format: uuid
+          description: M19 · KB note uuid · set by BFF after note creation
         phases:
           type: array
           minItems: 1
@@ -474,9 +789,41 @@ components:
           items:
             type: string
           description: gate_item keys in create request only
+    AddPhaseTaskRequest:
+      type: object
+      required: [assignee_user_id]
+      properties:
+        title:
+          type: string
+          description: Defaults to 新任务 when omitted
+        assignee_user_id:
+          type: string
+          description: Required; server does not fall back to pm_user_id
+    AddPhaseGateItemRequest:
+      type: object
+      required: [planned_due]
+      properties:
+        name:
+          type: string
+        planned_due:
+          type: string
+          format: date
+        form:
+          type: string
+          enum: [material, metric, status]
+          default: material
+        target_value:
+          oneOf:
+            - type: number
+            - type: string
+        operator:
+          type: string
+          enum: ['>=', '<=', '==', '>', '<']
+        target_state:
+          type: string
     CreateProjectResponse:
       type: object
-      required: [id, name, status, program_id, pm_user_id, created_by_user_id, graph_summary]
+      required: [id, name, status, program_id, pm_user_id, created_by_user_id, project_note_id, graph_summary]
       properties:
         id:
           type: string
@@ -493,6 +840,10 @@ components:
           type: string
         created_by_user_id:
           type: string
+        project_note_id:
+          type: string
+          format: uuid
+          description: Bound project Note in 项目管理 topic
         graph_summary:
           type: object
           properties:
@@ -528,6 +879,11 @@ components:
           type: string
         created_by_user_id:
           type: string
+        project_note_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: M19 · kb note uuid · null only for pre-M19 legacy rows
     ProgramMetadata:
       type: object
       required: [id, name, objective_id, is_default]
@@ -613,6 +969,14 @@ components:
           type: string
         status:
           type: string
+        planned_start:
+          type: string
+          format: date
+          nullable: true
+        planned_end:
+          type: string
+          format: date
+          nullable: true
         gate:
           type: object
           required: [id, is_open]
@@ -653,10 +1017,32 @@ components:
         rejected_by:
           type: string
           nullable: true
+        planned_due:
+          type: string
+          format: date
+          nullable: true
+        submitted_at:
+          type: string
+          format: date-time
+          nullable: true
+        signed_at:
+          type: string
+          format: date-time
+          nullable: true
+        rejected_at:
+          type: string
+          format: date-time
+          nullable: true
+        reject_reason:
+          type: string
+          nullable: true
         eligible_signers:
           type: array
           items:
             type: string
+        is_system:
+          type: boolean
+          description: M20 built-in lifecycle gate item; immutable structure
     TaskGraph:
       type: object
       description: produces/prerequisites are ge_gate_items.id (UUID), not create-request keys
@@ -684,6 +1070,9 @@ components:
           items:
             type: string
             format: uuid
+        is_system:
+          type: boolean
+          description: M20 built-in lifecycle task; title/phase immutable; 确认结项 assignee follows pm_user_id (system_sign_route_immutable on assignee patch / prerequisite delete)
     MeQueuesResponse:
       type: object
       required: [submit, sign, ready_tasks]
