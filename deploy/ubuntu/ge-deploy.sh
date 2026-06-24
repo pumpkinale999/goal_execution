@@ -62,6 +62,14 @@ read_env_value() {
   grep -E "^${key}=" "$file" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r' || true
 }
 
+is_placeholder_token() {
+  local value="${1:-}"
+  [[ -z "$value" ]] && return 0
+  [[ "$value" == *"替换"* ]] && return 0
+  [[ "$value" == *"change-me"* ]] && return 0
+  ! printf '%s' "$value" | LC_ALL=C grep -q '^[A-Za-z0-9._-]\+$'
+}
+
 set_env_key() {
   local file=$1 key=$2 value=$3
   local tmp
@@ -78,11 +86,13 @@ set_env_key() {
 check_env_file() {
   ensure_sudo
   sudo test -f "$GE_ENV" || die "缺少 $GE_ENV（先 bootstrap 或 configure）"
-  if sudo grep -qE '^GOAL_EXECUTION_JWT_SECRET=(替换|change-me|\s*$)' "$GE_ENV" 2>/dev/null; then
+  if sudo grep -qE '^GOAL_EXECUTION_JWT_SECRET=(替换|change-me)\s*$' "$GE_ENV" 2>/dev/null; then
     die "请在 $GE_ENV 设置 GOAL_EXECUTION_JWT_SECRET（与 skstudio JWT_SECRET 同值）"
   fi
-  if sudo grep -qE '^GOAL_EXECUTION_SERVICE_TOKEN=(替换|change-me)\s*$' "$GE_ENV" 2>/dev/null; then
-    die "请在 $GE_ENV 设置 GOAL_EXECUTION_SERVICE_TOKEN（与 skstudio 同值）"
+  local token_line
+  token_line="$(sudo grep -E '^GOAL_EXECUTION_SERVICE_TOKEN=' "$GE_ENV" 2>/dev/null | tail -1 | cut -d= -f2- || true)"
+  if is_placeholder_token "$token_line"; then
+    die "请在 $GE_ENV 设置 ASCII GOAL_EXECUTION_SERVICE_TOKEN（运行 ge-deploy configure）"
   fi
 }
 
@@ -130,6 +140,8 @@ configure() {
 
   sk_token="$(read_env_value "$SKSTUDIO_ENV" GOAL_EXECUTION_SERVICE_TOKEN)"
   ge_token="$(read_env_value "$GE_ENV" GOAL_EXECUTION_SERVICE_TOKEN)"
+  if is_placeholder_token "$sk_token"; then sk_token=""; fi
+  if is_placeholder_token "$ge_token"; then ge_token=""; fi
   if [[ -z "$sk_token" && -z "$ge_token" ]]; then
     sk_token="$(openssl rand -hex 24)"
     ge_token="$sk_token"
