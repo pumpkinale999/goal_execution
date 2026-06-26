@@ -14,7 +14,6 @@ from app.services.ge_access import can_govern_project, can_read_project, require
 from app.services.ge_graph import (
     apply_phase_transition,
     eligible_signers,
-    gate_is_open,
     load_project_graph,
     now_iso,
     project_is_empty,
@@ -23,9 +22,8 @@ from app.services.ge_graph import (
     recompute_task_status,
     write_operation_response,
 )
-from app.services.ge_notifications import upsert_phase_notifications
 from app.services.ge_system_tasks import sync_system_end_sign_task_assignee
-from app.services.ge_ws_callback import dispatch_ws_events
+from app.services.ge_ws_callback import dispatch_deviation_personal_assistant
 
 
 def _require_active_project(project: GeProject) -> None:
@@ -182,7 +180,13 @@ def submit_gate_item(
     produce_task = db.get(GeTask, produce_rows[0].task_id)
     if produce_task is None or not _can_act_as_task_assignee(project, produce_task, user):
         raise HTTPException(status_code=403, detail={"detail": "not_assignee"})
-    if item.status not in ("draft", "rejected"):
+    from app.services.ge_deviations import active_deviation_for_gate_item, assert_deviation_not_open_for_submit
+
+    dev = assert_deviation_not_open_for_submit(db, item.id)
+    if item.status == "deviation":
+        if dev is None or dev.status != "active":
+            raise HTTPException(status_code=409, detail={"detail": "gate_item_not_submittable"})
+    elif item.status not in ("draft", "rejected"):
         raise HTTPException(status_code=409, detail={"detail": "gate_item_not_submittable"})
     from app.services.ge_gate_item_payload import validate_submit_payload
 
@@ -217,17 +221,6 @@ def submit_gate_item(
     gate_events = recompute_gate_and_phases(db, project.id)
     affected = recompute_task_status(db, project.id) + affected
     db.commit()
-    ws_payload = {
-        "event": "ge.gate_item.submitted",
-        "target_user_ids": signers,
-        "payload": {
-            "gate_item_id": item.id,
-            "project_id": project.id,
-            "gate_item_name": item.name,
-            "submitter_user_id": user.user_id,
-        },
-    }
-    dispatch_ws_events(db, [ws_payload])
     return write_operation_response(
         db,
         project=project,
@@ -235,6 +228,7 @@ def submit_gate_item(
         affected_tasks=affected,
         phase=phase,
         gate=gate,
+        deviation=dev if dev and dev.status in ("open", "active") else None,
     )
 
 
@@ -253,12 +247,17 @@ def sign_gate_item(db: Session, gate_item_id: str, user: AuthUser) -> dict[str, 
     _require_active_project(project)
     if not _can_act_as_signer(db, project, item.id, user):
         raise HTTPException(status_code=403, detail={"detail": "not_eligible_signer"})
-    was_open = gate_is_open(db, gate) if gate else False
     now = now_iso()
     item.status = "signed"
     item.signed_by = user.user_id
     item.signed_at = now
     item.updated_at = now
+    from app.services.ge_deviations import active_deviation_for_gate_item, close_deviation_on_sign
+
+    active_dev = active_deviation_for_gate_item(db, item.id)
+    closed_notify = None
+    if active_dev is not None:
+        closed_notify = close_deviation_on_sign(db, active_dev, item, user.user_id)
     record_audit(
         db,
         actor_user_id=user.user_id,
@@ -268,33 +267,27 @@ def sign_gate_item(db: Session, gate_item_id: str, user: AuthUser) -> dict[str, 
         payload={},
     )
     affected = recompute_task_status(db, project.id)
-    gate_events = recompute_gate_and_phases(db, project.id)
+    recompute_gate_and_phases(db, project.id)
     affected2 = recompute_task_status(db, project.id)
     affected.extend(affected2)
     db.commit()
-    ws_events = []
-    for ev in gate_events.get("events", []):
-        participants = _participant_ids(db, project)
-        ws_events.append(
-            {
-                "event": ev["event"],
-                "target_user_ids": sorted(participants),
-                "payload": ev,
-            }
+    if closed_notify:
+        dispatch_deviation_personal_assistant(
+            event=closed_notify["event"],
+            recipient_user_ids=closed_notify["recipient_user_ids"],
+            payload=closed_notify["payload"],
         )
-        upsert_phase_notifications(db, ev, participants)
-    if gate_events.get("events"):
-        db.commit()
-    dispatch_ws_events(db, ws_events)
-    project = load_project_graph(db, project.id) or project
+    project_model = db.get(GeProject, project.id) or project
     phase = db.get(GePhase, gate.phase_id) if gate else phase
+    closed_dev = active_dev if active_dev and active_dev.status == "closed" else None
     return write_operation_response(
         db,
-        project=project,
+        project=project_model,
         gate_item=item,
         affected_tasks=affected,
         phase=phase,
         gate=gate,
+        deviation=closed_dev,
     )
 
 
@@ -394,6 +387,12 @@ def done_task(db: Session, task_id: str, user: AuthUser) -> dict[str, Any]:
         raise HTTPException(status_code=403, detail={"detail": "not_assignee"})
     if task.status != "running":
         raise HTTPException(status_code=409, detail={"detail": "task_not_ready"})
+    if task.deviation_id:
+        from app.models.ge import GeDeviation
+
+        dev = db.get(GeDeviation, task.deviation_id)
+        if dev is not None and dev.status == "open":
+            raise HTTPException(status_code=409, detail={"detail": "deviation_not_activated"})
     produce_rows = db.query(GeTaskGateItemProduce).filter(GeTaskGateItemProduce.task_id == task.id).all()
     for row in produce_rows:
         item = db.get(GeGateItem, row.gate_item_id)
@@ -411,11 +410,14 @@ def done_task(db: Session, task_id: str, user: AuthUser) -> dict[str, Any]:
         action="done",
         payload={},
     )
+    from app.models.ge import GeDeviation
+
+    open_dev = db.get(GeDeviation, task.deviation_id) if task.deviation_id else None
     db.commit()
-    return write_operation_response(db, project=project, gate_item=None, affected_tasks=[task])
-
-
-def _participant_ids(db: Session, project: GeProject) -> set[str]:
-    from app.services.ge_access import project_participant_user_ids
-
-    return project_participant_user_ids(db, project)
+    return write_operation_response(
+        db,
+        project=project,
+        gate_item=None,
+        affected_tasks=[task],
+        deviation=open_dev if open_dev and open_dev.status in ("open", "active") else None,
+    )

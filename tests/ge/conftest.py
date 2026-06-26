@@ -216,6 +216,40 @@ def task_id_by_title(graph: dict[str, Any], title: str) -> str:
     raise AssertionError(f"task {title} not found")
 
 
+def overdue_gate_item(graph: dict[str, Any], name: str) -> dict[str, Any]:
+    """Return gate item graph node; assert is_overdue when projected."""
+    for phase in graph["phases"]:
+        for gi in phase["gate_items"]:
+            if gi["name"] == name:
+                return gi
+    raise AssertionError(f"gate item {name} not found")
+
+
+def open_deviation(
+    client: TestClient,
+    gate_item_id: str,
+    user_id: str,
+    *,
+    kind: str = "overdue",
+) -> dict[str, Any]:
+    resp = client.post(
+        f"/api/v1/ge/gate-items/{gate_item_id}/deviations/open",
+        headers=jwt_headers(user_id),
+        json={"kind": kind},
+    )
+    assert resp.status_code == 200, resp.text
+    return resp.json()
+
+
+def get_deviation(client: TestClient, deviation_id: str, user_id: str) -> dict[str, Any]:
+    resp = client.get(
+        f"/api/v1/ge/deviations/{deviation_id}",
+        headers=jwt_headers(user_id),
+    )
+    assert resp.status_code == 200, resp.text
+    return resp.json()
+
+
 @pytest.fixture
 def golden_active(client):
     return create_project(client, U_PM)

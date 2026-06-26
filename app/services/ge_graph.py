@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.constants import SYSTEM_END_PHASE_NAME
 from app.models.ge import (
+    GeDeviation,
     GeGate,
     GeGateGateItemInclude,
     GeGateItem,
@@ -19,7 +20,6 @@ from app.models.ge import (
     GeTaskGateItemPrerequisite,
     GeTaskGateItemProduce,
 )
-from app.constants import SYSTEM_END_PHASE_NAME
 from app.services.ge_system_phases import is_start_phase
 
 
@@ -110,7 +110,7 @@ def recompute_task_status(db: Session, project_id: str) -> list[GeTask]:
         phase = phases.get(task.phase_id)
         if phase is None:
             continue
-        if task.status in ("running", "done"):
+        if task.status in ("running", "done", "deviated"):
             continue
         can_start = task_can_start(db, task, phase)
         new_status = "ready" if can_start else "blocked"
@@ -118,6 +118,71 @@ def recompute_task_status(db: Session, project_id: str) -> list[GeTask]:
             task.status = new_status
             changed.append(task)
     return changed
+
+
+def _find_end_system_phase(db: Session, project_id: str) -> GePhase | None:
+    return (
+        db.query(GePhase)
+        .filter(
+            GePhase.project_id == project_id,
+            GePhase.is_system.is_(True),
+            GePhase.name == SYSTEM_END_PHASE_NAME,
+        )
+        .order_by(GePhase.sequence.desc())
+        .first()
+    )
+
+
+def _phase_effectively_done(db: Session, phase: GePhase) -> bool:
+    if phase.status == "completed":
+        return True
+    gate = phase.gate
+    return gate is not None and gate_is_open(db, gate, phase)
+
+
+def maybe_activate_end_phase(db: Session, project_id: str) -> bool:
+    """Activate 结束 when all prior phases are done (legacy / backfill safety)."""
+    end_phase = _find_end_system_phase(db, project_id)
+    if end_phase is None or end_phase.status != "pending":
+        return False
+    project = load_project_graph(db, project_id)
+    if project is None:
+        return False
+    for phase in sorted(project.phases, key=lambda p: p.sequence):
+        if phase.id == end_phase.id:
+            continue
+        if not _phase_effectively_done(db, phase):
+            return False
+    end_phase.status = "active"
+    end_phase.updated_at = now_iso()
+    recompute_task_status(db, project_id)
+    return True
+
+
+def reconcile_project_completion(db: Session, project_id: str) -> bool:
+    """If 结束 gate is fully signed, mark end phase + project completed.
+
+    Handles stale state where gate items are signed but end phase never went
+    through active → apply_phase_transition (common after M20 backfill).
+    """
+    project = db.get(GeProject, project_id)
+    if project is None or project.status != "active":
+        return False
+    end_phase = _find_end_system_phase(db, project_id)
+    if end_phase is None:
+        return False
+    gate = end_phase.gate
+    if gate is None:
+        gate = db.query(GeGate).filter(GeGate.phase_id == end_phase.id).first()
+    if gate is None or not gate_is_open(db, gate, end_phase):
+        return False
+    now = now_iso()
+    if end_phase.status != "completed":
+        end_phase.status = "completed"
+        end_phase.updated_at = now
+    project.status = "completed"
+    project.updated_at = now
+    return True
 
 
 def apply_phase_transition(db: Session, project: GeProject, opened_phase: GePhase) -> dict[str, Any]:
@@ -134,12 +199,7 @@ def apply_phase_transition(db: Session, project: GeProject, opened_phase: GePhas
             "sequence": opened_phase.sequence,
         }
     )
-    end_phase = (
-        db.query(GePhase)
-        .filter(GePhase.project_id == project.id, GePhase.is_system.is_(True), GePhase.name == SYSTEM_END_PHASE_NAME)
-        .order_by(GePhase.sequence.desc())
-        .first()
-    )
+    end_phase = _find_end_system_phase(db, project.id)
     if end_phase is not None and opened_phase.id == end_phase.id:
         project.status = "completed"
         project.updated_at = now_iso()
@@ -166,17 +226,13 @@ def apply_phase_transition(db: Session, project: GeProject, opened_phase: GePhas
 
 
 def recompute_gate_and_phases(db: Session, project_id: str) -> dict[str, Any]:
-    project = load_project_graph(db, project_id)
-    if project is None:
-        return {"events": []}
     all_events: list[dict[str, Any]] = []
     while True:
+        maybe_activate_end_phase(db, project_id)
         project = load_project_graph(db, project_id)
         if project is None:
             break
         active_phases = [p for p in project.phases if p.status == "active"]
-        if not active_phases:
-            break
         transitioned = False
         for phase in active_phases:
             gate = phase.gate
@@ -187,8 +243,11 @@ def recompute_gate_and_phases(db: Session, project_id: str) -> dict[str, Any]:
                 all_events.extend(result["events"])
                 transitioned = True
                 break
-        if not transitioned:
+        if transitioned:
+            continue
+        if reconcile_project_completion(db, project_id):
             break
+        break
     return {"events": all_events}
 
 
@@ -245,6 +304,14 @@ def build_graph_edges(db: Session, project: GeProject) -> list[dict[str, Any]]:
 
 
 def build_project_graph(db: Session, project: GeProject) -> dict[str, Any]:
+    from app.services.ge_deviations import compute_gate_overdue_fields
+
+    deviations_by_gi = {
+        d.gate_item_id: d
+        for d in db.query(GeDeviation)
+        .filter(GeDeviation.project_id == project.id, GeDeviation.status.in_(("open", "active")))
+        .all()
+    }
     phases_out: list[dict[str, Any]] = []
     for phase in sorted(project.phases, key=lambda p: p.sequence):
         gate = phase.gate
@@ -269,21 +336,28 @@ def build_project_graph(db: Session, project: GeProject) -> dict[str, Any]:
                 },
                 "gate_items": [
                     {
-                        "id": gi.id,
-                        "name": gi.name,
-                        "form": gi.form,
-                        "status": gi.status,
-                        "payload": gi.payload_dict,
-                        "submitted_by": gi.submitted_by,
-                        "signed_by": gi.signed_by,
-                        "rejected_by": gi.rejected_by,
-                        "submitted_at": gi.submitted_at,
-                        "signed_at": gi.signed_at,
-                        "rejected_at": gi.rejected_at,
-                        "reject_reason": gi.reject_reason,
-                        "planned_due": gi.planned_due,
-                        "is_system": bool(gi.is_system),
-                        "eligible_signers": eligible_signers(db, gi.id),
+                        **{
+                            "id": gi.id,
+                            "name": gi.name,
+                            "form": gi.form,
+                            "status": gi.status,
+                            "payload": gi.payload_dict,
+                            "submitted_by": gi.submitted_by,
+                            "signed_by": gi.signed_by,
+                            "rejected_by": gi.rejected_by,
+                            "submitted_at": gi.submitted_at,
+                            "signed_at": gi.signed_at,
+                            "rejected_at": gi.rejected_at,
+                            "reject_reason": gi.reject_reason,
+                            "planned_due": gi.planned_due,
+                            "is_system": bool(gi.is_system),
+                            "eligible_signers": eligible_signers(db, gi.id),
+                        },
+                        **compute_gate_overdue_fields(
+                            db,
+                            gi,
+                            deviation=deviations_by_gi.get(gi.id),
+                        ),
                     }
                     for gi in sorted(phase.gate_items, key=lambda g: g.created_at)
                 ],
@@ -297,6 +371,8 @@ def build_project_graph(db: Session, project: GeProject) -> dict[str, Any]:
                         "produces": _produce_gate_item_ids(db, task.id),
                         "prerequisites": _prerequisite_gate_item_ids(db, task.id),
                         "is_system": bool(task.is_system),
+                        "deviation_id": task.deviation_id,
+                        "is_remediation": task.deviation_id is not None,
                     }
                     for task in phase_tasks
                 ],
@@ -318,6 +394,9 @@ def build_project_graph(db: Session, project: GeProject) -> dict[str, Any]:
 
 
 def gate_item_summary(item: GeGateItem, db: Session) -> dict[str, Any]:
+    from app.services.ge_deviations import active_deviation_for_gate_item, compute_gate_overdue_fields
+
+    dev = active_deviation_for_gate_item(db, item.id)
     return {
         "id": item.id,
         "name": item.name,
@@ -333,6 +412,7 @@ def gate_item_summary(item: GeGateItem, db: Session) -> dict[str, Any]:
         "reject_reason": item.reject_reason,
         "planned_due": item.planned_due,
         "eligible_signers": eligible_signers(db, item.id),
+        **compute_gate_overdue_fields(db, item, deviation=dev),
     }
 
 
@@ -344,7 +424,10 @@ def write_operation_response(
     affected_tasks: list[GeTask],
     phase: GePhase | None = None,
     gate: GeGate | None = None,
+    deviation: GeDeviation | None = None,
 ) -> dict[str, Any]:
+    from app.services.ge_deviations import deviation_summary
+
     phase_obj = phase
     gate_obj = gate
     if gate_item and gate_obj is None:
@@ -361,9 +444,13 @@ def write_operation_response(
                 "status": t.status,
                 "assignee_user_id": t.assignee_user_id,
                 "phase_id": t.phase_id,
+                "deviation_id": t.deviation_id,
+                "is_remediation": t.deviation_id is not None,
+                "produces": _produce_gate_item_ids(db, t.id),
             }
             for t in affected_tasks
         ],
+        "deviation": deviation_summary(deviation),
         "gate": (
             {
                 "id": gate_obj.id,

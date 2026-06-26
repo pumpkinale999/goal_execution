@@ -34,6 +34,12 @@ from app.services.ge_schedule_validate import (
 )
 from app.services.ge_system_phases import assert_not_system_phase, end_phase_for_project, resequence_with_system_phases
 from app.services.ge_system_tasks import is_protected_system_end_sign_prerequisite, is_system_end_sign_task
+from app.services.ge_deviations import (
+    assert_deviation_produce_mutable,
+    assert_remediation_produce_link_allowed,
+    assert_task_delete_allowed,
+    assert_task_patch_allowed,
+)
 
 
 def _assert_not_system_task(task: GeTask) -> None:
@@ -134,6 +140,13 @@ def add_produce_link(db: Session, task_id: str, gate_item_id: str, user: AuthUse
     if task_phase is None or task_phase.project_id != project.id or item_phase.project_id != project.id:
         raise HTTPException(status_code=400, detail={"detail": "invalid_request"})
     existing_produce = db.query(GeTaskGateItemProduce).filter(GeTaskGateItemProduce.gate_item_id == gate_item_id).first()
+    existing_produce_task_id = existing_produce.task_id if existing_produce is not None else None
+    assert_remediation_produce_link_allowed(
+        db,
+        task,
+        gate_item_id,
+        existing_produce_task_id=existing_produce_task_id,
+    )
     if existing_produce is not None and existing_produce.task_id != task_id:
         raise HTTPException(status_code=409, detail={"detail": "gate_item_already_produced"})
     existing_prereq = (
@@ -171,6 +184,7 @@ def remove_produce_link(db: Session, task_id: str, gate_item_id: str, user: Auth
     )
     if row is None:
         raise HTTPException(status_code=404, detail={"detail": "not_found"})
+    assert_deviation_produce_mutable(db, task_id, gate_item_id)
     db.delete(row)
     project.updated_at = now_iso()
     db.commit()
@@ -325,6 +339,7 @@ def reorder_phase_tasks(
 
 def patch_task(db: Session, task_id: str, body: dict[str, Any], user: AuthUser) -> dict[str, Any]:
     task = _get_task_or_404(db, task_id)
+    assert_task_patch_allowed(task)
     project = _get_project_or_404(db, task.project_id)
     _require_graph_editable(db, project, user)
     if not body:
@@ -422,6 +437,7 @@ def add_gate_item(db: Session, project_id: str, phase_id: str, body: dict[str, A
 def delete_task(db: Session, task_id: str, user: AuthUser) -> dict[str, Any]:
     task = _get_task_or_404(db, task_id)
     _assert_not_system_task(task)
+    assert_task_delete_allowed(db, task)
     project = _get_project_or_404(db, task.project_id)
     _require_graph_delete(db, project, user)
     if task.status != "blocked" or task.started_at or task.done_at:

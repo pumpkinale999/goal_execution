@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from app.models.ge import GeGate, GeGateItem, GePhase, GeProject, GeTask, GeTaskGateItemProduce
+from app.models.ge import GeDeviation, GeGateItem, GePhase, GeProject, GeTask, GeTaskGateItemProduce
+from app.services.ge_deviations import build_deviation_actions_for_user
 from app.services.ge_graph import eligible_signers
 
 
@@ -12,6 +13,7 @@ def build_queues(db: Session, user_id: str) -> dict:
     submit: list[dict] = []
     sign: list[dict] = []
     ready_tasks: list[dict] = []
+    deviation_actions = build_deviation_actions_for_user(db, user_id)
 
     active_projects = db.query(GeProject).filter(GeProject.status == "active", GeProject.deleted_at.is_(None)).all()
     project_map = {p.id: p for p in active_projects}
@@ -26,17 +28,37 @@ def build_queues(db: Session, user_id: str) -> dict:
     )
     for _, task, item, phase in produce_rows:
         project = project_map.get(task.project_id)
-        if project is None or item.status not in ("draft", "rejected"):
+        if project is None:
             continue
-        submit.append(
-            {
-                "gate_item_id": item.id,
-                "gate_item_name": item.name,
-                "project_id": project.id,
-                "project_name": project.name,
-                "phase_name": phase.name,
-            }
-        )
+        if item.status in ("draft", "rejected"):
+            submit.append(
+                {
+                    "gate_item_id": item.id,
+                    "gate_item_name": item.name,
+                    "project_id": project.id,
+                    "project_name": project.name,
+                    "phase_name": phase.name,
+                }
+            )
+        elif item.status == "deviation":
+            dev = (
+                db.query(GeDeviation)
+                .filter(
+                    GeDeviation.gate_item_id == item.id,
+                    GeDeviation.status == "active",
+                )
+                .first()
+            )
+            if dev is not None:
+                submit.append(
+                    {
+                        "gate_item_id": item.id,
+                        "gate_item_name": item.name,
+                        "project_id": project.id,
+                        "project_name": project.name,
+                        "phase_name": phase.name,
+                    }
+                )
 
     pending_items = (
         db.query(GeGateItem, GePhase, GeProject)
@@ -81,4 +103,9 @@ def build_queues(db: Session, user_id: str) -> dict:
             }
         )
 
-    return {"submit": submit, "sign": sign, "ready_tasks": ready_tasks}
+    return {
+        "submit": submit,
+        "sign": sign,
+        "ready_tasks": ready_tasks,
+        "deviation_actions": deviation_actions,
+    }

@@ -4,14 +4,18 @@ info:
   description: |
     Normative OpenAPI for P1 project governance domain (v1.1.3 · P1 spec frozen).
     Full spec: docs/目标与执行及其组织支撑(实现与测试).md §4.9
-    Business rules: docs/目标与执行及其组织支撑(需求).md v2.7.2
+    Business rules: docs/目标与执行及其组织支撑(需求).md v2.10.8
     M20: system lifecycle tasks (启动项目/结项复盘/确认结项) · is_system on Task/GateItem
     M20b: 结项复盘 auto-seeded PM sign route (确认结项 prerequisite) · system_sign_route_immutable
     M21: permission simplification · PM=reviewer governance · not_project_governor
     v1.10.0: gate.includes auto-sync · POST/DELETE includes → 410 · Canvas produce/prerequisite only
     v1.10.2: end closure sign route auto-seed · protected prerequisite edge
-    Out of scope: skstudio BFF /api/v1/org|ge/* and POST /internal/ge/ws-fanout (see impl doc §4.0 · §5.4)
-  version: 1.10.2
+    v1.11.0: M22 Deviation · open/activate/extend/cancel · graph is_overdue · queues deviation_actions
+    v1.11.1: WriteOperationResponse.deviation · AffectedTask P3 fields · Deviation cancel snapshots · submit/done 409 deviation_not_activated
+    v1.11.2: M22 deviation structure guards · produce unlink/rebind · patch deviated · delete remediation → 409 deviation_produce_immutable / task_deviated_immutable / remediation_task_not_deletable
+    v1.12.0: REST-only workbench · DROP ge_execution_notifications · no skstudio ws-fanout
+    Out of scope: skstudio BFF /api/v1/org|ge/* and POST /internal/ge/deviation-notify (see impl doc §4.0 · §5)
+  version: 1.12.0
 servers:
   - url: /api/v1
     description: goal_execution service (JWT participant + service governance via skstudio BFF)
@@ -24,6 +28,57 @@ paths:
       responses:
         '200':
           description: Department tree
+  /org/teams/{team_id}:
+    patch:
+      operationId: patchOrgTeam
+      summary: Update team (service · reviewer BFF)
+      tags: [org]
+      parameters:
+        - name: team_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Updated team
+    delete:
+      operationId: deleteOrgTeam
+      summary: Delete team · unassign members (service · reviewer BFF)
+      tags: [org]
+      parameters:
+        - name: team_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Deleted
+  /org/departments/{department_id}:
+    delete:
+      operationId: deleteOrgDepartment
+      summary: Delete department when no teams (service · reviewer BFF)
+      tags: [org]
+      parameters:
+        - name: department_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Deleted
+        '409':
+          description: department_has_teams
+  /org/members:
+    get:
+      operationId: listOrgMembers
+      summary: All org member profiles (service token · BFF aggregate)
+      tags: [org]
+      responses:
+        '200':
+          description: Member list
   /org/users/{user_id}/profile:
     get:
       operationId: getOrgUserProfile
@@ -371,6 +426,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
     delete:
       operationId: deleteGeTask
       summary: Delete blocked task with no links (pm)
@@ -414,6 +471,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/WriteOperationResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /ge/gate-items/{gate_item_id}:
     get:
       operationId: getGeGateItemContext
@@ -507,6 +566,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/WriteOperationResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /ge/gate-items/{gate_item_id}/sign:
     post:
       operationId: signGeGateItem
@@ -581,6 +642,87 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /ge/gate-items/{gate_item_id}/deviations/open:
+    post:
+      operationId: openGateItemDeviation
+      summary: Open deviation phase A (PM/reviewer · M22 P3)
+      tags: [ge-deviations]
+      parameters:
+        - $ref: '#/components/parameters/GateItemId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OpenDeviationRequest'
+      responses:
+        '200':
+          description: Deviation opened · graph slice
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WriteOperationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /ge/deviations/{deviation_id}:
+    get:
+      operationId: getGeDeviation
+      summary: Deviation detail
+      tags: [ge-deviations]
+      parameters:
+        - name: deviation_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Deviation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Deviation'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      operationId: patchGeDeviation
+      summary: Activate · extend · or cancel deviation
+      tags: [ge-deviations]
+      parameters:
+        - name: deviation_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchDeviationRequest'
+      responses:
+        '200':
+          description: Updated · graph slice
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WriteOperationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /ge/me/queues:
     get:
       operationId: getGeMeQueues
@@ -593,44 +735,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MeQueuesResponse'
-  /ge/me/execution-notifications:
-    get:
-      operationId: listGeExecutionNotifications
-      summary: Phase progress notifications
-      tags: [ge-notifications]
-      parameters:
-        - name: unread_only
-          in: query
-          schema:
-            type: boolean
-      responses:
-        '200':
-          description: Notification list
-  /ge/me/execution-notifications/read-all:
-    post:
-      operationId: markAllGeExecutionNotificationsRead
-      summary: Mark all phase progress notifications read
-      tags: [ge-notifications]
-      responses:
-        '200':
-          description: Updated count
-  /ge/me/execution-notifications/{notification_id}/read:
-    post:
-      operationId: markGeExecutionNotificationRead
-      summary: Mark one notification read
-      tags: [ge-notifications]
-      parameters:
-        - name: notification_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Notification marked read
-        '404':
-          $ref: '#/components/responses/NotFound'
 components:
   parameters:
     ProjectId:
@@ -706,7 +810,7 @@ components:
       properties:
         detail:
           type: string
-          description: e.g. project_not_found, gate_item_orphan_signer, note_title_conflict, project_note_required
+          description: e.g. project_not_found, gate_item_orphan_signer, note_title_conflict, project_note_required, deviation_not_activated, deviation_already_open, system_node_not_deviatable, deviation_produce_immutable, task_deviated_immutable, remediation_task_not_deletable
     PatchProjectRequest:
       type: object
       minProperties: 1
@@ -1043,6 +1147,16 @@ components:
         is_system:
           type: boolean
           description: M20 built-in lifecycle gate item; immutable structure
+        is_overdue:
+          type: boolean
+          description: P3 derived · overdue stamp · mutually exclusive with deviation status stamp
+        is_remediation_overdue:
+          type: boolean
+          description: P3 derived · remediation_due past · meta highlight · extend menu
+        deviation:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/DeviationSummary'
     TaskGraph:
       type: object
       description: produces/prerequisites are ge_gate_items.id (UUID), not create-request keys
@@ -1073,9 +1187,17 @@ components:
         is_system:
           type: boolean
           description: M20 built-in lifecycle task; title/phase immutable; 确认结项 assignee follows pm_user_id (system_sign_route_immutable on assignee patch / prerequisite delete)
+        deviation_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: P3 remediation task only
+        is_remediation:
+          type: boolean
+          description: P3 derived · deviation_id IS NOT NULL
     MeQueuesResponse:
       type: object
-      required: [submit, sign, ready_tasks]
+      required: [submit, sign, ready_tasks, deviation_actions]
       properties:
         submit:
           type: array
@@ -1089,6 +1211,224 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/QueueReadyTask'
+        deviation_actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/QueueDeviationAction'
+    OpenDeviationRequest:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum: [overdue, scope]
+          default: overdue
+    PatchDeviationRequest:
+      oneOf:
+        - $ref: '#/components/schemas/ActivateDeviationRequest'
+        - $ref: '#/components/schemas/ExtendDeviationRequest'
+        - $ref: '#/components/schemas/CancelDeviationRequest'
+      discriminator:
+        propertyName: action
+        mapping:
+          activate: '#/components/schemas/ActivateDeviationRequest'
+          extend: '#/components/schemas/ExtendDeviationRequest'
+          cancel: '#/components/schemas/CancelDeviationRequest'
+    ActivateDeviationRequest:
+      type: object
+      required: [action, reason, remediation_plan, remediation_due]
+      properties:
+        action:
+          type: string
+          enum: [activate]
+        reason:
+          type: string
+        remediation_plan:
+          type: string
+        remediation_due:
+          type: string
+          format: date
+        assignee_user_id:
+          type: string
+    ExtendDeviationRequest:
+      type: object
+      required: [action, remediation_due, extend_reason]
+      properties:
+        action:
+          type: string
+          enum: [extend]
+        remediation_due:
+          type: string
+          format: date
+        extend_reason:
+          type: string
+        remediation_plan:
+          type: string
+          description: Required when revision >= 3 before extend
+    CancelDeviationRequest:
+      type: object
+      required: [action, cancel_reason]
+      properties:
+        action:
+          type: string
+          enum: [cancel]
+        cancel_reason:
+          type: string
+    DeviationSummary:
+      type: object
+      required: [id, status, kind, revision]
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [open, active, closed, cancelled]
+        kind:
+          type: string
+          enum: [overdue, scope]
+        revision:
+          type: integer
+        remediation_due:
+          type: string
+          format: date
+          nullable: true
+        remediation_task_id:
+          type: string
+          format: uuid
+    Deviation:
+      allOf:
+        - $ref: '#/components/schemas/DeviationSummary'
+        - type: object
+          properties:
+            gate_item_id:
+              type: string
+              format: uuid
+            project_id:
+              type: string
+              format: uuid
+            reason:
+              type: string
+              nullable: true
+            remediation_plan:
+              type: string
+              nullable: true
+            superseded_task_id:
+              type: string
+              format: uuid
+            gate_item_status_at_open:
+              type: string
+              description: GateItem status snapshot at open · cancel rollback
+            superseded_task_status_at_open:
+              type: string
+              description: Superseded task status snapshot at open · cancel rollback
+            opened_by_user_id:
+              type: string
+            opened_at:
+              type: string
+              format: date-time
+            activated_at:
+              type: string
+              format: date-time
+              nullable: true
+            cancelled_at:
+              type: string
+              format: date-time
+              nullable: true
+    AffectedTask:
+      type: object
+      required: [id, title, status, assignee_user_id, phase_id]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        status:
+          type: string
+        assignee_user_id:
+          type: string
+        phase_id:
+          type: string
+        deviation_id:
+          type: string
+          format: uuid
+          nullable: true
+        is_remediation:
+          type: boolean
+        produces:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Produce edge gate_item ids · refreshed on rebind/cancel
+    WriteOperationResponse:
+      type: object
+      required: [gate_item, affected_tasks, gate, phase, project]
+      properties:
+        gate_item:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/GateItemGraph'
+        affected_tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/AffectedTask'
+        deviation:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/DeviationSummary'
+        gate:
+          nullable: true
+          type: object
+          properties:
+            id:
+              type: string
+            phase_id:
+              type: string
+            is_open:
+              type: boolean
+        phase:
+          nullable: true
+          type: object
+          properties:
+            id:
+              type: string
+            sequence:
+              type: integer
+            name:
+              type: string
+            status:
+              type: string
+        project:
+          type: object
+          required: [id, status]
+          properties:
+            id:
+              type: string
+            status:
+              type: string
+    QueueDeviationAction:
+      type: object
+      required: [action, project_id, project_name, gate_item_id, gate_item_name, phase_name]
+      properties:
+        action:
+          type: string
+          enum: [open, activate, extend]
+        project_id:
+          type: string
+        project_name:
+          type: string
+        gate_item_id:
+          type: string
+        gate_item_name:
+          type: string
+        phase_name:
+          type: string
+        deviation_id:
+          type: string
+          nullable: true
+        remediation_task_id:
+          type: string
+          nullable: true
     QueueGateItem:
       type: object
       required: [gate_item_id, gate_item_name, project_id, project_name, phase_name]
@@ -1120,57 +1460,3 @@ components:
           type: string
         phase_name:
           type: string
-    WriteOperationResponse:
-      type: object
-      required: [gate_item, affected_tasks, gate, phase, project]
-      properties:
-        gate_item:
-          nullable: true
-          allOf:
-            - $ref: '#/components/schemas/GateItemGraph'
-        affected_tasks:
-          type: array
-          items:
-            type: object
-            required: [id, title, status, assignee_user_id, phase_id]
-            properties:
-              id:
-                type: string
-              title:
-                type: string
-              status:
-                type: string
-              assignee_user_id:
-                type: string
-              phase_id:
-                type: string
-        gate:
-          nullable: true
-          type: object
-          properties:
-            id:
-              type: string
-            phase_id:
-              type: string
-            is_open:
-              type: boolean
-        phase:
-          nullable: true
-          type: object
-          properties:
-            id:
-              type: string
-            sequence:
-              type: integer
-            name:
-              type: string
-            status:
-              type: string
-        project:
-          type: object
-          required: [id, status]
-          properties:
-            id:
-              type: string
-            status:
-              type: string

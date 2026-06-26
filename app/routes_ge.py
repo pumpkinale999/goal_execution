@@ -13,7 +13,7 @@ from app.deps import get_current_user, get_db, require_service_user
 from app.models.ge import GeObjective, GeProgram, GeProject
 from app.services.ge_access import can_read_project, filter_projects_for_user
 from app.services.ge_bootstrap import ensure_ge_bootstrap
-from app.services.ge_graph import build_project_graph, load_project_graph
+from app.services.ge_graph import build_project_graph, load_project_graph, reconcile_project_completion
 from app.services.ge_graph_edit import (
     add_gate_item,
     add_phase,
@@ -32,7 +32,6 @@ from app.services.ge_graph_edit import (
     remove_produce_link,
     reorder_phase_tasks,
 )
-from app.services.ge_notifications import list_notifications, mark_all_notifications_read, mark_notification_read
 from app.services.ge_orchestrator import (
     bind_project_note_id,
     done_task,
@@ -43,6 +42,7 @@ from app.services.ge_orchestrator import (
     start_task,
     submit_gate_item,
 )
+from app.services.ge_deviations import get_deviation, open_deviation, patch_deviation
 from app.services.ge_strategic import (
     create_objective,
     create_program,
@@ -231,6 +231,11 @@ def get_project_graph(
         raise HTTPException(status_code=404, detail={"detail": "project_not_found"})
     if not can_read_project(db, project, user):
         raise HTTPException(status_code=403, detail={"detail": "not_project_participant"})
+    if project.status == "active" and reconcile_project_completion(db, project_id):
+        db.commit()
+        project = load_project_graph(db, project_id)
+        if project is None:
+            raise HTTPException(status_code=404, detail={"detail": "project_not_found"})
     graph = build_project_graph(db, project)
     graph["graph_editable"] = graph_editable_flag(db, project, user)
     graph["graph_deletable"] = graph_deletable_flag(db, project, user)
@@ -481,38 +486,41 @@ def post_done(
     return done_task(db, task_id, user)
 
 
+@router.post("/gate-items/{gate_item_id}/deviations/open")
+def post_open_deviation(
+    gate_item_id: str,
+    body: dict[str, Any],
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    return open_deviation(db, gate_item_id, user, body or {})
+
+
+@router.get("/deviations/{deviation_id}")
+def get_deviation_route(
+    deviation_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    return get_deviation(db, deviation_id, user)
+
+
+@router.patch("/deviations/{deviation_id}")
+def patch_deviation_route(
+    deviation_id: str,
+    body: dict[str, Any],
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    return patch_deviation(db, deviation_id, user, body)
+
+
 @router.get("/me/queues")
 def get_my_queues(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[AuthUser, Depends(get_current_user)],
 ) -> dict[str, Any]:
     return build_queues(db, user.user_id)
-
-
-@router.get("/me/execution-notifications")
-def get_my_notifications(
-    db: Annotated[Session, Depends(get_db)],
-    user: Annotated[AuthUser, Depends(get_current_user)],
-    unread_only: bool = Query(default=False),
-) -> list[dict[str, Any]]:
-    return list_notifications(db, user.user_id, unread_only=unread_only)
-
-
-@router.post("/me/execution-notifications/read-all")
-def mark_all_my_notifications_read(
-    db: Annotated[Session, Depends(get_db)],
-    user: Annotated[AuthUser, Depends(get_current_user)],
-) -> dict[str, int]:
-    return mark_all_notifications_read(db, user.user_id)
-
-
-@router.post("/me/execution-notifications/{notification_id}/read")
-def mark_my_notification_read(
-    notification_id: str,
-    db: Annotated[Session, Depends(get_db)],
-    user: Annotated[AuthUser, Depends(get_current_user)],
-) -> dict[str, Any]:
-    return mark_notification_read(db, user.user_id, notification_id)
 
 
 @router.get("/audit-events")

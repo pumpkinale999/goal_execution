@@ -1,7 +1,6 @@
 from app.db import Base
 from app.models.ge import (
     GeAuditEvent,
-    GeExecutionNotification,
     GeGate,
     GeGateItem,
     GeObjective,
@@ -29,5 +28,4 @@ __all__ = [
     "GeTaskGateItemProduce",
     "GeTaskGateItemPrerequisite",
     "GeAuditEvent",
-    "GeExecutionNotification",
 ]

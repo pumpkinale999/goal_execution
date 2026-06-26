@@ -147,6 +147,7 @@ class GeTask(Base):
     title: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False)
     canvas_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    deviation_id: Mapped[str | None] = mapped_column(String, ForeignKey("ge_deviations.id"), nullable=True)
     is_system: Mapped[bool] = mapped_column(Integer, nullable=False, default=0)
     started_at: Mapped[str | None] = mapped_column(Text, nullable=True)
     done_at: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -155,6 +156,32 @@ class GeTask(Base):
 
     project: Mapped[GeProject] = relationship("GeProject", back_populates="tasks")
     phase: Mapped[GePhase] = relationship("GePhase", back_populates="tasks")
+    deviation: Mapped[GeDeviation | None] = relationship("GeDeviation", foreign_keys=[deviation_id])
+
+
+class GeDeviation(Base):
+    __tablename__ = "ge_deviations"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    gate_item_id: Mapped[str] = mapped_column(String, ForeignKey("ge_gate_items.id"), nullable=False)
+    project_id: Mapped[str] = mapped_column(String, ForeignKey("ge_projects.id"), nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False)
+    kind: Mapped[str] = mapped_column(Text, nullable=False)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    remediation_plan: Mapped[str | None] = mapped_column(Text, nullable=True)
+    remediation_due: Mapped[str | None] = mapped_column(Text, nullable=True)
+    remediation_task_id: Mapped[str] = mapped_column(String, ForeignKey("ge_tasks.id"), nullable=False)
+    superseded_task_id: Mapped[str] = mapped_column(String, ForeignKey("ge_tasks.id"), nullable=False)
+    gate_item_status_at_open: Mapped[str] = mapped_column(Text, nullable=False)
+    superseded_task_status_at_open: Mapped[str] = mapped_column(Text, nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    opened_by_user_id: Mapped[str] = mapped_column(String, nullable=False)
+    opened_at: Mapped[str] = mapped_column(Text, nullable=False)
+    activated_at: Mapped[str | None] = mapped_column(Text, nullable=True)
+    closed_at: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cancelled_at: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[str] = mapped_column(Text, nullable=False)
+    updated_at: Mapped[str] = mapped_column(Text, nullable=False)
 
 
 class GeTaskGateItemProduce(Base):
@@ -185,18 +212,4 @@ class GeAuditEvent(Base):
     entity_id: Mapped[str] = mapped_column(Text, nullable=False)
     action: Mapped[str] = mapped_column(Text, nullable=False)
     payload: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[str] = mapped_column(Text, nullable=False)
-
-
-class GeExecutionNotification(Base):
-    __tablename__ = "ge_execution_notifications"
-
-    id: Mapped[str] = mapped_column(String, primary_key=True)
-    user_id: Mapped[str] = mapped_column(String, nullable=False)
-    kind: Mapped[str] = mapped_column(Text, nullable=False)
-    project_id: Mapped[str] = mapped_column(String, ForeignKey("ge_projects.id"), nullable=False)
-    phase_id: Mapped[str | None] = mapped_column(String, ForeignKey("ge_phases.id"), nullable=True)
-    gate_id: Mapped[str | None] = mapped_column(String, ForeignKey("ge_gates.id"), nullable=True)
-    payload: Mapped[str] = mapped_column(Text, nullable=False)
-    read_at: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[str] = mapped_column(Text, nullable=False)

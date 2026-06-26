@@ -51,3 +51,10 @@ def can_govern_project(project: GeProject, user: AuthUser) -> bool:
 def require_govern_project(project: GeProject, user: AuthUser) -> None:
     if not can_govern_project(project, user):
         raise HTTPException(status_code=403, detail={"detail": "not_project_governor"})
+
+
+def list_governed_project_ids(db: Session, user_id: str, *, auth_method: str = "jwt") -> list[str]:
+    q = db.query(GeProject).filter(GeProject.deleted_at.is_(None), GeProject.status == "active")
+    if auth_method == "service":
+        return [p.id for p in q.all()]
+    return [p.id for p in q.filter(GeProject.pm_user_id == user_id).all()]
