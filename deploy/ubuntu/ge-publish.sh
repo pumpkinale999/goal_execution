@@ -20,12 +20,26 @@ readonly _GIT_USER="${GE_GIT_USER:-devops}"
 
 log "SRC=${SRC} -> APP_ROOT=${APP_ROOT}"
 
+_git_pull_if_branch() {
+  if [[ "${GE_SKIP_GIT_PULL:-0}" == "1" ]]; then
+    log "GE_SKIP_GIT_PULL=1，跳过 git pull"
+    return 0
+  fi
+  local branch
+  branch="$(git symbolic-ref -q --short HEAD || true)"
+  if [[ -n "$branch" ]]; then
+    git pull
+  else
+    log "detached HEAD，跳过 git pull（已 checkout tag/commit）"
+  fi
+}
+
 if [[ "$(id -u)" -eq 0 ]]; then
   log "git pull（用户 ${_GIT_USER}）"
-  sudo -u "${_GIT_USER}" bash -c "set -euo pipefail; cd $(printf '%q' "$SRC"); git pull"
+  sudo -u "${_GIT_USER}" bash -c "set -euo pipefail; cd $(printf '%q' "$SRC"); $(declare -f _git_pull_if_branch); _git_pull_if_branch"
 else
   log "git pull（当前用户）"
-  ( cd "$SRC" && git pull )
+  ( cd "$SRC" && _git_pull_if_branch )
 fi
 
 log "rsync -> ${APP_ROOT}/"
