@@ -187,6 +187,23 @@ install_app() {
   run_as_ge ".venv/bin/pip install -e '.[dev]' --prefer-binary"
 }
 
+migrate_db() {
+  log "Database：alembic upgrade head（root source ${GE_ENV} 后 runuser -u ${GE_USER}）"
+  ensure_sudo
+  check_env_file
+  sudo mkdir -p "${GE_HOME}/goal-execution/data"
+  sudo chown -R "${GE_USER}:${GE_USER}" "${GE_HOME}/goal-execution" 2>/dev/null || true
+  sudo bash -lc "
+    set -euo pipefail
+    command -v runuser >/dev/null 2>&1 || { echo '缺少 runuser（util-linux）' >&2; exit 1; }
+    set -a
+    source \"${GE_ENV}\"
+    set +a
+    cd \"${APP_ROOT}\"
+    runuser -u ${GE_USER} -- env HOME=\"${GE_HOME}\" TMPDIR=/tmp ./.venv/bin/alembic upgrade head
+  "
+}
+
 start_service() {
   ensure_sudo
   check_env_file
@@ -227,6 +244,7 @@ print_checklist() {
 deploy() {
   preflight
   install_app
+  migrate_db
   start_service
   verify_health
   print_checklist
@@ -239,7 +257,7 @@ usage() {
 
   bootstrap    创建 ge 用户、数据目录、systemd unit、env 模板
   configure    从 /etc/skstudio/skstudio.env 同步 JWT + service token
-  deploy       pip install + 启动 goal-execution.service + health
+  deploy       pip install + alembic upgrade head + 启动 goal-execution.service + health
   health       仅 curl /api/v1/health
 
 环境变量: APP_ROOT GE_PORT HERMES_SHARED_ROOT GE_USER SKSTUDIO_ENV

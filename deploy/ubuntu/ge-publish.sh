@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 运维 devops 工作副本 → rsync /opt/goal_execution → ge-deploy deploy
+# 运维 devops 工作副本 → rsync /opt/goal_execution → ge-deploy deploy（含 alembic）
 #
 # 用法:
 #   sudo /opt/goal_execution/deploy/ubuntu/ge-publish.sh
