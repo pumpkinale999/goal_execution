@@ -68,14 +68,15 @@ def run_migrations() -> None:
     repo_root = Path(__file__).resolve().parents[1]
     cfg = Config(str(repo_root / "alembic.ini"))
     cfg.set_main_option("sqlalchemy.url", f"sqlite:///{db_path}")
+    cfg.attributes["skip_log_config"] = True
     command.upgrade(cfg, "head")
     _migrations_applied = True
     logger.info("Alembic migrations applied (head)")
 
 
 def init_db() -> None:
+    """Ensure SQLAlchemy engine is ready (migrations run separately via Alembic CLI)."""
     get_engine()
-    run_migrations()
 
 
 def db_ok() -> bool:

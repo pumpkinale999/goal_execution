@@ -1,4 +1,4 @@
-"""GE-T02–T05 · GE-T09 sign flow tests."""
+"""GE-T02–T05 · GE-T09 sign flow tests (M23 · no start/done)."""
 
 from __future__ import annotations
 
@@ -18,6 +18,13 @@ from tests.ge.conftest import (
 )
 
 
+def _task_by_title(phase: dict, title: str) -> dict:
+    for task in phase["tasks"]:
+        if task["title"] == title:
+            return task
+    raise AssertionError(f"task {title} not found")
+
+
 def _setup_active(client):
     created = create_project(client, U_PM)
     graph = get_graph(client, created["id"], U_PM)
@@ -26,10 +33,8 @@ def _setup_active(client):
 
 def test_cross_phase_prerequisite_sign(client):
     project_id, graph = _setup_active(client)
-    task_a = task_id_by_title(graph, "编写诊断报告")
     gi_x = gate_item_id_by_name(graph, "诊断报告")
 
-    client.post(f"/api/v1/ge/tasks/{task_a}/start", headers=jwt_headers(U_ZHANGSAN))
     client.post(
         f"/api/v1/ge/gate-items/{gi_x}/submit",
         headers=jwt_headers(U_ZHANGSAN),
@@ -44,8 +49,6 @@ def test_cross_phase_prerequisite_sign(client):
 def test_or_sign_any_eligible(client):
     project_id, graph = _setup_active(client)
     gi_x = gate_item_id_by_name(graph, "诊断报告")
-    task_a = task_id_by_title(graph, "编写诊断报告")
-    client.post(f"/api/v1/ge/tasks/{task_a}/start", headers=jwt_headers(U_ZHANGSAN))
     client.post(
         f"/api/v1/ge/gate-items/{gi_x}/submit",
         headers=jwt_headers(U_ZHANGSAN),
@@ -59,8 +62,6 @@ def test_or_sign_any_eligible(client):
 def test_gate_open_phase_transition(client):
     project_id, graph = _setup_active(client)
     gi_x = gate_item_id_by_name(graph, "诊断报告")
-    task_a = task_id_by_title(graph, "编写诊断报告")
-    client.post(f"/api/v1/ge/tasks/{task_a}/start", headers=jwt_headers(U_ZHANGSAN))
     client.post(
         f"/api/v1/ge/gate-items/{gi_x}/submit",
         headers=jwt_headers(U_ZHANGSAN),
@@ -78,31 +79,26 @@ def test_gate_open_phase_transition(client):
 def test_reject_reopens_produce_task(client):
     project_id, graph = _setup_active(client)
     gi_x = gate_item_id_by_name(graph, "诊断报告")
-    task_a = task_id_by_title(graph, "编写诊断报告")
-    client.post(f"/api/v1/ge/tasks/{task_a}/start", headers=jwt_headers(U_ZHANGSAN))
     client.post(
         f"/api/v1/ge/gate-items/{gi_x}/submit",
         headers=jwt_headers(U_ZHANGSAN),
         json=material_submit_payload("report"),
     )
-    client.post(f"/api/v1/ge/tasks/{task_a}/done", headers=jwt_headers(U_ZHANGSAN))
     reject = client.post(
         f"/api/v1/ge/gate-items/{gi_x}/reject",
         headers=jwt_headers(U_LISI),
         json={"reject_reason": "needs more detail in the summary field here"},
     )
     assert reject.status_code == 200
-    graph_after = get_graph(client, project_id, U_PM)
+    graph_after = get_graph(client, project_id, U_ZHANGSAN)
     plan_phase = phase_by_name(graph_after, "方案")
-    task = next(t for t in plan_phase["tasks"] if t["title"] == "编写诊断报告")
-    assert task["status"] == "running"
+    task = _task_by_title(plan_phase, "编写诊断报告")
+    assert task["effective_status"] == "actionable"
 
 
 def test_sign_route_task_no_start_done(client):
     project_id, graph = _setup_active(client)
     gi_x = gate_item_id_by_name(graph, "诊断报告")
-    task_a = task_id_by_title(graph, "编写诊断报告")
-    client.post(f"/api/v1/ge/tasks/{task_a}/start", headers=jwt_headers(U_ZHANGSAN))
     client.post(
         f"/api/v1/ge/gate-items/{gi_x}/submit",
         headers=jwt_headers(U_ZHANGSAN),
@@ -112,8 +108,6 @@ def test_sign_route_task_no_start_done(client):
 
     graph2 = get_graph(client, project_id, U_PM)
     gi_y = gate_item_id_by_name(graph2, "接口规格")
-    task_b = task_id_by_title(graph2, "编写接口规格")
-    client.post(f"/api/v1/ge/tasks/{task_b}/start", headers=jwt_headers(U_LISI))
     client.post(
         f"/api/v1/ge/gate-items/{gi_y}/submit",
         headers=jwt_headers(U_LISI),
@@ -126,5 +120,5 @@ def test_sign_route_task_no_start_done(client):
     final = get_graph(client, project_id, U_PM)
     assert final["project"]["status"] == "completed"
     dev_phase = phase_by_name(final, "开发")
-    task_c = next(t for t in dev_phase["tasks"] if "签收" in t["title"])
-    assert task_c["status"] in ("blocked", "ready")
+    task_c = _task_by_title(dev_phase, "评审接口规格（签收）")
+    assert task_c["effective_status"] == "complete"

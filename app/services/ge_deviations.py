@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.auth import AuthUser
+from app.constants import TASK_STATUS_IDLE
 from app.models.ge import (
     GeDeviation,
     GeGateItem,
@@ -20,12 +20,10 @@ from app.models.ge import (
     GeTaskGateItemProduce,
 )
 from app.models.org import UserOrgProfile
-from app.services.ge_access import require_govern_project
+from app.services.ge_access import can_govern_project, require_govern_project
 from app.services.ge_graph import (
     now_iso,
     record_audit,
-    recompute_task_status,
-    task_can_start,
     write_operation_response,
 )
 from app.services.ge_ws_callback import dispatch_deviation_personal_assistant
@@ -278,7 +276,7 @@ def open_deviation(
         phase_id=item.phase_id,
         assignee_user_id=superseded.assignee_user_id,
         title=f"补救·{item.name}",
-        status="blocked",
+        status=TASK_STATUS_IDLE,
         canvas_order=superseded.canvas_order + 1,
         deviation_id=dev_id,
         is_system=False,
@@ -311,13 +309,7 @@ def open_deviation(
     item.status = "deviation"
     item.updated_at = now
 
-    if task_can_start(db, remediation, phase):
-        remediation.status = "ready"
-    affected = recompute_task_status(db, project.id)
-    if remediation not in affected:
-        affected.append(remediation)
-    if superseded not in affected:
-        affected.append(superseded)
+    affected = [remediation, superseded]
 
     record_audit(
         db,
@@ -345,6 +337,8 @@ def open_deviation(
         phase=phase,
         gate=phase.gate,
         deviation=dev,
+        actor_user_id=user.user_id,
+        is_governor=can_govern_project(project, user),
     )
 
 
@@ -393,7 +387,10 @@ def activate_deviation(
     item.updated_at = now
     remediation.updated_at = now
 
-    affected = recompute_task_status(db, project.id)
+    superseded = db.get(GeTask, dev.superseded_task_id)
+    affected = [remediation]
+    if superseded is not None:
+        affected.append(superseded)
     record_audit(
         db,
         actor_user_id=user.user_id,
@@ -435,6 +432,8 @@ def activate_deviation(
         phase=phase,
         gate=phase.gate if phase else None,
         deviation=dev,
+        actor_user_id=user.user_id,
+        is_governor=can_govern_project(project, user),
     )
 
 
@@ -521,6 +520,8 @@ def extend_deviation(
         phase=phase,
         gate=phase.gate if phase else None,
         deviation=dev,
+        actor_user_id=user.user_id,
+        is_governor=can_govern_project(project, user),
     )
 
 
@@ -562,7 +563,6 @@ def cancel_deviation(
     db.add(GeTaskGateItemProduce(task_id=superseded.id, gate_item_id=item.id))
 
     remediation.deviation_id = None
-    remediation.status = "blocked"
     remediation.updated_at = now
 
     item.status = dev.gate_item_status_at_open
@@ -572,10 +572,7 @@ def cancel_deviation(
     dev.cancelled_at = now
     dev.updated_at = now
 
-    affected = recompute_task_status(db, project.id)
-    for t in (superseded, remediation):
-        if t not in affected:
-            affected.append(t)
+    affected = [superseded, remediation]
 
     record_audit(
         db,
@@ -599,6 +596,8 @@ def cancel_deviation(
         phase=phase,
         gate=phase.gate if phase else None,
         deviation=dev,
+        actor_user_id=user.user_id,
+        is_governor=can_govern_project(project, user),
     )
 
 

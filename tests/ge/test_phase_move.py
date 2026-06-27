@@ -69,8 +69,6 @@ def test_submitted_gate_item_not_movable(client):
     gi_id = next(gi["id"] for gi in plan["gate_items"] if gi["name"] == "诊断报告")
     task_id = task_id_by_title(graph, "编写诊断报告")
 
-    start = client.post(f"/api/v1/ge/tasks/{task_id}/start", headers=jwt_headers("u-zhangsan"))
-    assert start.status_code == 200
     submit = client.post(
         f"/api/v1/ge/gate-items/{gi_id}/submit",
         headers=jwt_headers("u-zhangsan"),

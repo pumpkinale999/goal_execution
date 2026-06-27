@@ -19,10 +19,10 @@ from app.models.ge import (
     GeTaskGateItemPrerequisite,
     GeTaskGateItemProduce,
 )
-from app.constants import SYSTEM_END_PHASE_NAME
+from app.constants import SYSTEM_END_PHASE_NAME, TASK_STATUS_IDLE
 from app.services.ge_access import can_govern_project
 from app.services.ge_gate_includes_sync import sync_gate_includes_for_phase
-from app.services.ge_graph import build_project_graph, load_project_graph, now_iso, recompute_task_status
+from app.services.ge_graph import build_project_graph, load_project_graph, now_iso
 from app.services.ge_schedule_validate import (
     parse_plan_date,
     parse_required_plan_date,
@@ -124,7 +124,14 @@ def graph_editable_flag(db: Session, project: GeProject, user: AuthUser) -> bool
 
 
 def build_editable_project_graph(db: Session, project: GeProject, user: AuthUser) -> dict[str, Any]:
-    graph = build_project_graph(db, project)
+    from app.services.ge_access import can_govern_project
+
+    graph = build_project_graph(
+        db,
+        project,
+        actor_user_id=user.user_id,
+        is_governor=can_govern_project(project, user),
+    )
     graph["graph_editable"] = graph_editable_flag(db, project, user)
     graph["graph_deletable"] = graph_deletable_flag(db, project, user)
     return graph
@@ -279,7 +286,7 @@ def add_task(db: Session, project_id: str, phase_id: str, body: dict[str, Any], 
             phase_id=phase_id,
             assignee_user_id=assignee,
             title=title,
-            status="blocked",
+            status=TASK_STATUS_IDLE,
             canvas_order=canvas_order,
             created_at=now,
             updated_at=now,
@@ -379,8 +386,6 @@ def patch_task(db: Session, task_id: str, body: dict[str, Any], user: AuthUser) 
             task.canvas_order = int(max_order_row[0]) + 1 if max_order_row else 0
     task.updated_at = now
     project.updated_at = now
-    if "phase_id" in body:
-        recompute_task_status(db, project.id)
     db.commit()
     project_loaded = load_project_graph(db, project.id)
     assert project_loaded is not None
@@ -440,7 +445,7 @@ def delete_task(db: Session, task_id: str, user: AuthUser) -> dict[str, Any]:
     assert_task_delete_allowed(db, task)
     project = _get_project_or_404(db, task.project_id)
     _require_graph_delete(db, project, user)
-    if task.status != "blocked" or task.started_at or task.done_at:
+    if task.status == "deviated":
         raise HTTPException(status_code=409, detail={"detail": "task_not_deletable"})
     has_produce = (
         db.query(GeTaskGateItemProduce).filter(GeTaskGateItemProduce.task_id == task_id).first()
@@ -454,7 +459,6 @@ def delete_task(db: Session, task_id: str, user: AuthUser) -> dict[str, Any]:
         raise HTTPException(status_code=409, detail={"detail": "task_has_links"})
     db.delete(task)
     project.updated_at = now_iso()
-    recompute_task_status(db, project.id)
     db.commit()
     project_loaded = load_project_graph(db, project.id)
     assert project_loaded is not None
@@ -551,7 +555,6 @@ def delete_gate_item(db: Session, gate_item_id: str, user: AuthUser) -> dict[str
     db.flush()
     sync_gate_includes_for_phase(db, phase_id)
     project.updated_at = now_iso()
-    recompute_task_status(db, project.id)
     db.commit()
     project_loaded = load_project_graph(db, project.id)
     assert project_loaded is not None

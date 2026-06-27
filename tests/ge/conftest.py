@@ -133,8 +133,6 @@ def bootstrap_startup_gate(client: TestClient, project_id: str, user_id: str) ->
         json={"gate_item_id": start_gi["id"]},
     )
     assert link.status_code == 200, link.text
-    start_resp = client.post(f"/api/v1/ge/tasks/{start_task_id}/start", headers=jwt_headers(pm_user))
-    assert start_resp.status_code == 200, start_resp.text
     if start_gi["form"] == "material":
         note_id = graph["project"].get("project_note_id") or TEST_PROJECT_NOTE_ID
         submit_payload = material_submit_payload("项目启动确认", project_note_id=note_id)
@@ -161,11 +159,6 @@ def bootstrap_closure_gate(client: TestClient, project_id: str, user_id: str) ->
     end_gi = next(gi for gi in end["gate_items"] if gi["name"] == SYSTEM_END_GATE_ITEM_NAME)
     end_task_id = task_id_by_title(graph, SYSTEM_END_TASK_TITLE)
     signer_user = pm_user
-    link = client.post(
-        f"/api/v1/ge/tasks/{end_task_id}/start",
-        headers=jwt_headers(pm_user),
-    )
-    assert link.status_code == 200, link.text
     if end_gi["form"] == "material":
         note_id = graph["project"].get("project_note_id") or TEST_PROJECT_NOTE_ID
         submit_payload = material_submit_payload("结项复盘完成", project_note_id=note_id)

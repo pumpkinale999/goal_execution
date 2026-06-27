@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import AuthUser
 from app.models.ge import GeProject, GeTask
+from app.services.ge_subtree_governor import is_subtree_governor
 
 
 def project_participant_user_ids(db: Session, project: GeProject) -> set[str]:
@@ -28,7 +29,11 @@ def can_read_project(db: Session, project: GeProject, user: AuthUser) -> bool:
         return True
     if is_participant(db, project, user.user_id):
         return True
-    return project.created_by_user_id == user.user_id
+    if project.created_by_user_id == user.user_id:
+        return True
+    if user.auth_method == "jwt":
+        return is_subtree_governor(db, user_id=user.user_id, project_id=project.id)
+    return False
 
 
 def filter_projects_for_user(db: Session, projects: list[GeProject], user: AuthUser) -> list[GeProject]:
@@ -38,7 +43,7 @@ def filter_projects_for_user(db: Session, projects: list[GeProject], user: AuthU
 
 
 def can_govern_project(project: GeProject, user: AuthUser) -> bool:
-    """PM (JWT) or reviewer governance (service token · BFF verified)."""
+    """Execution governance: PM (JWT) or reviewer (service token). Excludes subtree_governor (GE-26)."""
     if project.deleted_at is not None:
         return False
     if user.auth_method == "service":
@@ -48,8 +53,22 @@ def can_govern_project(project: GeProject, user: AuthUser) -> bool:
     return False
 
 
+def can_govern_structure(db: Session, project: GeProject, user: AuthUser) -> bool:
+    """Structural fields: PM, reviewer service, or subtree_governor."""
+    if can_govern_project(project, user):
+        return True
+    if user.auth_method == "jwt":
+        return is_subtree_governor(db, user_id=user.user_id, project_id=project.id)
+    return False
+
+
 def require_govern_project(project: GeProject, user: AuthUser) -> None:
     if not can_govern_project(project, user):
+        raise HTTPException(status_code=403, detail={"detail": "not_project_governor"})
+
+
+def require_govern_structure(db: Session, project: GeProject, user: AuthUser) -> None:
+    if not can_govern_structure(db, project, user):
         raise HTTPException(status_code=403, detail={"detail": "not_project_governor"})
 
 

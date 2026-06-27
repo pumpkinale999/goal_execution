@@ -30,9 +30,6 @@ def test_pm_can_proxy_submit_and_sign(client):
     gi_x = _gate_item_id(graph, "诊断报告")
     task_a = task_id_by_title(graph, "编写诊断报告")
 
-    start = client.post(f"/api/v1/ge/tasks/{task_a}/start", headers=jwt_headers(U_ZHANGSAN))
-    assert start.status_code == 200, start.text
-
     submit = client.post(
         f"/api/v1/ge/gate-items/{gi_x}/submit",
         headers=jwt_headers(U_PM),
@@ -51,9 +48,6 @@ def test_reviewer_service_token_can_proxy_submit_and_sign(client):
     graph = get_graph(client, project_id, U_PM)
     gi_x = _gate_item_id(graph, "诊断报告")
     task_a = task_id_by_title(graph, "编写诊断报告")
-
-    start = client.post(f"/api/v1/ge/tasks/{task_a}/start", headers=jwt_headers(U_ZHANGSAN))
-    assert start.status_code == 200, start.text
 
     submit = client.post(
         f"/api/v1/ge/gate-items/{gi_x}/submit",

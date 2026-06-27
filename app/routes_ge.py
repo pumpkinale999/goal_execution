@@ -11,7 +11,7 @@ from app.auth import AuthUser
 from app.constants import GE_DEFAULT_OBJECTIVE_ID, GE_DEFAULT_PROGRAM_ID
 from app.deps import get_current_user, get_db, require_service_user
 from app.models.ge import GeObjective, GeProgram, GeProject
-from app.services.ge_access import can_read_project, filter_projects_for_user
+from app.services.ge_access import can_read_project, filter_projects_for_user, can_govern_project
 from app.services.ge_bootstrap import ensure_ge_bootstrap
 from app.services.ge_graph import build_project_graph, load_project_graph, reconcile_project_completion
 from app.services.ge_graph_edit import (
@@ -34,12 +34,11 @@ from app.services.ge_graph_edit import (
 )
 from app.services.ge_orchestrator import (
     bind_project_note_id,
-    done_task,
     patch_project,
+    migrate_project_program,
     reject_gate_item,
     sign_gate_item,
     soft_delete_project,
-    start_task,
     submit_gate_item,
 )
 from app.services.ge_deviations import get_deviation, open_deviation, patch_deviation
@@ -236,7 +235,12 @@ def get_project_graph(
         project = load_project_graph(db, project_id)
         if project is None:
             raise HTTPException(status_code=404, detail={"detail": "project_not_found"})
-    graph = build_project_graph(db, project)
+    graph = build_project_graph(
+        db,
+        project,
+        actor_user_id=user.user_id,
+        is_governor=can_govern_project(project, user),
+    )
     graph["graph_editable"] = graph_editable_flag(db, project, user)
     graph["graph_deletable"] = graph_deletable_flag(db, project, user)
     return graph
@@ -250,6 +254,16 @@ def patch_project_route(
     user: Annotated[AuthUser, Depends(get_current_user)],
 ) -> dict[str, Any]:
     return patch_project(db, project_id, user, body)
+
+
+@router.patch("/projects/{project_id}/program")
+def patch_project_program_route(
+    project_id: str,
+    body: dict[str, Any],
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    return migrate_project_program(db, project_id, user, body)
 
 
 @router.patch("/projects/{project_id}/project-note")
@@ -468,22 +482,22 @@ def post_reject(
     return reject_gate_item(db, gate_item_id, user, body)
 
 
-@router.post("/tasks/{task_id}/start")
+@router.post("/tasks/{task_id}/start", status_code=status.HTTP_410_GONE)
 def post_start(
     task_id: str,
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[AuthUser, Depends(get_current_user)],
 ) -> dict[str, Any]:
-    return start_task(db, task_id, user)
+    raise HTTPException(status_code=410, detail={"detail": "task_start_deprecated"})
 
 
-@router.post("/tasks/{task_id}/done")
+@router.post("/tasks/{task_id}/done", status_code=status.HTTP_410_GONE)
 def post_done(
     task_id: str,
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[AuthUser, Depends(get_current_user)],
 ) -> dict[str, Any]:
-    return done_task(db, task_id, user)
+    raise HTTPException(status_code=410, detail={"detail": "task_done_deprecated"})
 
 
 @router.post("/gate-items/{gate_item_id}/deviations/open")

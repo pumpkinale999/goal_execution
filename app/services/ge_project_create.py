@@ -8,7 +8,7 @@ from typing import Any
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.constants import SYSTEM_END_PHASE_NAME, SYSTEM_START_PHASE_NAME
+from app.constants import SYSTEM_END_PHASE_NAME, SYSTEM_START_PHASE_NAME, TASK_STATUS_IDLE
 from app.models.ge import (
     GeGate,
     GeGateItem,
@@ -23,6 +23,7 @@ from app.services.ge_gate_includes_sync import sync_gate_includes_for_phase
 from app.services.ge_graph import now_iso, record_audit, recompute_gate_and_phases, recompute_task_status
 from app.services.ge_graph_validate import validate_phases_body, validate_project_graph_db
 from app.services.ge_schedule_validate import parse_plan_date, parse_required_plan_date, validate_gate_item_due_in_phase, validate_phase_window
+from app.services.ge_subtree_governor import is_subtree_governor
 
 
 def _validate_create_body(body: dict[str, Any]) -> None:
@@ -36,7 +37,12 @@ def _validate_create_body(body: dict[str, Any]) -> None:
 def create_project(db: Session, *, actor_user_id: str, body: dict[str, Any]) -> dict[str, Any]:
     _validate_create_body(body)
     now = now_iso()
-    program_id = body.get("program_id") or default_program_id(db)
+    default_pid = default_program_id(db)
+    program_id = body.get("program_id") or default_pid
+    program_id = str(program_id)
+    if "program_id" in body and body.get("program_id") and program_id != default_pid:
+        if not is_subtree_governor(db, user_id=actor_user_id, program_id=program_id):
+            raise HTTPException(status_code=403, detail={"detail": "not_subtree_governor"})
     project_id = str(uuid.uuid4())
     project_note_id = body.get("project_note_id")
     if project_note_id is not None:
@@ -137,7 +143,7 @@ def create_project(db: Session, *, actor_user_id: str, body: dict[str, Any]) -> 
                     phase_id=phase_id,
                     assignee_user_id=str(task_body["assignee_user_id"]),
                     title=str(task_body["title"]).strip(),
-                    status="blocked",
+                    status=TASK_STATUS_IDLE,
                     canvas_order=task_index,
                     created_at=now,
                     updated_at=now,

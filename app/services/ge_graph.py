@@ -8,7 +8,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session, joinedload
 
-from app.constants import SYSTEM_END_PHASE_NAME
+from app.constants import SYSTEM_END_PHASE_NAME, TASK_STATUS_DEVIATED, TASK_STATUS_IDLE
 from app.models.ge import (
     GeDeviation,
     GeGate,
@@ -53,6 +53,23 @@ def _prerequisite_gate_item_ids(db: Session, task_id: str) -> list[str]:
 def _produce_gate_item_ids(db: Session, task_id: str) -> list[str]:
     rows = db.query(GeTaskGateItemProduce).filter(GeTaskGateItemProduce.task_id == task_id).all()
     return [row.gate_item_id for row in rows]
+
+
+def _task_graph_row(db: Session, task: GeTask) -> dict[str, Any]:
+    row: dict[str, Any] = {
+        "id": task.id,
+        "title": task.title,
+        "assignee_user_id": task.assignee_user_id,
+        "phase_id": task.phase_id,
+        "produces": _produce_gate_item_ids(db, task.id),
+        "prerequisites": _prerequisite_gate_item_ids(db, task.id),
+        "is_system": bool(task.is_system),
+        "deviation_id": task.deviation_id,
+        "is_remediation": task.deviation_id is not None,
+    }
+    if task.status == TASK_STATUS_DEVIATED:
+        row["status"] = TASK_STATUS_DEVIATED
+    return row
 
 
 def eligible_signers(db: Session, gate_item_id: str) -> list[str]:
@@ -102,22 +119,29 @@ def task_can_start(db: Session, task: GeTask, phase: GePhase) -> bool:
     return True
 
 
+def tasks_linked_to_gate_item(db: Session, gate_item_id: str) -> list[GeTask]:
+    """Tasks whose effective_status may change when a GateItem is updated."""
+    seen: set[str] = set()
+    linked: list[GeTask] = []
+    for row in db.query(GeTaskGateItemProduce).filter(GeTaskGateItemProduce.gate_item_id == gate_item_id).all():
+        task = db.get(GeTask, row.task_id)
+        if task is not None and task.id not in seen:
+            seen.add(task.id)
+            linked.append(task)
+    for row in db.query(GeTaskGateItemPrerequisite).filter(
+        GeTaskGateItemPrerequisite.gate_item_id == gate_item_id
+    ).all():
+        task = db.get(GeTask, row.task_id)
+        if task is not None and task.id not in seen:
+            seen.add(task.id)
+            linked.append(task)
+    return linked
+
+
 def recompute_task_status(db: Session, project_id: str) -> list[GeTask]:
-    changed: list[GeTask] = []
-    tasks = db.query(GeTask).filter(GeTask.project_id == project_id).all()
-    phases = {p.id: p for p in db.query(GePhase).filter(GePhase.project_id == project_id).all()}
-    for task in tasks:
-        phase = phases.get(task.phase_id)
-        if phase is None:
-            continue
-        if task.status in ("running", "done", "deviated"):
-            continue
-        can_start = task_can_start(db, task, phase)
-        new_status = "ready" if can_start else "blocked"
-        if task.status != new_status:
-            task.status = new_status
-            changed.append(task)
-    return changed
+    """Deprecated · M23 — no-op; Task progress is read-time effective_status."""
+    _ = (db, project_id)
+    return []
 
 
 def _find_end_system_phase(db: Session, project_id: str) -> GePhase | None:
@@ -155,7 +179,6 @@ def maybe_activate_end_phase(db: Session, project_id: str) -> bool:
             return False
     end_phase.status = "active"
     end_phase.updated_at = now_iso()
-    recompute_task_status(db, project_id)
     return True
 
 
@@ -303,7 +326,13 @@ def build_graph_edges(db: Session, project: GeProject) -> list[dict[str, Any]]:
     return edges
 
 
-def build_project_graph(db: Session, project: GeProject) -> dict[str, Any]:
+def build_project_graph(
+    db: Session,
+    project: GeProject,
+    *,
+    actor_user_id: str | None = None,
+    is_governor: bool = False,
+) -> dict[str, Any]:
     from app.services.ge_deviations import compute_gate_overdue_fields
 
     deviations_by_gi = {
@@ -361,24 +390,10 @@ def build_project_graph(db: Session, project: GeProject) -> dict[str, Any]:
                     }
                     for gi in sorted(phase.gate_items, key=lambda g: g.created_at)
                 ],
-                "tasks": [
-                    {
-                        "id": task.id,
-                        "title": task.title,
-                        "status": task.status,
-                        "assignee_user_id": task.assignee_user_id,
-                        "phase_id": task.phase_id,
-                        "produces": _produce_gate_item_ids(db, task.id),
-                        "prerequisites": _prerequisite_gate_item_ids(db, task.id),
-                        "is_system": bool(task.is_system),
-                        "deviation_id": task.deviation_id,
-                        "is_remediation": task.deviation_id is not None,
-                    }
-                    for task in phase_tasks
-                ],
+                "tasks": [_task_graph_row(db, task) for task in phase_tasks],
             }
         )
-    return {
+    graph = {
         "project": {
             "id": project.id,
             "name": project.name,
@@ -391,6 +406,16 @@ def build_project_graph(db: Session, project: GeProject) -> dict[str, Any]:
         "phases": phases_out,
         "edges": build_graph_edges(db, project),
     }
+    if actor_user_id is not None:
+        from app.services.ge_effective_status import attach_effective_status_to_graph
+
+        attach_effective_status_to_graph(
+            db,
+            graph,
+            actor_user_id=actor_user_id,
+            is_governor=is_governor,
+        )
+    return graph
 
 
 def gate_item_summary(item: GeGateItem, db: Session) -> dict[str, Any]:
@@ -425,8 +450,11 @@ def write_operation_response(
     phase: GePhase | None = None,
     gate: GeGate | None = None,
     deviation: GeDeviation | None = None,
+    actor_user_id: str | None = None,
+    is_governor: bool = False,
 ) -> dict[str, Any]:
     from app.services.ge_deviations import deviation_summary
+    from app.services.ge_effective_status import effective_status_for_task_row
 
     phase_obj = phase
     gate_obj = gate
@@ -441,12 +469,27 @@ def write_operation_response(
             {
                 "id": t.id,
                 "title": t.title,
-                "status": t.status,
+                "effective_status": (
+                    effective_status_for_task_row(
+                        db,
+                        task=t,
+                        project=project,
+                        actor_user_id=actor_user_id,
+                        is_governor=is_governor,
+                    )
+                    if actor_user_id is not None
+                    else None
+                ),
                 "assignee_user_id": t.assignee_user_id,
                 "phase_id": t.phase_id,
                 "deviation_id": t.deviation_id,
                 "is_remediation": t.deviation_id is not None,
                 "produces": _produce_gate_item_ids(db, t.id),
+                **(
+                    {"status": TASK_STATUS_DEVIATED}
+                    if t.status == TASK_STATUS_DEVIATED
+                    else {}
+                ),
             }
             for t in affected_tasks
         ],

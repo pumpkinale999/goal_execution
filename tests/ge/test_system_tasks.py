@@ -162,9 +162,6 @@ def test_system_startup_submit_after_sign_route(client):
     )
     assert link.status_code == 200, link.text
 
-    start_resp = client.post(f"/api/v1/ge/tasks/{start_task_id}/start", headers=jwt_headers(U_PM))
-    assert start_resp.status_code == 200, start_resp.text
-
     submit = client.post(
         f"/api/v1/ge/gate-items/{start_gi['id']}/submit",
         headers=jwt_headers(U_PM),
@@ -330,8 +327,6 @@ def test_closure_gate_pm_submit_sign_without_manual_route(client):
     project_id = created["id"]
     graph = get_graph(client, project_id, U_PM)
     gi_x = gate_item_id_by_name(graph, "诊断报告")
-    task_a = task_id_by_title(graph, "编写诊断报告")
-    client.post(f"/api/v1/ge/tasks/{task_a}/start", headers=jwt_headers(U_ZHANGSAN))
     client.post(
         f"/api/v1/ge/gate-items/{gi_x}/submit",
         headers=jwt_headers(U_ZHANGSAN),
@@ -341,8 +336,6 @@ def test_closure_gate_pm_submit_sign_without_manual_route(client):
 
     graph2 = get_graph(client, project_id, U_PM)
     gi_y = gate_item_id_by_name(graph2, "接口规格")
-    task_b = task_id_by_title(graph2, "编写接口规格")
-    client.post(f"/api/v1/ge/tasks/{task_b}/start", headers=jwt_headers(U_LISI))
     client.post(
         f"/api/v1/ge/gate-items/{gi_y}/submit",
         headers=jwt_headers(U_LISI),

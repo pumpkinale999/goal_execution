@@ -19,6 +19,13 @@ def _require_sub_objective(objective: GeObjective) -> None:
         raise HTTPException(status_code=400, detail={"detail": "program_requires_sub_objective"})
 
 
+def _require_owner(body: dict[str, Any]) -> str:
+    owner = body.get("owner_user_id")
+    if owner is None or not str(owner).strip():
+        raise HTTPException(status_code=400, detail={"detail": "owner_required"})
+    return str(owner).strip()
+
+
 def create_objective(db: Session, body: dict[str, Any]) -> dict[str, Any]:
     ensure_ge_bootstrap(db)
     name = str(body.get("name") or "").strip()
@@ -32,12 +39,13 @@ def create_objective(db: Session, body: dict[str, Any]) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail={"detail": "not_found"})
     level = "sub" if parent.level == "company" else "sub"
     now = now_iso()
+    owner_user_id = _require_owner(body)
     obj = GeObjective(
         id=str(uuid.uuid4()),
         name=name,
         level=level,
         parent_id=str(parent_id),
-        owner_user_id=body.get("owner_user_id"),
+        owner_user_id=owner_user_id,
         is_default=0,
         created_at=now,
         updated_at=now,
@@ -79,11 +87,12 @@ def create_program(db: Session, body: dict[str, Any]) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail={"detail": "not_found"})
     _require_sub_objective(objective)
     now = now_iso()
+    owner_user_id = _require_owner(body)
     program = GeProgram(
         id=str(uuid.uuid4()),
         name=name,
         objective_id=str(objective_id),
-        owner_user_id=body.get("owner_user_id"),
+        owner_user_id=owner_user_id,
         is_default=0,
         created_at=now,
         updated_at=now,

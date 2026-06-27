@@ -54,7 +54,7 @@ def test_create_and_patch_program(client):
     create = client.post(
         "/api/v1/ge/programs",
         headers=service_headers("reviewer-1"),
-        json={"name": "产品群", "objective_id": GE_DEFAULT_SUB_OBJECTIVE_ID},
+        json={"name": "产品群", "objective_id": GE_DEFAULT_SUB_OBJECTIVE_ID, "owner_user_id": "u-owner"},
     )
     assert create.status_code == 201
     program_id = create.json()["id"]
@@ -71,7 +71,7 @@ def test_patch_program_to_company_objective_forbidden(client):
     create = client.post(
         "/api/v1/ge/programs",
         headers=service_headers("reviewer-1"),
-        json={"name": "产品群", "objective_id": GE_DEFAULT_SUB_OBJECTIVE_ID},
+        json={"name": "产品群", "objective_id": GE_DEFAULT_SUB_OBJECTIVE_ID, "owner_user_id": "u-owner"},
     )
     assert create.status_code == 201
     program_id = create.json()["id"]
@@ -119,7 +119,7 @@ def test_create_sub_objective(client):
     create = client.post(
         "/api/v1/ge/objectives",
         headers=service_headers("reviewer-1"),
-        json={"name": "2026 增长", "parent_id": GE_DEFAULT_OBJECTIVE_ID},
+        json={"name": "2026 增长", "parent_id": GE_DEFAULT_OBJECTIVE_ID, "owner_user_id": "u-owner"},
     )
     assert create.status_code == 201
     assert create.json()["parent_id"] == GE_DEFAULT_OBJECTIVE_ID
@@ -129,7 +129,7 @@ def test_delete_sub_objective(client):
     create = client.post(
         "/api/v1/ge/objectives",
         headers=service_headers("reviewer-1"),
-        json={"name": "待删子目标", "parent_id": GE_DEFAULT_OBJECTIVE_ID},
+        json={"name": "待删子目标", "parent_id": GE_DEFAULT_OBJECTIVE_ID, "owner_user_id": "u-owner"},
     )
     assert create.status_code == 201
     obj_id = create.json()["id"]

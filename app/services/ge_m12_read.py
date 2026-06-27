@@ -9,8 +9,10 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.auth import AuthUser
+from app.constants import TASK_STATUS_DEVIATED
 from app.models.ge import GeAuditEvent, GeGateItem, GePhase, GeProject, GeTask
 from app.services.ge_access import can_read_project
+from app.services.ge_effective_status import effective_status_for_task_row
 from app.services.ge_graph import _prerequisite_gate_item_ids, _produce_gate_item_ids, eligible_signers
 
 
@@ -22,16 +24,25 @@ def _ensure_project_readable(db: Session, project: GeProject | None, user: AuthU
     return project
 
 
-def _task_dict(db: Session, task: GeTask) -> dict[str, Any]:
-    return {
+def _task_dict(db: Session, task: GeTask, *, project: GeProject, user: AuthUser) -> dict[str, Any]:
+    row: dict[str, Any] = {
         "id": task.id,
         "title": task.title,
-        "status": task.status,
+        "effective_status": effective_status_for_task_row(
+            db,
+            task=task,
+            project=project,
+            actor_user_id=user.user_id,
+            is_governor=False,
+        ),
         "assignee_user_id": task.assignee_user_id,
         "phase_id": task.phase_id,
         "produces": _produce_gate_item_ids(db, task.id),
         "prerequisites": _prerequisite_gate_item_ids(db, task.id),
     }
+    if task.status == TASK_STATUS_DEVIATED:
+        row["status"] = TASK_STATUS_DEVIATED
+    return row
 
 
 def _gate_item_dict(db: Session, item: GeGateItem) -> dict[str, Any]:
@@ -57,7 +68,7 @@ def get_task_context(db: Session, task_id: str, user: AuthUser) -> dict[str, Any
     phase = db.get(GePhase, task.phase_id)
     gate_id = phase.gate.id if phase and phase.gate else None
     return {
-        "task": _task_dict(db, task),
+        "task": _task_dict(db, task, project=project, user=user),
         "project_id": project.id,
         "phase_id": task.phase_id,
         "gate_id": gate_id,

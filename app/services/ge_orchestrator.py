@@ -9,8 +9,8 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.auth import AuthUser
-from app.models.ge import GeGate, GeGateItem, GePhase, GeProject, GeTask, GeTaskGateItemProduce
-from app.services.ge_access import can_govern_project, can_read_project, require_govern_project
+from app.models.ge import GeGate, GeGateItem, GePhase, GeProgram, GeProject, GeTask, GeTaskGateItemProduce
+from app.services.ge_access import can_govern_project, can_read_project, require_govern_project, require_govern_structure
 from app.services.ge_graph import (
     apply_phase_transition,
     eligible_signers,
@@ -19,10 +19,11 @@ from app.services.ge_graph import (
     project_is_empty,
     record_audit,
     recompute_gate_and_phases,
-    recompute_task_status,
+    tasks_linked_to_gate_item,
     write_operation_response,
 )
 from app.services.ge_system_tasks import sync_system_end_sign_task_assignee
+from app.services.ge_subtree_governor import is_subtree_governor
 from app.services.ge_ws_callback import dispatch_deviation_personal_assistant
 
 
@@ -45,8 +46,7 @@ def _require_read(db: Session, project: GeProject, user: AuthUser) -> None:
 
 def soft_delete_project(db: Session, project_id: str, user: AuthUser) -> None:
     project = _get_project_or_404(db, project_id)
-    if not can_govern_project(project, user):
-        raise HTTPException(status_code=403, detail={"detail": "not_project_governor"})
+    require_govern_structure(db, project, user)
     if not project_is_empty(db, project):
         raise HTTPException(status_code=409, detail={"detail": "project_not_empty"})
     project.deleted_at = now_iso()
@@ -69,7 +69,7 @@ def _can_act_as_signer(db: Session, project: GeProject, gate_item_id: str, user:
 def patch_project(db: Session, project_id: str, user: AuthUser, body: dict[str, Any]) -> dict[str, Any]:
     project = _get_project_or_404(db, project_id)
     _require_read(db, project, user)
-    require_govern_project(project, user)
+    require_govern_structure(db, project, user)
     if project.status not in ("draft", "active"):
         raise HTTPException(status_code=409, detail={"detail": "project_not_editable"})
     changed = False
@@ -85,6 +85,14 @@ def patch_project(db: Session, project_id: str, user: AuthUser, body: dict[str, 
             raise HTTPException(status_code=400, detail={"detail": "invalid_assignee"})
         project.pm_user_id = pm_user_id
         changed = True
+    if body.get("program_id") is not None:
+        new_program_id = str(body["program_id"]).strip()
+        if not new_program_id:
+            raise HTTPException(status_code=400, detail={"detail": "invalid_program_id"})
+        if new_program_id != project.program_id:
+            _require_program_migration(db, project, user, new_program_id)
+            project.program_id = new_program_id
+            changed = True
     if not changed:
         raise HTTPException(status_code=400, detail={"detail": "no_changes"})
     now = now_iso()
@@ -101,7 +109,7 @@ def patch_project(db: Session, project_id: str, user: AuthUser, body: dict[str, 
         entity_type="project",
         entity_id=project.id,
         action="patch",
-        payload={"name": project.name, "pm_user_id": project.pm_user_id},
+        payload={"name": project.name, "pm_user_id": project.pm_user_id, "program_id": project.program_id},
     )
     db.commit()
     db.refresh(project)
@@ -114,6 +122,77 @@ def patch_project(db: Session, project_id: str, user: AuthUser, body: dict[str, 
         "created_by_user_id": project.created_by_user_id,
         "project_note_id": project.project_note_id,
     }
+
+
+def _can_migrate_program(
+    db: Session,
+    project: GeProject,
+    user: AuthUser,
+    *,
+    source_program_id: str,
+    target_program_id: str,
+) -> bool:
+    if user.auth_method == "service":
+        return True
+    if user.auth_method == "jwt" and user.user_id == project.pm_user_id:
+        return True
+    return is_subtree_governor(db, user_id=user.user_id, program_id=source_program_id) and is_subtree_governor(
+        db, user_id=user.user_id, program_id=target_program_id
+    )
+
+
+def _require_program_migration(
+    db: Session,
+    project: GeProject,
+    user: AuthUser,
+    target_program_id: str,
+) -> None:
+    if db.get(GeProgram, target_program_id) is None:
+        raise HTTPException(status_code=404, detail={"detail": "not_found"})
+    if not _can_migrate_program(
+        db,
+        project,
+        user,
+        source_program_id=project.program_id,
+        target_program_id=target_program_id,
+    ):
+        raise HTTPException(status_code=403, detail={"detail": "not_subtree_governor"})
+
+
+def migrate_project_program(
+    db: Session,
+    project_id: str,
+    user: AuthUser,
+    body: dict[str, Any],
+) -> dict[str, Any]:
+    project = _get_project_or_404(db, project_id)
+    _require_read(db, project, user)
+    program_id = body.get("program_id")
+    if program_id is None:
+        raise HTTPException(status_code=400, detail={"detail": "program_id_required"})
+    new_program_id = str(program_id).strip()
+    if not new_program_id:
+        raise HTTPException(status_code=400, detail={"detail": "invalid_program_id"})
+    if new_program_id == project.program_id:
+        raise HTTPException(status_code=400, detail={"detail": "no_changes"})
+    if project.status not in ("draft", "active"):
+        raise HTTPException(status_code=409, detail={"detail": "project_not_editable"})
+    _require_program_migration(db, project, user, new_program_id)
+    old_program_id = project.program_id
+    now = now_iso()
+    project.program_id = new_program_id
+    project.updated_at = now
+    record_audit(
+        db,
+        actor_user_id=user.user_id,
+        entity_type="project",
+        entity_id=project.id,
+        action="migrate_program",
+        payload={"from_program_id": old_program_id, "to_program_id": new_program_id},
+    )
+    db.commit()
+    db.refresh(project)
+    return _project_summary(project)
 
 
 def _project_summary(project: GeProject) -> dict[str, Any]:
@@ -217,9 +296,8 @@ def submit_gate_item(
         action="submit",
         payload={"summary": summary},
     )
-    affected = recompute_task_status(db, project.id)
-    gate_events = recompute_gate_and_phases(db, project.id)
-    affected = recompute_task_status(db, project.id) + affected
+    affected = tasks_linked_to_gate_item(db, item.id)
+    recompute_gate_and_phases(db, project.id)
     db.commit()
     return write_operation_response(
         db,
@@ -229,6 +307,8 @@ def submit_gate_item(
         phase=phase,
         gate=gate,
         deviation=dev if dev and dev.status in ("open", "active") else None,
+        actor_user_id=user.user_id,
+        is_governor=can_govern_project(project, user),
     )
 
 
@@ -266,10 +346,8 @@ def sign_gate_item(db: Session, gate_item_id: str, user: AuthUser) -> dict[str, 
         action="sign",
         payload={},
     )
-    affected = recompute_task_status(db, project.id)
+    affected = tasks_linked_to_gate_item(db, item.id)
     recompute_gate_and_phases(db, project.id)
-    affected2 = recompute_task_status(db, project.id)
-    affected.extend(affected2)
     db.commit()
     if closed_notify:
         dispatch_deviation_personal_assistant(
@@ -288,6 +366,8 @@ def sign_gate_item(db: Session, gate_item_id: str, user: AuthUser) -> dict[str, 
         phase=phase,
         gate=gate,
         deviation=closed_dev,
+        actor_user_id=user.user_id,
+        is_governor=can_govern_project(project_model, user),
     )
 
 
@@ -320,15 +400,6 @@ def reject_gate_item(
     item.rejected_at = now
     item.reject_reason = str(reason)
     item.updated_at = now
-    produce_rows = db.query(GeTaskGateItemProduce).filter(GeTaskGateItemProduce.gate_item_id == item.id).all()
-    affected: list[GeTask] = []
-    for row in produce_rows:
-        task = db.get(GeTask, row.task_id)
-        if task and task.status == "done":
-            task.status = "running"
-            task.done_at = None
-            task.updated_at = now
-            affected.append(task)
     record_audit(
         db,
         actor_user_id=user.user_id,
@@ -337,7 +408,7 @@ def reject_gate_item(
         action="reject",
         payload={"reject_reason": reason},
     )
-    affected.extend(recompute_task_status(db, project.id))
+    affected = tasks_linked_to_gate_item(db, item.id)
     db.commit()
     return write_operation_response(
         db,
@@ -346,6 +417,8 @@ def reject_gate_item(
         affected_tasks=affected,
         phase=phase,
         gate=gate,
+        actor_user_id=user.user_id,
+        is_governor=can_govern_project(project, user),
     )
 
 
@@ -373,7 +446,14 @@ def start_task(db: Session, task_id: str, user: AuthUser) -> dict[str, Any]:
         payload={},
     )
     db.commit()
-    return write_operation_response(db, project=project, gate_item=None, affected_tasks=[task])
+    return write_operation_response(
+        db,
+        project=project,
+        gate_item=None,
+        affected_tasks=[task],
+        actor_user_id=user.user_id,
+        is_governor=can_govern_project(project, user),
+    )
 
 
 def done_task(db: Session, task_id: str, user: AuthUser) -> dict[str, Any]:
@@ -420,4 +500,6 @@ def done_task(db: Session, task_id: str, user: AuthUser) -> dict[str, Any]:
         gate_item=None,
         affected_tasks=[task],
         deviation=open_dev if open_dev and open_dev.status in ("open", "active") else None,
+        actor_user_id=user.user_id,
+        is_governor=can_govern_project(project, user),
     )

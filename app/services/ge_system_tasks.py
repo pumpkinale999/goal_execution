@@ -13,6 +13,7 @@ from app.constants import (
     SYSTEM_END_TASK_TITLE,
     SYSTEM_START_GATE_ITEM_NAME,
     SYSTEM_START_TASK_TITLE,
+    TASK_STATUS_IDLE,
 )
 from app.models.ge import (
     GeGateItem,
@@ -204,7 +205,7 @@ def _ensure_end_sign_route(
             phase_id=end_phase_id,
             assignee_user_id=pm_user_id,
             title=SYSTEM_END_SIGN_TASK_TITLE,
-            status="blocked",
+            status=TASK_STATUS_IDLE,
             canvas_order=1,
             is_system=True,
             created_at=now,
@@ -262,25 +263,21 @@ def _ensure_start_side(
     if start_task is None:
         _bump_non_system_task_orders(db, start_phase_id)
         start_task_id = str(uuid.uuid4())
-        task_status = "done" if legacy_complete else "blocked"
         start_task = GeTask(
             id=start_task_id,
             project_id=project_id,
             phase_id=start_phase_id,
             assignee_user_id=pm_user_id,
             title=SYSTEM_START_TASK_TITLE,
-            status=task_status,
+            status=TASK_STATUS_IDLE,
             canvas_order=0,
             is_system=True,
-            done_at=now if legacy_complete else None,
             created_at=now,
             updated_at=now,
         )
         db.add(start_task)
         task_count += 1
-    elif legacy_complete and start_task.status != "done":
-        start_task.status = "done"
-        start_task.done_at = now
+    elif legacy_complete:
         start_task.updated_at = now
 
     if start_gi is None:
@@ -333,7 +330,7 @@ def _ensure_end_side(
             phase_id=end_phase_id,
             assignee_user_id=pm_user_id,
             title=SYSTEM_END_TASK_TITLE,
-            status="blocked",
+            status=TASK_STATUS_IDLE,
             canvas_order=0,
             is_system=True,
             created_at=now,

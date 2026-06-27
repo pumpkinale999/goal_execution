@@ -95,7 +95,8 @@ def test_deviated_task_no_produce_edge(client):
                 for t in phase["tasks"]
                 if t["id"] == task_id
             )
-            assert task["status"] != "deviated"
+            assert task.get("effective_status") != "deviated"
+            assert task.get("status") != "deviated"
 
 
 def test_open_twice_409(client):
@@ -144,22 +145,17 @@ def test_activate_deviation(client, monkeypatch):
     assert pa_calls[0]["event"] == "ge.deviation.activated"
 
 
-def test_open_phase_start_allowed_submit_done_409(client):
-    """GE-T81 · open phase: start ok · submit/done 409."""
+def test_open_phase_submit_409(client):
+    """GE-T81 · open phase: submit 409 · start/done 410 (M23)."""
     created = create_project(client, U_PM)
     graph = get_graph(client, created["id"], U_PM)
-    open_body = _open_overdue_deviation(client, graph)
+    _open_overdue_deviation(client, graph)
     remediation_id = next(
         t["id"]
         for phase in get_graph(client, created["id"], U_PM)["phases"]
         for t in phase["tasks"]
         if t.get("is_remediation")
     )
-    start = client.post(
-        f"/api/v1/ge/tasks/{remediation_id}/start",
-        headers=jwt_headers(U_ZHANGSAN),
-    )
-    assert start.status_code == 200, start.text
     gi = _gi(get_graph(client, created["id"], U_PM), "诊断报告")
     submit = client.post(
         f"/api/v1/ge/gate-items/{gi['id']}/submit",
@@ -168,11 +164,16 @@ def test_open_phase_start_allowed_submit_done_409(client):
     )
     assert submit.status_code == 409
     assert submit.json()["detail"] == "deviation_not_activated"
+    start = client.post(
+        f"/api/v1/ge/tasks/{remediation_id}/start",
+        headers=jwt_headers(U_ZHANGSAN),
+    )
+    assert start.status_code == 410
     done = client.post(
         f"/api/v1/ge/tasks/{remediation_id}/done",
         headers=jwt_headers(U_ZHANGSAN),
     )
-    assert done.status_code == 409
+    assert done.status_code == 410
 
 
 def test_system_node_open_403(client):
@@ -210,8 +211,6 @@ def test_remediation_submit_sign_close(client, monkeypatch):
     )
     graph2 = get_graph(client, created["id"], U_PM)
     remediation_id = next(t["id"] for phase in graph2["phases"] for t in phase["tasks"] if t.get("is_remediation"))
-    client.post(f"/api/v1/ge/tasks/{remediation_id}/start", headers=jwt_headers(U_ZHANGSAN))
-    client.post(f"/api/v1/ge/tasks/{remediation_id}/done", headers=jwt_headers(U_ZHANGSAN))
     gi = _gi(graph2, "诊断报告")
     client.post(
         f"/api/v1/ge/gate-items/{gi['id']}/submit",
@@ -283,7 +282,7 @@ def test_cancel_snapshot_rollback(client):
     created = create_project(client, U_PM)
     graph = get_graph(client, created["id"], U_PM)
     orig_task = next(t for t in graph["phases"][1]["tasks"] if t["title"] == "编写诊断报告")
-    orig_status = orig_task["status"]
+    orig_gi_status = _gi(graph, "诊断报告")["status"]
     dev_id = _open_overdue_deviation(client, graph)["deviation"]["id"]
     resp = client.patch(
         f"/api/v1/ge/deviations/{dev_id}",
@@ -293,9 +292,10 @@ def test_cancel_snapshot_rollback(client):
     assert resp.status_code == 200, resp.text
     graph2 = get_graph(client, created["id"], U_PM)
     gi = _gi(graph2, "诊断报告")
-    assert gi["status"] in (orig_status, "draft", "rejected", "ready")
+    assert gi["status"] in (orig_gi_status, "draft", "rejected")
     task = next(t for t in graph2["phases"][1]["tasks"] if t["title"] == "编写诊断报告")
-    assert task["status"] != "deviated"
+    assert task.get("effective_status") != "deviated"
+    assert task.get("status") != "deviated"
     assert gi["id"] in task["produces"]
     detail = client.get(f"/api/v1/ge/deviations/{dev_id}", headers=jwt_headers(U_PM))
     assert detail.json()["status"] == "cancelled"
@@ -330,7 +330,10 @@ def test_deviated_task_patch_immutable(client):
     graph = get_graph(client, created["id"], U_PM)
     _open_overdue_deviation(client, graph)
     graph2 = get_graph(client, created["id"], U_PM)
-    deviated = next(t for t in graph2["phases"][1]["tasks"] if t["status"] == "deviated")
+    deviated = next(
+        t for t in graph2["phases"][1]["tasks"]
+        if t.get("status") == "deviated" or t.get("effective_status") == "deviated"
+    )
     resp = client.patch(
         f"/api/v1/ge/tasks/{deviated['id']}",
         headers=jwt_headers(U_PM),
@@ -347,7 +350,10 @@ def test_remediation_task_not_deletable(client):
     _open_overdue_deviation(client, graph)
     graph2 = get_graph(client, created["id"], U_PM)
     remediation = next(t for t in graph2["phases"][1]["tasks"] if t.get("is_remediation"))
-    deviated = next(t for t in graph2["phases"][1]["tasks"] if t["status"] == "deviated")
+    deviated = next(
+        t for t in graph2["phases"][1]["tasks"]
+        if t.get("status") == "deviated" or t.get("effective_status") == "deviated"
+    )
     rem_resp = client.delete(f"/api/v1/ge/tasks/{remediation['id']}", headers=jwt_headers(U_PM))
     assert rem_resp.status_code == 409
     assert rem_resp.json()["detail"] == "remediation_task_not_deletable"
