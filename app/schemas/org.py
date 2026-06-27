@@ -28,6 +28,7 @@ class CreateDepartmentRequest(BaseModel):
 class PatchDepartmentRequest(BaseModel):
     name: str | None = None
     manager_user_id: str | None = None
+    parent_id: str | None = None
 
 
 class CreateTeamRequest(BaseModel):

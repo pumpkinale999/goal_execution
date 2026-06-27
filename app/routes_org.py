@@ -23,7 +23,7 @@ from app.schemas.org import (
     PatchUserOrgProfileRequest,
     UserOrgProfileOut,
 )
-from app.services.org_department_tree import department_has_children
+from app.services.org_department_tree import department_has_children, department_is_ancestor
 
 router = APIRouter(prefix="/org", tags=["org"])
 
@@ -104,6 +104,23 @@ def patch_department(
         dept.name = body.name.strip()
     if body.manager_user_id is not None or "manager_user_id" in body.model_fields_set:
         dept.manager_user_id = body.manager_user_id
+    if "parent_id" in body.model_fields_set:
+        new_parent_id = body.parent_id
+        if new_parent_id == department_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"detail": "invalid_parent"},
+            )
+        if new_parent_id is not None:
+            parent = db.get(OrgDepartment, new_parent_id)
+            if parent is None:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"detail": "not_found"})
+            if department_is_ancestor(db, department_id, new_parent_id):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={"detail": "department_cycle"},
+                )
+        dept.parent_id = new_parent_id
     dept.updated_at = _now_iso()
     db.commit()
     db.refresh(dept)
