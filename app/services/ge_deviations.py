@@ -210,8 +210,8 @@ def deviation_detail(dev: GeDeviation) -> dict[str, Any]:
     }
 
 
-def _require_governor(project: GeProject, user: AuthUser) -> None:
-    require_govern_project(project, user)
+def _require_governor(db: Session, project: GeProject, user: AuthUser) -> None:
+    require_govern_project(db, project, user)
 
 
 def _assert_not_system(item: GeGateItem | None, task: GeTask | None) -> None:
@@ -244,7 +244,7 @@ def open_deviation(
     project = db.get(GeProject, phase.project_id)
     if project is None or project.deleted_at is not None:
         raise HTTPException(status_code=404, detail={"detail": "project_not_found"})
-    _require_governor(project, user)
+    _require_governor(db, project, user)
     if active_deviation_for_gate_item(db, item.id):
         raise HTTPException(status_code=409, detail={"detail": "deviation_already_open"})
     if item.status in ("signed", "deviation"):
@@ -338,7 +338,7 @@ def open_deviation(
         gate=phase.gate,
         deviation=dev,
         actor_user_id=user.user_id,
-        is_governor=can_govern_project(project, user),
+        is_governor=can_govern_project(db, project, user),
     )
 
 
@@ -354,7 +354,7 @@ def activate_deviation(
     project = db.get(GeProject, dev.project_id)
     if project is None:
         raise HTTPException(status_code=404, detail={"detail": "project_not_found"})
-    _require_governor(project, user)
+    _require_governor(db, project, user)
     if dev.status != "open":
         raise HTTPException(status_code=409, detail={"detail": "deviation_not_open"})
 
@@ -433,7 +433,7 @@ def activate_deviation(
         gate=phase.gate if phase else None,
         deviation=dev,
         actor_user_id=user.user_id,
-        is_governor=can_govern_project(project, user),
+        is_governor=can_govern_project(db, project, user),
     )
 
 
@@ -449,7 +449,7 @@ def extend_deviation(
     project = db.get(GeProject, dev.project_id)
     if project is None:
         raise HTTPException(status_code=404, detail={"detail": "project_not_found"})
-    _require_governor(project, user)
+    _require_governor(db, project, user)
     if dev.status != "active":
         raise HTTPException(status_code=409, detail={"detail": "deviation_not_active"})
 
@@ -521,7 +521,7 @@ def extend_deviation(
         gate=phase.gate if phase else None,
         deviation=dev,
         actor_user_id=user.user_id,
-        is_governor=can_govern_project(project, user),
+        is_governor=can_govern_project(db, project, user),
     )
 
 
@@ -537,7 +537,7 @@ def cancel_deviation(
     project = db.get(GeProject, dev.project_id)
     if project is None:
         raise HTTPException(status_code=404, detail={"detail": "project_not_found"})
-    _require_governor(project, user)
+    _require_governor(db, project, user)
     if dev.status not in ("open", "active"):
         raise HTTPException(status_code=409, detail={"detail": "deviation_not_cancellable"})
 
@@ -597,7 +597,7 @@ def cancel_deviation(
         gate=phase.gate if phase else None,
         deviation=dev,
         actor_user_id=user.user_id,
-        is_governor=can_govern_project(project, user),
+        is_governor=can_govern_project(db, project, user),
     )
 
 

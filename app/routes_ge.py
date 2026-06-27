@@ -239,7 +239,7 @@ def get_project_graph(
         db,
         project,
         actor_user_id=user.user_id,
-        is_governor=can_govern_project(project, user),
+        is_governor=can_govern_project(db, project, user),
     )
     graph["graph_editable"] = graph_editable_flag(db, project, user)
     graph["graph_deletable"] = graph_deletable_flag(db, project, user)

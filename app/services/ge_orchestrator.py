@@ -54,16 +54,16 @@ def soft_delete_project(db: Session, project_id: str, user: AuthUser) -> None:
     db.commit()
 
 
-def _can_act_as_task_assignee(project: GeProject, task: GeTask, user: AuthUser) -> bool:
+def _can_act_as_task_assignee(db: Session, project: GeProject, task: GeTask, user: AuthUser) -> bool:
     if task.assignee_user_id == user.user_id:
         return True
-    return can_govern_project(project, user)
+    return can_govern_project(db, project, user)
 
 
 def _can_act_as_signer(db: Session, project: GeProject, gate_item_id: str, user: AuthUser) -> bool:
     if user.user_id in eligible_signers(db, gate_item_id):
         return True
-    return can_govern_project(project, user)
+    return can_govern_project(db, project, user)
 
 
 def patch_project(db: Session, project_id: str, user: AuthUser, body: dict[str, Any]) -> dict[str, Any]:
@@ -257,7 +257,7 @@ def submit_gate_item(
     if not produce_rows:
         raise HTTPException(status_code=409, detail={"detail": "gate_item_not_submittable"})
     produce_task = db.get(GeTask, produce_rows[0].task_id)
-    if produce_task is None or not _can_act_as_task_assignee(project, produce_task, user):
+    if produce_task is None or not _can_act_as_task_assignee(db, project, produce_task, user):
         raise HTTPException(status_code=403, detail={"detail": "not_assignee"})
     from app.services.ge_deviations import active_deviation_for_gate_item, assert_deviation_not_open_for_submit
 
@@ -308,7 +308,7 @@ def submit_gate_item(
         gate=gate,
         deviation=dev if dev and dev.status in ("open", "active") else None,
         actor_user_id=user.user_id,
-        is_governor=can_govern_project(project, user),
+        is_governor=can_govern_project(db, project, user),
     )
 
 
@@ -367,7 +367,7 @@ def sign_gate_item(db: Session, gate_item_id: str, user: AuthUser) -> dict[str, 
         gate=gate,
         deviation=closed_dev,
         actor_user_id=user.user_id,
-        is_governor=can_govern_project(project_model, user),
+        is_governor=can_govern_project(db, project_model, user),
     )
 
 
@@ -418,7 +418,7 @@ def reject_gate_item(
         phase=phase,
         gate=gate,
         actor_user_id=user.user_id,
-        is_governor=can_govern_project(project, user),
+        is_governor=can_govern_project(db, project, user),
     )
 
 
@@ -429,7 +429,7 @@ def start_task(db: Session, task_id: str, user: AuthUser) -> dict[str, Any]:
     project = _get_project_or_404(db, task.project_id)
     _require_read(db, project, user)
     _require_active_project(project)
-    if not _can_act_as_task_assignee(project, task, user):
+    if not _can_act_as_task_assignee(db, project, task, user):
         raise HTTPException(status_code=403, detail={"detail": "not_assignee"})
     if task.status != "ready":
         raise HTTPException(status_code=409, detail={"detail": "task_not_ready"})
@@ -452,7 +452,7 @@ def start_task(db: Session, task_id: str, user: AuthUser) -> dict[str, Any]:
         gate_item=None,
         affected_tasks=[task],
         actor_user_id=user.user_id,
-        is_governor=can_govern_project(project, user),
+        is_governor=can_govern_project(db, project, user),
     )
 
 
@@ -463,7 +463,7 @@ def done_task(db: Session, task_id: str, user: AuthUser) -> dict[str, Any]:
     project = _get_project_or_404(db, task.project_id)
     _require_read(db, project, user)
     _require_active_project(project)
-    if not _can_act_as_task_assignee(project, task, user):
+    if not _can_act_as_task_assignee(db, project, task, user):
         raise HTTPException(status_code=403, detail={"detail": "not_assignee"})
     if task.status != "running":
         raise HTTPException(status_code=409, detail={"detail": "task_not_ready"})
@@ -501,5 +501,5 @@ def done_task(db: Session, task_id: str, user: AuthUser) -> dict[str, Any]:
         affected_tasks=[task],
         deviation=open_dev if open_dev and open_dev.status in ("open", "active") else None,
         actor_user_id=user.user_id,
-        is_governor=can_govern_project(project, user),
+        is_governor=can_govern_project(db, project, user),
     )

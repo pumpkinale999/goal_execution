@@ -16,8 +16,9 @@ info:
     v1.12.0: REST-only workbench · DROP ge_execution_notifications · no skstudio ws-fanout
     v1.13.0 (P2 · M8): owner subtree_governor · structural CRUD objectives/programs · JWT read extension · service/BFF write (see impl §4.2.0.1)
     v1.14.0 (M23 · B′): Task effective_status read-time derivation (viewer/actor-relative) · actionable_tasks queue · Deprecated POST …/tasks/{id}/start|done · legacy ge_tasks.status stop-write · **spec draft ☑ · runtime pending**
+    v1.15.0 (M24): can_govern_project includes subtree_governor (GE-26 superseded) · graph write for steward · ProjectGraph graph_editable/graph_deletable
     Out of scope: skstudio BFF /api/v1/org|ge/* and POST /internal/ge/deviation-notify (see impl doc §4.0 · §5)
-  version: 1.14.0
+  version: 1.15.0
 servers:
   - url: /api/v1
     description: goal_execution service (JWT participant + service governance via skstudio BFF)
@@ -442,7 +443,7 @@ paths:
   /ge/projects/{project_id}/phases/{phase_id}/tasks:
     post:
       operationId: addGePhaseTask
-      summary: Add task to phase (pm; assignee_user_id required)
+      summary: Add task to phase (pm or subtree_governor; assignee_user_id required)
       description: |
         Creates a task in the given phase. assignee_user_id is required;
         the server does not fall back to pm_user_id when omitted or empty.
@@ -473,7 +474,7 @@ paths:
   /ge/projects/{project_id}/phases/{phase_id}/gate-items:
     post:
       operationId: addGePhaseGateItem
-      summary: Add gate item to phase (pm)
+      summary: Add gate item to phase (pm or subtree_governor)
       tags: [ge-gate-items]
       parameters:
         - $ref: '#/components/parameters/ProjectId'
@@ -498,7 +499,7 @@ paths:
   /ge/phases/{phase_id}:
     patch:
       operationId: patchGePhase
-      summary: Update business phase name and planned window (pm)
+      summary: Update business phase name and planned window (pm or subtree_governor)
       tags: [ge-phases]
       parameters:
         - $ref: '#/components/parameters/PhaseId'
@@ -532,7 +533,7 @@ paths:
           $ref: '#/components/responses/NotFound'
     delete:
       operationId: deleteGePhase
-      summary: Delete empty non-active business phase (pm)
+      summary: Delete empty non-active business phase (pm or subtree_governor)
       tags: [ge-phases]
       parameters:
         - $ref: '#/components/parameters/PhaseId'
@@ -565,7 +566,7 @@ paths:
           $ref: '#/components/responses/NotFound'
     patch:
       operationId: patchGeTask
-      summary: Update assignee_user_id, title, or phase_id (pm)
+      summary: Update assignee_user_id, title, or phase_id (pm or subtree_governor)
       tags: [ge-tasks]
       parameters:
         - $ref: '#/components/parameters/TaskId'
@@ -594,7 +595,7 @@ paths:
           $ref: '#/components/responses/Conflict'
     delete:
       operationId: deleteGeTask
-      summary: Delete task with no produce/prerequisite links (pm)
+      summary: Delete task with no produce/prerequisite links (pm or subtree_governor)
       tags: [ge-tasks]
       parameters:
         - $ref: '#/components/parameters/TaskId'
@@ -659,7 +660,7 @@ paths:
           $ref: '#/components/responses/NotFound'
     patch:
       operationId: patchGeGateItem
-      summary: Update gate item name, phase_id, planned_due, form, or definition fields (pm; draft only for form)
+      summary: Update gate item name, phase_id, planned_due, form, or definition fields (pm or subtree_governor; draft only for form)
       tags: [ge-gate-items]
       parameters:
         - $ref: '#/components/parameters/GateItemId'
@@ -700,7 +701,7 @@ paths:
           $ref: '#/components/responses/NotFound'
     delete:
       operationId: deleteGeGateItem
-      summary: Delete draft gate item with no links (pm)
+      summary: Delete draft gate item with no links (pm or subtree_governor)
       tags: [ge-gate-items]
       parameters:
         - $ref: '#/components/parameters/GateItemId'
@@ -1196,6 +1197,15 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PhaseGraph'
+        graph_editable:
+          type: boolean
+          description: M24 · caller may edit graph (PM or subtree_governor or reviewer service)
+        graph_deletable:
+          type: boolean
+          description: M24 · caller may delete graph nodes
+        is_governor:
+          type: boolean
+          description: M24 · can_govern_project for caller
     ProjectSummary:
       type: object
       required: [id, name, status, pm_user_id, program_id, created_by_user_id]

@@ -1,4 +1,4 @@
-"""Project access control (§4.0 · §4.2.1 · M21 governance)."""
+"""Project access control (§4.0 · §4.2.1 · M21 governance · M24 subtree steward)."""
 
 from __future__ import annotations
 
@@ -42,38 +42,41 @@ def filter_projects_for_user(db: Session, projects: list[GeProject], user: AuthU
     return [p for p in projects if can_read_project(db, p, user)]
 
 
-def can_govern_project(project: GeProject, user: AuthUser) -> bool:
-    """Execution governance: PM (JWT) or reviewer (service token). Excludes subtree_governor (GE-26)."""
+def can_govern_project(db: Session, project: GeProject, user: AuthUser) -> bool:
+    """Structure + execution governance: PM, subtree_governor (M24), or reviewer (service)."""
     if project.deleted_at is not None:
         return False
     if user.auth_method == "service":
         return True
-    if user.auth_method == "jwt" and user.user_id == project.pm_user_id:
-        return True
-    return False
-
-
-def can_govern_structure(db: Session, project: GeProject, user: AuthUser) -> bool:
-    """Structural fields: PM, reviewer service, or subtree_governor."""
-    if can_govern_project(project, user):
-        return True
     if user.auth_method == "jwt":
+        if user.user_id == project.pm_user_id:
+            return True
         return is_subtree_governor(db, user_id=user.user_id, project_id=project.id)
     return False
 
 
-def require_govern_project(project: GeProject, user: AuthUser) -> None:
-    if not can_govern_project(project, user):
+def can_govern_structure(db: Session, project: GeProject, user: AuthUser) -> bool:
+    """Alias for can_govern_project (M24 · GE-29 · no dual-track)."""
+    return can_govern_project(db, project, user)
+
+
+def require_govern_project(db: Session, project: GeProject, user: AuthUser) -> None:
+    if not can_govern_project(db, project, user):
         raise HTTPException(status_code=403, detail={"detail": "not_project_governor"})
 
 
 def require_govern_structure(db: Session, project: GeProject, user: AuthUser) -> None:
-    if not can_govern_structure(db, project, user):
-        raise HTTPException(status_code=403, detail={"detail": "not_project_governor"})
+    require_govern_project(db, project, user)
 
 
 def list_governed_project_ids(db: Session, user_id: str, *, auth_method: str = "jwt") -> list[str]:
     q = db.query(GeProject).filter(GeProject.deleted_at.is_(None), GeProject.status == "active")
     if auth_method == "service":
         return [p.id for p in q.all()]
-    return [p.id for p in q.filter(GeProject.pm_user_id == user_id).all()]
+    ids: set[str] = set()
+    for project in q.all():
+        if project.pm_user_id == user_id:
+            ids.add(project.id)
+        elif is_subtree_governor(db, user_id=user_id, project_id=project.id):
+            ids.add(project.id)
+    return list(ids)

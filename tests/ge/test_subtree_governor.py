@@ -1,10 +1,19 @@
-"""GE-T90 subtree_governor read + structural write · GE-26 canvas reject."""
+"""GE-T90 subtree_governor read + structural write · M24 steward full govern (GE-T101/102)."""
 
 from __future__ import annotations
 
 from app.constants import GE_DEFAULT_OBJECTIVE_ID, GE_DEFAULT_PROGRAM_ID, GE_DEFAULT_SUB_OBJECTIVE_ID
 from tests.conftest import jwt_headers, service_headers
-from tests.ge.conftest import GOLDEN_PROJECT_BODY, U_PM, U_STRANGER, create_project
+from tests.ge.conftest import (
+    GOLDEN_PROJECT_BODY,
+    U_PM,
+    U_STRANGER,
+    U_ZHANGSAN,
+    create_project,
+    get_graph,
+    material_submit_payload,
+    task_id_by_title,
+)
 
 U_OWNER = "u-owner"
 U_GOVERNOR = "u-governor"
@@ -17,6 +26,14 @@ def _patch_objective_owner(client, objective_id: str, owner_user_id: str) -> Non
         json={"owner_user_id": owner_user_id},
     )
     assert resp.status_code == 200, resp.text
+
+
+def _gate_item_id(graph, name: str) -> str:
+    for phase in graph["phases"]:
+        for gi in phase["gate_items"]:
+            if gi["name"] == name:
+                return gi["id"]
+    raise AssertionError(f"gate item {name!r} not found")
 
 
 def test_company_owner_reads_non_participant_project(client):
@@ -33,7 +50,7 @@ def test_company_owner_reads_non_participant_project(client):
 
     owner_graph = client.get(f"/api/v1/ge/projects/{project_id}/graph", headers=jwt_headers(U_OWNER))
     assert owner_graph.status_code == 200
-    assert owner_graph.json()["graph_editable"] is False
+    assert owner_graph.json()["graph_editable"] is True
 
     stranger = client.get(f"/api/v1/ge/projects/{project_id}/graph", headers=jwt_headers(U_STRANGER))
     assert stranger.status_code == 403
@@ -53,7 +70,8 @@ def test_governor_program_projects_full_list(client):
     assert created["id"] not in {p["id"] for p in stranger.json()["projects"]}
 
 
-def test_governor_structural_patch_ok_canvas_write_forbidden(client):
+def test_governor_structural_patch_and_canvas_write_allowed(client):
+    """GE-T101 · steward can PATCH graph."""
     _patch_objective_owner(client, GE_DEFAULT_OBJECTIVE_ID, U_OWNER)
     created = create_project(client, U_PM)
     project_id = created["id"]
@@ -66,13 +84,60 @@ def test_governor_structural_patch_ok_canvas_write_forbidden(client):
     assert patch.status_code == 200
     assert patch.json()["name"] == "owner-renamed"
 
-    graph = client.get(f"/api/v1/ge/projects/{project_id}/graph", headers=jwt_headers(U_OWNER)).json()
-    add_phase = client.post(
-        f"/api/v1/ge/projects/{project_id}/phases",
+    graph_resp = client.get(f"/api/v1/ge/projects/{project_id}/graph", headers=jwt_headers(U_OWNER))
+    assert graph_resp.status_code == 200
+    graph = graph_resp.json()
+    assert graph["graph_editable"] is True
+
+    task_id = task_id_by_title(graph, "编写诊断报告")
+    patch_task = client.patch(
+        f"/api/v1/ge/tasks/{task_id}",
         headers=jwt_headers(U_OWNER),
-        json={"sequence": 99, "name": "非法阶段"},
+        json={"title": "负责人改标题"},
     )
-    assert add_phase.status_code == 403
+    assert patch_task.status_code == 200, patch_task.text
+
+
+def test_steward_non_pm_can_patch_name_and_pm(client):
+    """GE-T102 · steward PATCH name/pm (project activate endpoint removed)."""
+    _patch_objective_owner(client, GE_DEFAULT_OBJECTIVE_ID, U_OWNER)
+    created = create_project(client, U_PM)
+    project_id = created["id"]
+
+    patch_name = client.patch(
+        f"/api/v1/ge/projects/{project_id}",
+        headers=jwt_headers(U_OWNER),
+        json={"name": "steward-renamed"},
+    )
+    assert patch_name.status_code == 200
+    assert patch_name.json()["name"] == "steward-renamed"
+
+    patch_pm = client.patch(
+        f"/api/v1/ge/projects/{project_id}",
+        headers=jwt_headers(U_OWNER),
+        json={"pm_user_id": U_ZHANGSAN},
+    )
+    assert patch_pm.status_code == 200
+    assert patch_pm.json()["pm_user_id"] == U_ZHANGSAN
+
+
+def test_steward_can_proxy_submit_and_sign(client):
+    """GE-T101 extension · steward execution write."""
+    _patch_objective_owner(client, GE_DEFAULT_OBJECTIVE_ID, U_OWNER)
+    created = create_project(client, U_PM)
+    project_id = created["id"]
+    graph = get_graph(client, project_id, U_PM)
+    gi_x = _gate_item_id(graph, "诊断报告")
+
+    submit = client.post(
+        f"/api/v1/ge/gate-items/{gi_x}/submit",
+        headers=jwt_headers(U_OWNER),
+        json=material_submit_payload("负责人代提交"),
+    )
+    assert submit.status_code == 200, submit.text
+
+    sign = client.post(f"/api/v1/ge/gate-items/{gi_x}/sign", headers=jwt_headers(U_OWNER))
+    assert sign.status_code == 200, sign.text
 
 
 def test_non_default_program_create_requires_governor(client):

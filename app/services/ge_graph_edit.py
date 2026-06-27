@@ -80,8 +80,7 @@ def _get_project_or_404(db: Session, project_id: str) -> GeProject:
 
 
 def _can_graph_govern(db: Session, project: GeProject, user: AuthUser) -> bool:
-    del db
-    return can_govern_project(project, user)
+    return can_govern_project(db, project, user)
 
 
 def _require_graph_editable(db: Session, project: GeProject, user: AuthUser) -> None:
@@ -130,7 +129,7 @@ def build_editable_project_graph(db: Session, project: GeProject, user: AuthUser
         db,
         project,
         actor_user_id=user.user_id,
-        is_governor=can_govern_project(project, user),
+        is_governor=can_govern_project(db, project, user),
     )
     graph["graph_editable"] = graph_editable_flag(db, project, user)
     graph["graph_deletable"] = graph_deletable_flag(db, project, user)
