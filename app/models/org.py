@@ -20,6 +20,7 @@ class OrgDepartment(Base):
         nullable=True,
     )
     department_note_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    sort_order: Mapped[int] = mapped_column(nullable=False, default=0)
     created_at: Mapped[str] = mapped_column(Text, nullable=False)
     updated_at: Mapped[str] = mapped_column(Text, nullable=False)
 
@@ -51,6 +52,7 @@ class OrgTeam(Base):
     name: Mapped[str] = mapped_column(Text, nullable=False)
     lead_user_id: Mapped[str | None] = mapped_column(String, nullable=True)
     team_note_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    sort_order: Mapped[int] = mapped_column(nullable=False, default=0)
     created_at: Mapped[str] = mapped_column(Text, nullable=False)
     updated_at: Mapped[str] = mapped_column(Text, nullable=False)
 

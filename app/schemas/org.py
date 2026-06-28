@@ -10,6 +10,7 @@ class OrgTeamOut(BaseModel):
     name: str
     lead_user_id: str | None = None
     team_note_id: str | None = None
+    sort_order: int = 0
 
 
 class OrgDepartmentOut(BaseModel):
@@ -18,6 +19,7 @@ class OrgDepartmentOut(BaseModel):
     manager_user_id: str | None = None
     parent_id: str | None = None
     department_note_id: str | None = None
+    sort_order: int = 0
     teams: list[OrgTeamOut] = Field(default_factory=list)
 
 
@@ -79,3 +81,7 @@ class PatchUserOrgProfileRequest(BaseModel):
     primary_membership_id: str | None = None
     proficiency: str | None = None
     manager_user_id: str | None = None
+
+
+class ReorderRequest(BaseModel):
+    direction: str = Field(pattern="^(up|down)$")

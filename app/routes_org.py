@@ -23,6 +23,7 @@ from app.schemas.org import (
     PatchDepartmentRequest,
     PatchTeamRequest,
     PatchUserOrgProfileRequest,
+    ReorderRequest,
     UserOrgProfileOut,
 )
 from app.services.org_department_tree import department_has_children, department_is_ancestor
@@ -37,6 +38,12 @@ from app.services.org_memberships import (
     validate_primary_membership_id,
 )
 from app.services.org_role_membership import ensure_dept_manager_membership, ensure_team_lead_membership
+from app.services.org_sort_order import (
+    next_department_sort_order,
+    next_team_sort_order,
+    reorder_department,
+    reorder_team,
+)
 
 router = APIRouter(prefix="/org", tags=["org"])
 
@@ -48,14 +55,16 @@ def _dept_out(dept: OrgDepartment) -> OrgDepartmentOut:
         manager_user_id=dept.manager_user_id,
         parent_id=dept.parent_id,
         department_note_id=dept.department_note_id,
+        sort_order=dept.sort_order,
         teams=[
             OrgTeamOut(
                 id=team.id,
                 name=team.name,
                 lead_user_id=team.lead_user_id,
                 team_note_id=team.team_note_id,
+                sort_order=team.sort_order,
             )
-            for team in sorted(dept.teams, key=lambda t: t.name)
+            for team in sorted(dept.teams, key=lambda t: (t.sort_order, t.name))
         ],
     )
 
@@ -99,7 +108,7 @@ def list_departments(
     db: Annotated[Session, Depends(get_db)],
     _user: Annotated[AuthUser, Depends(get_current_user)],
 ) -> list[OrgDepartmentOut]:
-    departments = db.query(OrgDepartment).order_by(OrgDepartment.name).all()
+    departments = db.query(OrgDepartment).order_by(OrgDepartment.sort_order, OrgDepartment.name).all()
     return [_dept_out(dept) for dept in departments]
 
 
@@ -120,6 +129,7 @@ def create_department(
         name=body.name.strip(),
         manager_user_id=body.manager_user_id,
         parent_id=parent_id,
+        sort_order=next_department_sort_order(db, parent_id),
         created_at=now,
         updated_at=now,
     )
@@ -175,7 +185,10 @@ def patch_department(
                     status_code=status.HTTP_409_CONFLICT,
                     detail={"detail": "department_cycle"},
                 )
+        old_parent_id = dept.parent_id
         dept.parent_id = new_parent_id
+        if new_parent_id != old_parent_id:
+            dept.sort_order = next_department_sort_order(db, new_parent_id)
     if "department_note_id" in body.model_fields_set:
         dept.department_note_id = body.department_note_id
     dept.updated_at = now
@@ -199,6 +212,7 @@ def create_team(
         department_id=body.department_id,
         name=body.name.strip(),
         lead_user_id=body.lead_user_id,
+        sort_order=next_team_sort_order(db, body.department_id),
         created_at=now,
         updated_at=now,
     )
@@ -219,6 +233,7 @@ def create_team(
         name=team.name,
         lead_user_id=team.lead_user_id,
         team_note_id=team.team_note_id,
+        sort_order=team.sort_order,
     )
 
 
@@ -255,6 +270,43 @@ def patch_team(
         name=team.name,
         lead_user_id=team.lead_user_id,
         team_note_id=team.team_note_id,
+        sort_order=team.sort_order,
+    )
+
+
+@router.post("/departments/{department_id}/reorder", response_model=OrgDepartmentOut)
+def reorder_department_route(
+    department_id: str,
+    body: ReorderRequest,
+    db: Annotated[Session, Depends(get_db)],
+    _user: Annotated[AuthUser, Depends(require_service_user)],
+) -> OrgDepartmentOut:
+    now = _now_iso()
+    dept = reorder_department(db, department_id, body.direction)  # type: ignore[arg-type]
+    dept.updated_at = now
+    db.commit()
+    db.refresh(dept)
+    return _dept_out(dept)
+
+
+@router.post("/teams/{team_id}/reorder", response_model=OrgTeamOut)
+def reorder_team_route(
+    team_id: str,
+    body: ReorderRequest,
+    db: Annotated[Session, Depends(get_db)],
+    _user: Annotated[AuthUser, Depends(require_service_user)],
+) -> OrgTeamOut:
+    now = _now_iso()
+    team = reorder_team(db, team_id, body.direction)  # type: ignore[arg-type]
+    team.updated_at = now
+    db.commit()
+    db.refresh(team)
+    return OrgTeamOut(
+        id=team.id,
+        name=team.name,
+        lead_user_id=team.lead_user_id,
+        team_note_id=team.team_note_id,
+        sort_order=team.sort_order,
     )
 
 
