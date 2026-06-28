@@ -47,8 +47,14 @@ def _dept_out(dept: OrgDepartment) -> OrgDepartmentOut:
         name=dept.name,
         manager_user_id=dept.manager_user_id,
         parent_id=dept.parent_id,
+        department_note_id=dept.department_note_id,
         teams=[
-            OrgTeamOut(id=team.id, name=team.name, lead_user_id=team.lead_user_id)
+            OrgTeamOut(
+                id=team.id,
+                name=team.name,
+                lead_user_id=team.lead_user_id,
+                team_note_id=team.team_note_id,
+            )
             for team in sorted(dept.teams, key=lambda t: t.name)
         ],
     )
@@ -170,6 +176,8 @@ def patch_department(
                     detail={"detail": "department_cycle"},
                 )
         dept.parent_id = new_parent_id
+    if "department_note_id" in body.model_fields_set:
+        dept.department_note_id = body.department_note_id
     dept.updated_at = now
     db.commit()
     db.refresh(dept)
@@ -206,7 +214,12 @@ def create_team(
         )
     db.commit()
     db.refresh(team)
-    return OrgTeamOut(id=team.id, name=team.name, lead_user_id=team.lead_user_id)
+    return OrgTeamOut(
+        id=team.id,
+        name=team.name,
+        lead_user_id=team.lead_user_id,
+        team_note_id=team.team_note_id,
+    )
 
 
 @router.patch("/teams/{team_id}", response_model=OrgTeamOut)
@@ -232,10 +245,17 @@ def patch_team(
                 user_id=team.lead_user_id,
                 now=now,
             )
+    if "team_note_id" in body.model_fields_set:
+        team.team_note_id = body.team_note_id
     team.updated_at = now
     db.commit()
     db.refresh(team)
-    return OrgTeamOut(id=team.id, name=team.name, lead_user_id=team.lead_user_id)
+    return OrgTeamOut(
+        id=team.id,
+        name=team.name,
+        lead_user_id=team.lead_user_id,
+        team_note_id=team.team_note_id,
+    )
 
 
 @router.delete("/teams/{team_id}", status_code=status.HTTP_204_NO_CONTENT)

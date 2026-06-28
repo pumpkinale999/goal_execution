@@ -9,6 +9,7 @@ class OrgTeamOut(BaseModel):
     id: str
     name: str
     lead_user_id: str | None = None
+    team_note_id: str | None = None
 
 
 class OrgDepartmentOut(BaseModel):
@@ -16,6 +17,7 @@ class OrgDepartmentOut(BaseModel):
     name: str
     manager_user_id: str | None = None
     parent_id: str | None = None
+    department_note_id: str | None = None
     teams: list[OrgTeamOut] = Field(default_factory=list)
 
 
@@ -29,6 +31,7 @@ class PatchDepartmentRequest(BaseModel):
     name: str | None = None
     manager_user_id: str | None = None
     parent_id: str | None = None
+    department_note_id: str | None = None
 
 
 class CreateTeamRequest(BaseModel):
@@ -40,6 +43,7 @@ class CreateTeamRequest(BaseModel):
 class PatchTeamRequest(BaseModel):
     name: str | None = None
     lead_user_id: str | None = None
+    team_note_id: str | None = None
 
 
 class OrgMemberOut(BaseModel):

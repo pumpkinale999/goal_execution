@@ -17,8 +17,10 @@ info:
     v1.13.0 (P2 · M8): owner subtree_governor · structural CRUD objectives/programs · JWT read extension · service/BFF write (see impl §4.2.0.1)
     v1.14.0 (M23 · B′): Task effective_status read-time derivation (viewer/actor-relative) · actionable_tasks queue · Deprecated POST …/tasks/{id}/start|done · legacy ge_tasks.status stop-write · **spec draft ☑ · runtime pending**
     v1.15.0 (M24): can_govern_project includes subtree_governor (GE-26 superseded) · graph write for steward · ProjectGraph graph_editable/graph_deletable
+    v1.16.0 (v2.22/v2.23 · runtime ☑): user_org_memberships · primary_membership_id · membership CRUD · primary_membership_required 409 · see impl §4.1.3 · req v2.23.2 invariant
+    v1.17.3 (M28): KB topic org-charter (title 组织宪章) · paths org-charter/departments|teams/{slug} · see impl §4.1.4 · req v2.24.4
     Out of scope: skstudio BFF /api/v1/org|ge/* and POST /internal/ge/deviation-notify (see impl doc §4.0 · §5)
-  version: 1.15.0
+  version: 1.17.3
 servers:
   - url: /api/v1
     description: goal_execution service (JWT participant + service governance via skstudio BFF)
@@ -98,6 +100,69 @@ paths:
                 $ref: '#/components/schemas/UserOrgProfile'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      operationId: patchOrgUserProfile
+      summary: Update org scalars (service · reviewer BFF · v2.23 planning)
+      tags: [org]
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchUserOrgProfileRequest'
+      responses:
+        '200':
+          description: Updated profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserOrgProfile'
+        '400':
+          description: invalid_primary_membership
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /org/users/{user_id}/memberships:
+    post:
+      operationId: createOrgUserMembership
+      summary: Add org membership row (service · reviewer BFF · v2.22 planning)
+      tags: [org]
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrgMembershipRequest'
+      responses:
+        '201':
+          description: Created membership
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrgMembership'
+        '409':
+          description: primary_membership_required · department_membership_conflict
+  /org/memberships/{membership_id}:
+    delete:
+      operationId: deleteOrgMembership
+      summary: Remove one membership row (service · reviewer BFF · v2.22 planning)
+      tags: [org]
+      parameters:
+        - name: membership_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Deleted
         '404':
           $ref: '#/components/responses/NotFound'
   /ge/objectives:
@@ -1288,18 +1353,149 @@ components:
       properties:
         user_id:
           type: string
+        primary_membership_id:
+          type: string
+          nullable: true
+          description: v2.23 · FK to user_org_memberships.id
+        memberships:
+          type: array
+          description: v2.22 · aggregated on GET profile
+          items:
+            $ref: '#/components/schemas/OrgMembership'
         department_id:
           type: string
           nullable: true
+          deprecated: true
+          description: Removed in v2.22 migration 017 · use memberships[]
         team_id:
           type: string
           nullable: true
+          deprecated: true
+          description: Removed in v2.22 migration 017 · use memberships[]
         proficiency:
           type: string
           nullable: true
         manager_user_id:
           type: string
           nullable: true
+    OrgMembership:
+      type: object
+      required: [id, user_id, department_id]
+      properties:
+        id:
+          type: string
+        user_id:
+          type: string
+        department_id:
+          type: string
+        team_id:
+          type: string
+          nullable: true
+        is_primary:
+          type: boolean
+          description: BFF denormalized · v2.23
+        org_path:
+          type: string
+          description: Single path segment · BFF computed
+    CreateOrgMembershipRequest:
+      type: object
+      required: [department_id]
+      properties:
+        department_id:
+          type: string
+        team_id:
+          type: string
+          nullable: true
+        primary_membership_id:
+          type: string
+          nullable: true
+          description: Required when resulting membership count >= 2 and none set
+    PatchUserOrgProfileRequest:
+      type: object
+      properties:
+        primary_membership_id:
+          type: string
+          nullable: true
+        manager_user_id:
+          type: string
+          nullable: true
+        proficiency:
+          type: string
+          nullable: true
+    OrgDepartmentOut:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        manager_user_id:
+          type: string
+          nullable: true
+        department_note_id:
+          type: string
+          nullable: true
+          description: M28 · logical FK to knowledge base note uuid
+        teams:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrgTeamOut'
+    OrgTeamOut:
+      type: object
+      required: [id, name, department_id]
+      properties:
+        id:
+          type: string
+        department_id:
+          type: string
+        name:
+          type: string
+        lead_user_id:
+          type: string
+          nullable: true
+        team_note_id:
+          type: string
+          nullable: true
+          description: M28 · logical FK to knowledge base note uuid
+    PatchOrgDepartmentRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        manager_user_id:
+          type: string
+          nullable: true
+        department_note_id:
+          type: string
+          nullable: true
+          description: M28 · service bind only · no body text
+    PatchOrgTeamRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        lead_user_id:
+          type: string
+          nullable: true
+        team_note_id:
+          type: string
+          nullable: true
+          description: M28 · service bind only · no body text
+    OrgCharterExcerpt:
+      type: object
+      required: [bound]
+      properties:
+        bound:
+          type: boolean
+          description: false when department_note_id/team_note_id is null
+        note_id:
+          type: string
+          nullable: true
+        excerpt:
+          type: string
+          nullable: true
+          description: Plain text, max 500 chars, markdown stripped; null when unbound or empty body
     PhaseGraph:
       type: object
       required: [id, sequence, name, status, gate, gate_items, tasks]
