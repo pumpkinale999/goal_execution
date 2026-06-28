@@ -24,6 +24,7 @@ from app.schemas.org import (
     UserOrgProfileOut,
 )
 from app.services.org_department_tree import department_has_children, department_is_ancestor
+from app.services.org_role_membership import ensure_dept_manager_membership, ensure_team_lead_membership
 
 router = APIRouter(prefix="/org", tags=["org"])
 
@@ -85,6 +86,13 @@ def create_department(
         updated_at=now,
     )
     db.add(dept)
+    if body.manager_user_id:
+        ensure_dept_manager_membership(
+            db,
+            department_id=dept.id,
+            user_id=body.manager_user_id,
+            now=now,
+        )
     db.commit()
     db.refresh(dept)
     return _dept_out(dept)
@@ -100,10 +108,18 @@ def patch_department(
     dept = db.get(OrgDepartment, department_id)
     if dept is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"detail": "not_found"})
+    now = _now_iso()
     if body.name is not None:
         dept.name = body.name.strip()
     if body.manager_user_id is not None or "manager_user_id" in body.model_fields_set:
         dept.manager_user_id = body.manager_user_id
+        if dept.manager_user_id:
+            ensure_dept_manager_membership(
+                db,
+                department_id=department_id,
+                user_id=dept.manager_user_id,
+                now=now,
+            )
     if "parent_id" in body.model_fields_set:
         new_parent_id = body.parent_id
         if new_parent_id == department_id:
@@ -121,7 +137,7 @@ def patch_department(
                     detail={"detail": "department_cycle"},
                 )
         dept.parent_id = new_parent_id
-    dept.updated_at = _now_iso()
+    dept.updated_at = now
     db.commit()
     db.refresh(dept)
     return _dept_out(dept)
@@ -146,6 +162,14 @@ def create_team(
         updated_at=now,
     )
     db.add(team)
+    if body.lead_user_id:
+        ensure_team_lead_membership(
+            db,
+            team_id=team.id,
+            department_id=body.department_id,
+            user_id=body.lead_user_id,
+            now=now,
+        )
     db.commit()
     db.refresh(team)
     return OrgTeamOut(id=team.id, name=team.name, lead_user_id=team.lead_user_id)
@@ -161,11 +185,20 @@ def patch_team(
     team = db.get(OrgTeam, team_id)
     if team is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"detail": "not_found"})
+    now = _now_iso()
     if body.name is not None:
         team.name = body.name.strip()
     if body.lead_user_id is not None or "lead_user_id" in body.model_fields_set:
         team.lead_user_id = body.lead_user_id
-    team.updated_at = _now_iso()
+        if team.lead_user_id:
+            ensure_team_lead_membership(
+                db,
+                team_id=team_id,
+                department_id=team.department_id,
+                user_id=team.lead_user_id,
+                now=now,
+            )
+    team.updated_at = now
     db.commit()
     db.refresh(team)
     return OrgTeamOut(id=team.id, name=team.name, lead_user_id=team.lead_user_id)
