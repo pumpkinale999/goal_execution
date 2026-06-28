@@ -55,16 +55,30 @@ class OrgTeam(Base):
     department: Mapped[OrgDepartment] = relationship("OrgDepartment", back_populates="teams")
 
 
+class UserOrgMembership(Base):
+    __tablename__ = "user_org_memberships"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    department_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("org_departments.id"),
+        nullable=False,
+    )
+    team_id: Mapped[str | None] = mapped_column(String, ForeignKey("org_teams.id"), nullable=True)
+    created_at: Mapped[str] = mapped_column(Text, nullable=False)
+    updated_at: Mapped[str] = mapped_column(Text, nullable=False)
+
+
 class UserOrgProfile(Base):
     __tablename__ = "user_org_profiles"
 
     user_id: Mapped[str] = mapped_column(String, primary_key=True)
-    department_id: Mapped[str | None] = mapped_column(
+    primary_membership_id: Mapped[str | None] = mapped_column(
         String,
-        ForeignKey("org_departments.id"),
+        ForeignKey("user_org_memberships.id"),
         nullable=True,
     )
-    team_id: Mapped[str | None] = mapped_column(String, ForeignKey("org_teams.id"), nullable=True)
     manager_user_id: Mapped[str | None] = mapped_column(String, nullable=True)
     proficiency_level: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_at: Mapped[str] = mapped_column(Text, nullable=False)

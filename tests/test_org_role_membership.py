@@ -1,4 +1,4 @@
-"""GE-T114～T118: role appointment syncs user_org_profiles membership."""
+"""GE-T114～T118: role appointment syncs user_org_memberships."""
 
 from __future__ import annotations
 
@@ -14,6 +14,20 @@ def _profile(client, user_id: str) -> dict:
     return resp.json()
 
 
+def _dept_membership(profile: dict, dept_id: str) -> dict | None:
+    for m in profile["memberships"]:
+        if m["department_id"] == dept_id and m["team_id"] is None:
+            return m
+    return None
+
+
+def _team_membership(profile: dict, team_id: str) -> dict | None:
+    for m in profile["memberships"]:
+        if m["team_id"] == team_id:
+            return m
+    return None
+
+
 def test_create_department_with_manager_syncs_profile(client):
     """GE-T114: POST /departments with manager_user_id."""
     resp = client.post(
@@ -25,8 +39,8 @@ def test_create_department_with_manager_syncs_profile(client):
     dept_id = resp.json()["id"]
 
     profile = _profile(client, "u-boss")
-    assert profile["department_id"] == dept_id
-    assert profile["team_id"] is None
+    assert _dept_membership(profile, dept_id) is not None
+    assert profile["primary_membership_id"] is not None
 
 
 def test_patch_department_manager_syncs_profile(client):
@@ -46,8 +60,7 @@ def test_patch_department_manager_syncs_profile(client):
     assert patch.status_code == 200
 
     profile = _profile(client, "u-mgr")
-    assert profile["department_id"] == dept_id
-    assert profile["team_id"] is None
+    assert _dept_membership(profile, dept_id) is not None
 
 
 def test_create_and_patch_team_lead_syncs_profile(client):
@@ -68,8 +81,7 @@ def test_create_and_patch_team_lead_syncs_profile(client):
     team_id = team.json()["id"]
 
     profile = _profile(client, "u-lead")
-    assert profile["department_id"] == dept_id
-    assert profile["team_id"] == team_id
+    assert _team_membership(profile, team_id) is not None
 
     team2 = client.post(
         "/api/v1/org/teams",
@@ -86,12 +98,11 @@ def test_create_and_patch_team_lead_syncs_profile(client):
     assert patch.status_code == 200
 
     profile2 = _profile(client, "u-lead2")
-    assert profile2["department_id"] == dept_id
-    assert profile2["team_id"] == team2_id
+    assert _team_membership(profile2, team2_id) is not None
 
 
 def test_clear_manager_or_lead_does_not_change_profile(client):
-    """GE-T117: clearing manager/lead leaves profile unchanged."""
+    """GE-T117: clearing manager/lead leaves membership unchanged."""
     dept = client.post(
         "/api/v1/org/departments",
         headers=service_headers("reviewer-1"),
@@ -122,12 +133,12 @@ def test_clear_manager_or_lead_does_not_change_profile(client):
 
     after_mgr = _profile(client, "u-mgr")
     after_lead = _profile(client, "u-lead")
-    assert after_mgr == before_mgr
-    assert after_lead == before_lead
+    assert after_mgr["memberships"] == before_mgr["memberships"]
+    assert after_lead["memberships"] == before_lead["memberships"]
 
 
-def test_cross_department_and_promote_to_dept_manager(client):
-    """GE-T118: cross-dept override; same-dept group member promoted to dept manager."""
+def test_cross_department_append_not_override(client):
+    """GE-T118: cross-dept append; same-dept group member promoted to dept manager."""
     dept_a = client.post(
         "/api/v1/org/departments",
         headers=service_headers("reviewer-1"),
@@ -144,8 +155,7 @@ def test_cross_department_and_promote_to_dept_manager(client):
         json={"department_id": dept_a, "name": "A组", "lead_user_id": "u-move"},
     ).json()["id"]
 
-    assert _profile(client, "u-move")["department_id"] == dept_a
-    assert _profile(client, "u-move")["team_id"] == team_a
+    assert _team_membership(_profile(client, "u-move"), team_a) is not None
 
     client.patch(
         f"/api/v1/org/departments/{dept_b}",
@@ -153,8 +163,8 @@ def test_cross_department_and_promote_to_dept_manager(client):
         json={"manager_user_id": "u-move"},
     )
     moved = _profile(client, "u-move")
-    assert moved["department_id"] == dept_b
-    assert moved["team_id"] is None
+    assert _dept_membership(moved, dept_b) is not None
+    assert _team_membership(moved, team_a) is not None
 
     dept_c = client.post(
         "/api/v1/org/departments",
@@ -166,11 +176,12 @@ def test_cross_department_and_promote_to_dept_manager(client):
         headers=service_headers("reviewer-1"),
         json={"department_id": dept_c, "name": "C组"},
     ).json()["id"]
-    client.patch(
-        "/api/v1/org/users/u-promote/profile",
+    mem = client.post(
+        "/api/v1/org/users/u-promote/memberships",
         headers=service_headers("reviewer-1"),
         json={"department_id": dept_c, "team_id": team_c},
     )
+    assert mem.status_code == 201
 
     client.patch(
         f"/api/v1/org/departments/{dept_c}",
@@ -178,8 +189,8 @@ def test_cross_department_and_promote_to_dept_manager(client):
         json={"manager_user_id": "u-promote"},
     )
     promoted = _profile(client, "u-promote")
-    assert promoted["department_id"] == dept_c
-    assert promoted["team_id"] is None
+    assert _dept_membership(promoted, dept_c) is not None
+    assert _team_membership(promoted, team_c) is None
 
 
 def test_replace_manager_only_syncs_new_manager(client):
@@ -198,7 +209,6 @@ def test_replace_manager_only_syncs_new_manager(client):
         json={"manager_user_id": "u-new"},
     )
 
-    assert _profile(client, "u-old") == old_before
+    assert _profile(client, "u-old")["memberships"] == old_before["memberships"]
     new_profile = _profile(client, "u-new")
-    assert new_profile["department_id"] == dept_id
-    assert new_profile["team_id"] is None
+    assert _dept_membership(new_profile, dept_id) is not None

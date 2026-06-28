@@ -25,13 +25,16 @@ def _create_team(client, dept_id: str, name: str = "前端组") -> str:
     return resp.json()["id"]
 
 
-def _assign_profile(client, user_id: str, *, department_id: str | None, team_id: str | None) -> None:
-    resp = client.patch(
-        f"/api/v1/org/users/{user_id}/profile",
+def _add_membership(client, user_id: str, *, department_id: str, team_id: str | None = None) -> None:
+    body: dict = {"department_id": department_id}
+    if team_id is not None:
+        body["team_id"] = team_id
+    resp = client.post(
+        f"/api/v1/org/users/{user_id}/memberships",
         headers=service_headers("reviewer-1"),
-        json={"department_id": department_id, "team_id": team_id},
+        json=body,
     )
-    assert resp.status_code == 200
+    assert resp.status_code == 201
 
 
 def test_patch_team(client):
@@ -50,7 +53,7 @@ def test_patch_team(client):
 def test_delete_team_moves_members_to_unassigned(client):
     dept_id = _create_dept(client)
     team_id = _create_team(client, dept_id)
-    _assign_profile(client, "42", department_id=dept_id, team_id=team_id)
+    _add_membership(client, "42", department_id=dept_id, team_id=team_id)
 
     resp = client.delete(
         f"/api/v1/org/teams/{team_id}",
@@ -59,9 +62,7 @@ def test_delete_team_moves_members_to_unassigned(client):
     assert resp.status_code == 204
 
     members = client.get("/api/v1/org/members", headers=service_headers("reviewer-1")).json()
-    profile = next(m for m in members if m["user_id"] == "42")
-    assert profile["department_id"] is None
-    assert profile["team_id"] is None
+    assert not any(m["user_id"] == "42" for m in members)
 
 
 def test_delete_department_blocked_when_teams_exist(client):
@@ -82,7 +83,7 @@ def test_delete_department_blocked_when_teams_exist(client):
 
 def test_delete_department_when_no_teams(client):
     dept_id = _create_dept(client)
-    _assign_profile(client, "7", department_id=dept_id, team_id=None)
+    _add_membership(client, "7", department_id=dept_id)
 
     resp = client.delete(
         f"/api/v1/org/departments/{dept_id}",
@@ -91,8 +92,7 @@ def test_delete_department_when_no_teams(client):
     assert resp.status_code == 204
 
     members = client.get("/api/v1/org/members", headers=service_headers("reviewer-1")).json()
-    profile = next(m for m in members if m["user_id"] == "7")
-    assert profile["department_id"] is None
+    assert not any(m["user_id"] == "7" for m in members)
 
 
 def test_list_members_jwt_forbidden(client):

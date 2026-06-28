@@ -11,12 +11,14 @@ from sqlalchemy.orm import Session
 
 from app.auth import AuthUser
 from app.deps import get_current_user, get_db, require_service_user
-from app.models.org import OrgDepartment, OrgTeam, UserOrgProfile
+from app.models.org import OrgDepartment, OrgTeam, UserOrgMembership, UserOrgProfile
 from app.schemas.org import (
     CreateDepartmentRequest,
+    CreateOrgMembershipRequest,
     CreateTeamRequest,
     OrgDepartmentOut,
     OrgMemberOut,
+    OrgMembershipOut,
     OrgTeamOut,
     PatchDepartmentRequest,
     PatchTeamRequest,
@@ -24,6 +26,16 @@ from app.schemas.org import (
     UserOrgProfileOut,
 )
 from app.services.org_department_tree import department_has_children, department_is_ancestor
+from app.services.org_memberships import (
+    create_membership,
+    delete_membership,
+    delete_memberships_for_department,
+    delete_memberships_for_team,
+    ensure_profile,
+    heal_primary_if_single,
+    list_memberships_for_user,
+    validate_primary_membership_id,
+)
 from app.services.org_role_membership import ensure_dept_manager_membership, ensure_team_lead_membership
 
 router = APIRouter(prefix="/org", tags=["org"])
@@ -46,14 +58,34 @@ def _now_iso() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def _profile_out(profile: UserOrgProfile) -> UserOrgProfileOut:
+def _profile_out(db: Session, profile: UserOrgProfile) -> UserOrgProfileOut:
+    memberships = list_memberships_for_user(db, profile.user_id)
     return UserOrgProfileOut(
         user_id=profile.user_id,
-        department_id=profile.department_id,
-        team_id=profile.team_id,
+        primary_membership_id=profile.primary_membership_id,
+        memberships=[
+            OrgMembershipOut(
+                id=m.id,
+                user_id=m.user_id,
+                department_id=m.department_id,
+                team_id=m.team_id,
+                is_primary=m.id == profile.primary_membership_id,
+            )
+            for m in memberships
+        ],
         proficiency=profile.proficiency_level,
         manager_user_id=profile.manager_user_id,
     )
+
+
+def _get_or_create_profile(db: Session, user_id: str, *, now: str) -> UserOrgProfile:
+    profile = db.get(UserOrgProfile, user_id)
+    if profile is None:
+        memberships = list_memberships_for_user(db, user_id)
+        if not memberships:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"detail": "not_found"})
+        profile = ensure_profile(db, user_id, now=now)
+    return profile
 
 
 @router.get("/departments", response_model=list[OrgDepartmentOut])
@@ -86,6 +118,7 @@ def create_department(
         updated_at=now,
     )
     db.add(dept)
+    db.flush()
     if body.manager_user_id:
         ensure_dept_manager_membership(
             db,
@@ -162,6 +195,7 @@ def create_team(
         updated_at=now,
     )
     db.add(team)
+    db.flush()
     if body.lead_user_id:
         ensure_team_lead_membership(
             db,
@@ -214,10 +248,7 @@ def delete_team(
     if team is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"detail": "not_found"})
     now = _now_iso()
-    for profile in db.query(UserOrgProfile).filter(UserOrgProfile.team_id == team_id).all():
-        profile.team_id = None
-        profile.department_id = None
-        profile.updated_at = now
+    delete_memberships_for_team(db, team_id, now=now)
     db.delete(team)
     db.commit()
 
@@ -242,10 +273,7 @@ def delete_department(
             detail={"detail": "department_has_children"},
         )
     now = _now_iso()
-    for profile in db.query(UserOrgProfile).filter(UserOrgProfile.department_id == department_id).all():
-        profile.department_id = None
-        profile.team_id = None
-        profile.updated_at = now
+    delete_memberships_for_department(db, department_id, now=now)
     db.delete(dept)
     db.commit()
 
@@ -255,14 +283,19 @@ def list_org_members(
     db: Annotated[Session, Depends(get_db)],
     _user: Annotated[AuthUser, Depends(require_service_user)],
 ) -> list[OrgMemberOut]:
-    profiles = db.query(UserOrgProfile).order_by(UserOrgProfile.user_id).all()
+    rows = (
+        db.query(UserOrgMembership)
+        .order_by(UserOrgMembership.user_id, UserOrgMembership.created_at)
+        .all()
+    )
     return [
         OrgMemberOut(
-            user_id=p.user_id,
-            department_id=p.department_id,
-            team_id=p.team_id,
+            user_id=m.user_id,
+            membership_id=m.id,
+            department_id=m.department_id,
+            team_id=m.team_id,
         )
-        for p in profiles
+        for m in rows
     ]
 
 
@@ -274,10 +307,17 @@ def get_user_profile(
 ) -> UserOrgProfileOut:
     if user.auth_method == "jwt" and user.user_id != user_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={"detail": "forbidden"})
+    now = _now_iso()
     profile = db.get(UserOrgProfile, user_id)
     if profile is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"detail": "not_found"})
-    return _profile_out(profile)
+        memberships = list_memberships_for_user(db, user_id)
+        if not memberships:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"detail": "not_found"})
+        profile = ensure_profile(db, user_id, now=now)
+    heal_primary_if_single(db, profile, now=now)
+    db.commit()
+    db.refresh(profile)
+    return _profile_out(db, profile)
 
 
 @router.patch("/users/{user_id}/profile", response_model=UserOrgProfileOut)
@@ -287,27 +327,13 @@ def patch_user_profile(
     db: Annotated[Session, Depends(get_db)],
     _user: Annotated[AuthUser, Depends(require_service_user)],
 ) -> UserOrgProfileOut:
-    profile = db.get(UserOrgProfile, user_id)
     now = _now_iso()
+    profile = db.get(UserOrgProfile, user_id)
     if profile is None:
-        profile = UserOrgProfile(user_id=user_id, updated_at=now)
-        db.add(profile)
-    if body.department_id is not None or "department_id" in body.model_fields_set:
-        if body.department_id is not None:
-            if db.get(OrgDepartment, body.department_id) is None:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"detail": "not_found"})
-        profile.department_id = body.department_id
-    if body.team_id is not None or "team_id" in body.model_fields_set:
-        if body.team_id is not None:
-            team = db.get(OrgTeam, body.team_id)
-            if team is None:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"detail": "not_found"})
-            if profile.department_id and team.department_id != profile.department_id:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail={"detail": "team_department_mismatch"},
-                )
-        profile.team_id = body.team_id
+        profile = ensure_profile(db, user_id, now=now)
+    if body.primary_membership_id is not None or "primary_membership_id" in body.model_fields_set:
+        validate_primary_membership_id(db, user_id, body.primary_membership_id)
+        profile.primary_membership_id = body.primary_membership_id
     if body.proficiency is not None or "proficiency" in body.model_fields_set:
         profile.proficiency_level = body.proficiency
     if body.manager_user_id is not None or "manager_user_id" in body.model_fields_set:
@@ -315,4 +341,47 @@ def patch_user_profile(
     profile.updated_at = now
     db.commit()
     db.refresh(profile)
-    return _profile_out(profile)
+    return _profile_out(db, profile)
+
+
+@router.post(
+    "/users/{user_id}/memberships",
+    response_model=OrgMembershipOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def post_user_membership(
+    user_id: str,
+    body: CreateOrgMembershipRequest,
+    db: Annotated[Session, Depends(get_db)],
+    _user: Annotated[AuthUser, Depends(require_service_user)],
+) -> OrgMembershipOut:
+    now = _now_iso()
+    membership = create_membership(
+        db,
+        user_id=user_id,
+        department_id=body.department_id,
+        team_id=body.team_id,
+        now=now,
+        primary_membership_id=body.primary_membership_id,
+    )
+    db.commit()
+    db.refresh(membership)
+    profile = ensure_profile(db, user_id, now=now)
+    return OrgMembershipOut(
+        id=membership.id,
+        user_id=membership.user_id,
+        department_id=membership.department_id,
+        team_id=membership.team_id,
+        is_primary=membership.id == profile.primary_membership_id,
+    )
+
+
+@router.delete("/memberships/{membership_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_membership_route(
+    membership_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    _user: Annotated[AuthUser, Depends(require_service_user)],
+) -> None:
+    now = _now_iso()
+    delete_membership(db, membership_id, now=now)
+    db.commit()

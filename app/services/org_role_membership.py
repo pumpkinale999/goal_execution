@@ -1,18 +1,10 @@
-"""Sync user_org_profiles when department manager or team lead is appointed."""
+"""Sync user_org_memberships when department manager or team lead is appointed."""
 
 from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from app.models.org import UserOrgProfile
-
-
-def _upsert_profile(db: Session, user_id: str, *, now: str) -> UserOrgProfile:
-    profile = db.get(UserOrgProfile, user_id)
-    if profile is None:
-        profile = UserOrgProfile(user_id=user_id, updated_at=now)
-        db.add(profile)
-    return profile
+from app.services.org_memberships import create_membership, ensure_profile
 
 
 def ensure_dept_manager_membership(
@@ -22,13 +14,17 @@ def ensure_dept_manager_membership(
     user_id: str | None,
     now: str,
 ) -> None:
-    """Appointee becomes a direct department member (no team). No-op when user_id is None."""
+    """Append direct department membership (skip if exists). Does not change primary."""
     if not user_id:
         return
-    profile = _upsert_profile(db, user_id, now=now)
-    profile.department_id = department_id
-    profile.team_id = None
-    profile.updated_at = now
+    create_membership(
+        db,
+        user_id=user_id,
+        department_id=department_id,
+        team_id=None,
+        now=now,
+        skip_primary_gate=True,
+    )
 
 
 def ensure_team_lead_membership(
@@ -39,10 +35,14 @@ def ensure_team_lead_membership(
     user_id: str | None,
     now: str,
 ) -> None:
-    """Appointee becomes a member of the team and its department. No-op when user_id is None."""
+    """Append team membership; same-dept direct is replaced with team. Does not change primary."""
     if not user_id:
         return
-    profile = _upsert_profile(db, user_id, now=now)
-    profile.department_id = department_id
-    profile.team_id = team_id
-    profile.updated_at = now
+    create_membership(
+        db,
+        user_id=user_id,
+        department_id=department_id,
+        team_id=team_id,
+        now=now,
+        skip_primary_gate=True,
+    )
