@@ -20,6 +20,20 @@ class GeObjective(Base):
     parent_id: Mapped[str | None] = mapped_column(String, ForeignKey("ge_objectives.id"), nullable=True)
     owner_user_id: Mapped[str | None] = mapped_column(String, nullable=True)
     is_default: Mapped[bool] = mapped_column(Integer, nullable=False, default=0)
+    period_granularity: Mapped[str | None] = mapped_column(Text, nullable=True)
+    period_start: Mapped[str | None] = mapped_column(Text, nullable=True)
+    period_end: Mapped[str | None] = mapped_column(Text, nullable=True)
+    lifecycle_status: Mapped[str] = mapped_column(Text, nullable=False, default="active")
+    primary_department_id: Mapped[str | None] = mapped_column(
+        String,
+        ForeignKey("org_departments.id"),
+        nullable=True,
+    )
+    primary_department_needs_confirmation: Mapped[bool] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+    )
     created_at: Mapped[str] = mapped_column(Text, nullable=False)
     updated_at: Mapped[str] = mapped_column(Text, nullable=False)
 
@@ -34,6 +48,20 @@ class GeProgram(Base):
     objective_id: Mapped[str] = mapped_column(String, ForeignKey("ge_objectives.id"), nullable=False)
     owner_user_id: Mapped[str | None] = mapped_column(String, nullable=True)
     is_default: Mapped[bool] = mapped_column(Integer, nullable=False, default=0)
+    period_granularity: Mapped[str | None] = mapped_column(Text, nullable=True)
+    period_start: Mapped[str | None] = mapped_column(Text, nullable=True)
+    period_end: Mapped[str | None] = mapped_column(Text, nullable=True)
+    lifecycle_status: Mapped[str] = mapped_column(Text, nullable=False, default="active")
+    primary_department_id: Mapped[str | None] = mapped_column(
+        String,
+        ForeignKey("org_departments.id"),
+        nullable=True,
+    )
+    primary_department_needs_confirmation: Mapped[bool] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+    )
     created_at: Mapped[str] = mapped_column(Text, nullable=False)
     updated_at: Mapped[str] = mapped_column(Text, nullable=False)
 

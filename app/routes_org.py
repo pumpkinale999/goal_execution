@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.auth import AuthUser
@@ -43,6 +43,15 @@ from app.services.org_sort_order import (
     next_team_sort_order,
     reorder_department,
     reorder_team,
+)
+from app.services.ge_goal_portfolio import (
+    get_department_goal_portfolio,
+    get_team_goal_portfolio,
+    get_user_goal_portfolio,
+)
+from app.services.org_department_migrate import (
+    department_has_primary_objectives,
+    migrate_primary_objectives,
 )
 
 router = APIRouter(prefix="/org", tags=["org"])
@@ -334,6 +343,11 @@ def delete_department(
     dept = db.get(OrgDepartment, department_id)
     if dept is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"detail": "not_found"})
+    if department_has_primary_objectives(db, department_id):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"detail": "department_has_primary_objectives"},
+        )
     if dept.teams:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -457,3 +471,67 @@ def delete_membership_route(
     now = _now_iso()
     delete_membership(db, membership_id, now=now)
     db.commit()
+
+
+@router.get("/departments/{department_id}/goal-portfolio")
+def get_department_goal_portfolio_route(
+    department_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    _user: Annotated[AuthUser, Depends(require_service_user)],
+    include_completed: int = Query(default=0, ge=0, le=1),
+    include_archived: int = Query(default=0, ge=0, le=1),
+) -> dict[str, Any]:
+    return get_department_goal_portfolio(
+        db,
+        department_id,
+        include_completed=bool(include_completed),
+        include_archived=bool(include_archived),
+    )
+
+
+@router.get("/teams/{team_id}/goal-portfolio")
+def get_team_goal_portfolio_route(
+    team_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    _user: Annotated[AuthUser, Depends(require_service_user)],
+    include_completed: int = Query(default=0, ge=0, le=1),
+    include_archived: int = Query(default=0, ge=0, le=1),
+) -> dict[str, Any]:
+    return get_team_goal_portfolio(
+        db,
+        team_id,
+        include_completed=bool(include_completed),
+        include_archived=bool(include_archived),
+    )
+
+
+@router.get("/users/{user_id}/goal-portfolio")
+def get_user_goal_portfolio_route(
+    user_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    _user: Annotated[AuthUser, Depends(require_service_user)],
+    include_completed: int = Query(default=0, ge=0, le=1),
+    include_archived: int = Query(default=0, ge=0, le=1),
+) -> dict[str, Any]:
+    return get_user_goal_portfolio(
+        db,
+        user_id,
+        include_completed=bool(include_completed),
+        include_archived=bool(include_archived),
+    )
+
+
+@router.post("/departments/{department_id}/migrate-primary-objectives")
+def migrate_department_primary_objectives_route(
+    department_id: str,
+    body: dict[str, Any],
+    db: Annotated[Session, Depends(get_db)],
+    _user: Annotated[AuthUser, Depends(require_service_user)],
+) -> dict[str, Any]:
+    target = body.get("target_department_id")
+    if not target or not str(target).strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"detail": "target_department_required"},
+        )
+    return migrate_primary_objectives(db, department_id, str(target).strip())

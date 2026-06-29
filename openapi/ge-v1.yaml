@@ -19,8 +19,10 @@ info:
     v1.15.0 (M24): can_govern_project includes subtree_governor (GE-26 superseded) · graph write for steward · ProjectGraph graph_editable/graph_deletable
     v1.16.0 (v2.22/v2.23 · runtime ☑): user_org_memberships · primary_membership_id · membership CRUD · primary_membership_required 409 · see impl §4.1.3 · req v2.23.2 invariant
     v1.17.3 (M28): KB topic org-charter (title 组织宪章) · paths org-charter/departments|teams/{slug} · see impl §4.1.4 · req v2.24.4
+    v1.18.0 (M29 · runtime ☑): period_* · lifecycle_status · primary_department_id · POST /ge/objectives/years · assess · planning_year readOnly response · see impl §4.2.0.4 · req v2.26.0
+    v1.19.0 (M30/M31 · runtime ☑): people-summary · goal-portfolio · migrate-primary-objectives · DELETE department 409 department_has_primary_objectives · see impl §4.2.4 · §4.1.5 · req v2.27.0
     Out of scope: skstudio BFF /api/v1/org|ge/* and POST /internal/ge/deviation-notify (see impl doc §4.0 · §5)
-  version: 1.17.3
+  version: 1.19.0
 servers:
   - url: /api/v1
     description: goal_execution service (JWT participant + service governance via skstudio BFF)
@@ -75,7 +77,98 @@ paths:
         '204':
           description: Deleted
         '409':
-          description: department_has_teams
+          description: department_has_teams · department_has_primary_objectives (M31)
+  /org/departments/{department_id}/goal-portfolio:
+    get:
+      operationId: getDepartmentGoalPortfolio
+      summary: Department primary + participation rollup (M31 · service · BFF permission)
+      tags: [org]
+      parameters:
+        - name: department_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: include_completed
+          in: query
+          schema: { type: integer, enum: [0, 1], default: 0 }
+        - name: include_archived
+          in: query
+          schema: { type: integer, enum: [0, 1], default: 0 }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GoalPortfolio'
+  /org/departments/{department_id}/migrate-primary-objectives:
+    post:
+      operationId: migrateDepartmentPrimaryObjectives
+      summary: Batch retarget primary_department_id (M31 · reviewer BFF)
+      tags: [org]
+      parameters:
+        - name: department_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [target_department_id]
+              properties:
+                target_department_id: { type: string }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  objectives_migrated: { type: integer }
+                  programs_migrated: { type: integer }
+  /org/teams/{team_id}/goal-portfolio:
+    get:
+      operationId: getTeamGoalPortfolio
+      summary: Team member participation rollup (M31)
+      tags: [org]
+      parameters:
+        - name: team_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: include_completed
+          in: query
+          schema: { type: integer, enum: [0, 1], default: 0 }
+        - name: include_archived
+          in: query
+          schema: { type: integer, enum: [0, 1], default: 0 }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GoalPortfolio'
+  /org/users/{user_id}/goal-portfolio:
+    get:
+      operationId: getUserGoalPortfolio
+      summary: User accountable + contributing portfolio (M31)
+      tags: [org]
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - name: include_completed
+          in: query
+          schema: { type: integer, enum: [0, 1], default: 0 }
+        - name: include_archived
+          in: query
+          schema: { type: integer, enum: [0, 1], default: 0 }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GoalPortfolio'
   /org/members:
     get:
       operationId: listOrgMembers
@@ -249,6 +342,84 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorDetail'
+  /ge/objectives/years:
+    post:
+      operationId: createGeObjectiveYear
+      summary: Create annual business objective tree (M29 · reviewer · service token via BFF)
+      tags: [ge-objectives]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateObjectiveYearRequest'
+      responses:
+        '201':
+          description: Created annual company objective subtree; b1 period synced in same transaction
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ObjectiveNode'
+        '400':
+          description: validation · duplicate active year
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /ge/objectives/{objective_id}/assess:
+    post:
+      operationId: assessGeObjective
+      summary: Assess strategic objective lifecycle (M29 · reviewer · pending_assessment only)
+      tags: [ge-objectives]
+      parameters:
+        - $ref: '#/components/parameters/ObjectiveId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StrategicAssessRequest'
+      responses:
+        '200':
+          description: Assessed objective (then archived)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ObjectiveNode'
+        '400':
+          description: not pending_assessment
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /ge/objectives/{objective_id}/people-summary:
+    get:
+      operationId: getObjectivePeopleSummary
+      summary: People accountable/contributing rollup for objective subtree (M30)
+      tags: [ge-objectives]
+      parameters:
+        - $ref: '#/components/parameters/ObjectiveId'
+        - name: include_completed
+          in: query
+          schema: { type: integer, enum: [0, 1], default: 0 }
+        - name: include_archived
+          in: query
+          schema: { type: integer, enum: [0, 1], default: 0 }
+      responses:
+        '200':
+          description: PeopleSummary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PeopleSummary'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /ge/programs:
     get:
       operationId: listGePrograms
@@ -348,6 +519,57 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorDetail'
+  /ge/programs/{program_id}/assess:
+    post:
+      operationId: assessGeProgram
+      summary: Assess strategic program lifecycle (M29 · reviewer · pending_assessment only)
+      tags: [ge-programs]
+      parameters:
+        - $ref: '#/components/parameters/ProgramId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StrategicAssessRequest'
+      responses:
+        '200':
+          description: Assessed program (then archived)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgramMetadata'
+        '400':
+          description: not pending_assessment
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /ge/programs/{program_id}/people-summary:
+    get:
+      operationId: getProgramPeopleSummary
+      summary: People rollup for program (M30)
+      tags: [ge-programs]
+      parameters:
+        - $ref: '#/components/parameters/ProgramId'
+        - name: include_completed
+          in: query
+          schema: { type: integer, enum: [0, 1], default: 0 }
+        - name: include_archived
+          in: query
+          schema: { type: integer, enum: [0, 1], default: 0 }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PeopleSummary'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /ge/projects:
     get:
       operationId: listGeProjects
@@ -487,6 +709,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorDetail'
+  /ge/projects/{project_id}/people-summary:
+    get:
+      operationId: getProjectPeopleSummary
+      summary: PM + assignee people summary (M30)
+      tags: [ge-projects]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - name: include_completed
+          in: query
+          schema: { type: integer, enum: [0, 1], default: 0 }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PeopleSummary'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /ge/projects/{project_id}/graph:
     get:
       operationId: getGeProjectGraph
@@ -1065,6 +1307,19 @@ components:
           format: uuid
         owner_user_id:
           type: string
+        period_granularity:
+          $ref: '#/components/schemas/PeriodGranularity'
+        period_start:
+          type: string
+          format: date
+          description: YYYY-MM-DD · sub must fall within parent company year
+        period_end:
+          type: string
+          format: date
+        primary_department_id:
+          type: string
+          format: uuid
+          description: Required for non-default sub-objectives (M29)
     PatchObjectiveRequest:
       type: object
       minProperties: 1
@@ -1073,6 +1328,160 @@ components:
           type: string
         owner_user_id:
           type: string
+        period_granularity:
+          $ref: '#/components/schemas/PeriodGranularity'
+        period_start:
+          type: string
+          format: date
+        period_end:
+          type: string
+          format: date
+        primary_department_id:
+          type: string
+          format: uuid
+          nullable: true
+    CreateObjectiveYearRequest:
+      type: object
+      required: [planning_year]
+      properties:
+        planning_year:
+          type: integer
+          minimum: 2000
+          maximum: 2100
+          description: Calendar year; creates is_default=false company tree; syncs b1 period in same transaction
+        copy_from_year:
+          type: integer
+          minimum: 2000
+          maximum: 2100
+          nullable: true
+          description: Optional copy structure from prior annual tree; never copies default chain b1/b2/b3
+    StrategicAssessRequest:
+      type: object
+      required: [outcome]
+      properties:
+        outcome:
+          type: string
+          enum: [met, partial_met, not_met]
+        note:
+          type: string
+          maxLength: 2000
+    PeopleSummaryAccountable:
+      type: object
+      properties:
+        user_id: { type: string }
+        display_name: { type: string }
+        role: { type: string, enum: [owner, pm] }
+        node_type: { type: string, enum: [objective, program, project] }
+        node_id: { type: string }
+        node_name: { type: string }
+    PeopleSummaryContributing:
+      type: object
+      properties:
+        user_id: { type: string }
+        display_name: { type: string }
+        projects:
+          type: array
+          items:
+            type: object
+            properties:
+              project_id: { type: string }
+              project_name: { type: string }
+              task_count: { type: integer }
+    PeopleSummary:
+      type: object
+      properties:
+        accountable:
+          type: array
+          items:
+            $ref: '#/components/schemas/PeopleSummaryAccountable'
+        contributing:
+          type: array
+          items:
+            $ref: '#/components/schemas/PeopleSummaryContributing'
+        include_completed: { type: boolean }
+    GoalPortfolioPrimary:
+      type: object
+      properties:
+        node_type: { type: string, enum: [objective, program] }
+        node_id: { type: string }
+        node_name: { type: string }
+        lifecycle_status: { type: string }
+        planning_year: { type: integer, nullable: true }
+    GoalPortfolio:
+      type: object
+      properties:
+        primary:
+          type: array
+          items:
+            $ref: '#/components/schemas/GoalPortfolioPrimary'
+        accountable:
+          type: array
+          items:
+            type: object
+            properties:
+              user_id: { type: string }
+              display_name: { type: string }
+              org_path: { type: string, nullable: true }
+              items:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    node_type: { type: string }
+                    node_id: { type: string }
+                    node_name: { type: string }
+                    role: { type: string }
+        contributing:
+          type: array
+          items:
+            type: object
+            properties:
+              user_id: { type: string }
+              display_name: { type: string }
+              org_path: { type: string, nullable: true }
+              projects:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    project_id: { type: string }
+                    project_name: { type: string }
+                    task_count: { type: integer }
+        include_completed: { type: boolean }
+        include_archived: { type: boolean }
+    PeriodGranularity:
+      type: string
+      enum: [year, month, quarter]
+    StrategicLifecycleStatus:
+      type: string
+      enum: [active, pending_assessment, met, partial_met, not_met, archived]
+    StrategicFields:
+      type: object
+      properties:
+        period_granularity:
+          $ref: '#/components/schemas/PeriodGranularity'
+        period_start:
+          type: string
+          format: date
+        period_end:
+          type: string
+          format: date
+        lifecycle_status:
+          $ref: '#/components/schemas/StrategicLifecycleStatus'
+        primary_department_id:
+          type: string
+          format: uuid
+          nullable: true
+        primary_department_needs_confirmation:
+          type: boolean
+        primary_department_name:
+          type: string
+          nullable: true
+          description: BFF aggregation optional
+        planning_year:
+          type: integer
+          readOnly: true
+          description: Response only · company level · is_default=false · derived YEAR(period_start) · no DB column
     CreateProgramRequest:
       type: object
       required: [name, objective_id, owner_user_id]
@@ -1084,6 +1493,18 @@ components:
           format: uuid
         owner_user_id:
           type: string
+        period_granularity:
+          $ref: '#/components/schemas/PeriodGranularity'
+        period_start:
+          type: string
+          format: date
+        period_end:
+          type: string
+          format: date
+        primary_department_id:
+          type: string
+          format: uuid
+          description: Required for non-default programs (M29)
     PatchProgramRequest:
       type: object
       minProperties: 1
@@ -1095,6 +1516,18 @@ components:
         objective_id:
           type: string
           format: uuid
+        period_granularity:
+          $ref: '#/components/schemas/PeriodGranularity'
+        period_start:
+          type: string
+          format: date
+        period_end:
+          type: string
+          format: date
+        primary_department_id:
+          type: string
+          format: uuid
+          nullable: true
     PatchProjectProgramRequest:
       type: object
       required: [program_id]
@@ -1293,49 +1726,53 @@ components:
           nullable: true
           description: M19 · kb note uuid · null only for pre-M19 legacy rows
     ProgramMetadata:
-      type: object
-      required: [id, name, objective_id, is_default]
-      properties:
-        id:
-          type: string
-          format: uuid
-        name:
-          type: string
-        objective_id:
-          type: string
-          format: uuid
-        is_default:
-          type: boolean
-        owner_user_id:
-          type: string
-          nullable: true
+      allOf:
+        - $ref: '#/components/schemas/StrategicFields'
+        - type: object
+          required: [id, name, objective_id, is_default]
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            objective_id:
+              type: string
+              format: uuid
+            is_default:
+              type: boolean
+            owner_user_id:
+              type: string
+              nullable: true
     ObjectiveNode:
-      type: object
-      required: [id, name, is_default, programs]
-      properties:
-        id:
-          type: string
-          format: uuid
-        name:
-          type: string
-        is_default:
-          type: boolean
-        owner_user_id:
-          type: string
-          nullable: true
-        parent_id:
-          type: string
-          format: uuid
-          nullable: true
-        programs:
-          type: array
-          description: Program metadata only; no nested foreign project names
-          items:
-            $ref: '#/components/schemas/ProgramMetadata'
-        children:
-          type: array
-          items:
-            $ref: '#/components/schemas/ObjectiveNode'
+      allOf:
+        - $ref: '#/components/schemas/StrategicFields'
+        - type: object
+          required: [id, name, is_default, programs]
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            is_default:
+              type: boolean
+            owner_user_id:
+              type: string
+              nullable: true
+            parent_id:
+              type: string
+              format: uuid
+              nullable: true
+            programs:
+              type: array
+              description: Program metadata only; no nested foreign project names
+              items:
+                $ref: '#/components/schemas/ProgramMetadata'
+            children:
+              type: array
+              items:
+                $ref: '#/components/schemas/ObjectiveNode'
     ProgramDetail:
       allOf:
         - $ref: '#/components/schemas/ProgramMetadata'

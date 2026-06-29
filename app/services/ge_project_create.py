@@ -34,7 +34,7 @@ def _validate_create_body(body: dict[str, Any]) -> None:
         raise HTTPException(status_code=400, detail={"detail": "invalid_assignee"})
 
 
-def create_project(db: Session, *, actor_user_id: str, body: dict[str, Any]) -> dict[str, Any]:
+def create_project(db: Session, *, actor_user_id: str, body: dict[str, Any], commit: bool = True) -> dict[str, Any]:
     _validate_create_body(body)
     now = now_iso()
     default_pid = default_program_id(db)
@@ -204,7 +204,10 @@ def create_project(db: Session, *, actor_user_id: str, body: dict[str, Any]) -> 
     )
     recompute_gate_and_phases(db, project_id)
     recompute_task_status(db, project_id)
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
     return {
         "id": project_id,
         "name": project.name,

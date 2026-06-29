@@ -43,16 +43,27 @@ from app.services.ge_orchestrator import (
 )
 from app.services.ge_deviations import get_deviation, open_deviation, patch_deviation
 from app.services.ge_strategic import (
+    assess_objective,
+    assess_program,
     create_objective,
+    create_objective_year,
     create_program,
     delete_objective,
     delete_program,
+    objective_out,
     patch_objective,
     patch_program,
+    program_out,
 )
+from app.services.ge_strategic_lifecycle import refresh_lifecycle_batch, refresh_lifecycle_on_read
 from app.services.ge_project_create import create_project
 from app.services.ge_queues import build_queues
 from app.services.ge_m12_read import get_gate_item_context, get_task_context, list_audit_events
+from app.services.ge_people_summary import (
+    get_objective_people_summary,
+    get_program_people_summary,
+    get_project_people_summary,
+)
 
 router = APIRouter(prefix="/ge", tags=["ge"])
 
@@ -63,6 +74,7 @@ def list_objectives(
     _user: Annotated[AuthUser, Depends(get_current_user)],
 ) -> list[dict[str, Any]]:
     ensure_ge_bootstrap(db)
+    refresh_lifecycle_batch(db)
     objectives = (
         db.query(GeObjective)
         .options(joinedload(GeObjective.programs))
@@ -71,15 +83,11 @@ def list_objectives(
     )
 
     def program_meta(program: GeProgram) -> dict[str, Any]:
-        return {
-            "id": program.id,
-            "name": program.name,
-            "objective_id": program.objective_id,
-            "owner_user_id": program.owner_user_id,
-            "is_default": bool(program.is_default),
-        }
+        refresh_lifecycle_on_read(db, program)
+        return program_out(program)
 
     def build_node(obj: GeObjective) -> dict[str, Any]:
+        refresh_lifecycle_on_read(db, obj)
         children = (
             db.query(GeObjective)
             .filter(GeObjective.parent_id == obj.id)
@@ -92,16 +100,12 @@ def list_objectives(
             else [program_meta(p) for p in obj.programs if p.is_default or p.objective_id == obj.id]
         )
         return {
-            "id": obj.id,
-            "name": obj.name,
-            "level": obj.level,
-            "owner_user_id": obj.owner_user_id,
-            "parent_id": obj.parent_id,
-            "is_default": bool(obj.is_default),
+            **objective_out(obj),
             "programs": programs,
             "children": [build_node(child) for child in children],
         }
 
+    db.commit()
     return [build_node(obj) for obj in objectives if obj.parent_id is None]
 
 
@@ -111,17 +115,10 @@ def list_programs(
     _user: Annotated[AuthUser, Depends(get_current_user)],
 ) -> list[dict[str, Any]]:
     ensure_ge_bootstrap(db)
+    refresh_lifecycle_batch(db)
     programs = db.query(GeProgram).order_by(GeProgram.name).all()
-    return [
-        {
-            "id": p.id,
-            "name": p.name,
-            "objective_id": p.objective_id,
-            "owner_user_id": p.owner_user_id,
-            "is_default": bool(p.is_default),
-        }
-        for p in programs
-    ]
+    db.commit()
+    return [program_out(p) for p in programs]
 
 
 @router.get("/programs/{program_id}")
@@ -134,6 +131,8 @@ def get_program(
     program = db.get(GeProgram, program_id)
     if program is None:
         raise HTTPException(status_code=404, detail={"detail": "not_found"})
+    refresh_lifecycle_on_read(db, program)
+    db.commit()
     projects = (
         db.query(GeProject)
         .filter(GeProject.program_id == program_id, GeProject.deleted_at.is_(None))
@@ -142,11 +141,7 @@ def get_program(
     )
     visible = filter_projects_for_user(db, projects, user)
     return {
-        "id": program.id,
-        "name": program.name,
-        "objective_id": program.objective_id,
-        "owner_user_id": program.owner_user_id,
-        "is_default": bool(program.is_default),
+        **program_out(program),
         "projects": [
             {
                 "id": p.id,
@@ -564,6 +559,84 @@ def get_gate_item(
     user: Annotated[AuthUser, Depends(get_current_user)],
 ) -> dict[str, Any]:
     return get_gate_item_context(db, gate_item_id, user)
+
+
+@router.post("/objectives/years", status_code=status.HTTP_201_CREATED)
+def post_objective_year(
+    body: dict[str, Any],
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(require_service_user)],
+) -> dict[str, Any]:
+    return create_objective_year(db, body, actor_user_id=user.user_id)
+
+
+@router.post("/objectives/{objective_id}/assess")
+def post_assess_objective(
+    objective_id: str,
+    body: dict[str, Any],
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(require_service_user)],
+) -> dict[str, Any]:
+    return assess_objective(db, objective_id, body, actor_user_id=user.user_id)
+
+
+@router.post("/programs/{program_id}/assess")
+def post_assess_program(
+    program_id: str,
+    body: dict[str, Any],
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(require_service_user)],
+) -> dict[str, Any]:
+    return assess_program(db, program_id, body, actor_user_id=user.user_id)
+
+
+@router.get("/objectives/{objective_id}/people-summary")
+def get_objective_people_summary_route(
+    objective_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+    include_completed: int = Query(default=0, ge=0, le=1),
+    include_archived: int = Query(default=0, ge=0, le=1),
+) -> dict[str, Any]:
+    return get_objective_people_summary(
+        db,
+        objective_id,
+        user,
+        include_completed=bool(include_completed),
+        include_archived=bool(include_archived),
+    )
+
+
+@router.get("/programs/{program_id}/people-summary")
+def get_program_people_summary_route(
+    program_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+    include_completed: int = Query(default=0, ge=0, le=1),
+    include_archived: int = Query(default=0, ge=0, le=1),
+) -> dict[str, Any]:
+    return get_program_people_summary(
+        db,
+        program_id,
+        user,
+        include_completed=bool(include_completed),
+        include_archived=bool(include_archived),
+    )
+
+
+@router.get("/projects/{project_id}/people-summary")
+def get_project_people_summary_route(
+    project_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+    include_completed: int = Query(default=0, ge=0, le=1),
+) -> dict[str, Any]:
+    return get_project_people_summary(
+        db,
+        project_id,
+        user,
+        include_completed=bool(include_completed),
+    )
 
 
 @router.post("/objectives", status_code=status.HTTP_201_CREATED)
