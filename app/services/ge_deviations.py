@@ -14,7 +14,9 @@ from app.constants import TASK_STATUS_IDLE
 from app.models.ge import (
     GeDeviation,
     GeGateItem,
+    GeObjective,
     GePhase,
+    GeProgram,
     GeProject,
     GeTask,
     GeTaskGateItemProduce,
@@ -29,6 +31,47 @@ from app.services.ge_graph import (
 from app.services.ge_ws_callback import dispatch_deviation_personal_assistant
 
 SHANGHAI = ZoneInfo("Asia/Shanghai")
+
+
+def _sync_remediation_schedule(
+    db: Session,
+    *,
+    project: GeProject,
+    phase: GePhase | None,
+    item: GeGateItem,
+    remediation_due: str,
+) -> None:
+    """Sync GI planned_due and extend Phase.planned_end when due exceeds phase end (§6.5 T6)."""
+    from app.services.ge_schedule_derive import build_program_period, effective_window_for_phase
+    from app.services.ge_schedule_validate import plan_date_to_ord, validate_project_schedule
+
+    item.planned_due = remediation_due
+    if phase is None:
+        return
+
+    phases = db.query(GePhase).filter(GePhase.project_id == project.id).order_by(GePhase.sequence).all()
+    program = db.get(GeProgram, project.program_id)
+    objective = None
+    if program is not None:
+        objective = program.objective or db.get(GeObjective, program.objective_id)
+    program_period = build_program_period(program, objective=objective)
+
+    compare_end = phase.planned_end
+    if not compare_end:
+        _, eff_end = effective_window_for_phase(phase, phases, program_period)
+        compare_end = eff_end
+
+    if compare_end and plan_date_to_ord(remediation_due) > plan_date_to_ord(compare_end):
+        phase.planned_end = remediation_due
+        phase.updated_at = now_iso()
+
+    db.flush()
+    phases = db.query(GePhase).filter(GePhase.project_id == project.id).order_by(GePhase.sequence).all()
+    try:
+        validate_project_schedule(phases, program_period=program_period, require_program=True)
+    except HTTPException as exc:
+        detail = exc.detail.get("detail") if isinstance(exc.detail, dict) else exc.detail
+        raise HTTPException(status_code=409, detail={"detail": detail}) from exc
 
 
 def today_shanghai() -> date:
@@ -261,10 +304,10 @@ def open_deviation(
 
     produce_rows = db.query(GeTaskGateItemProduce).filter(GeTaskGateItemProduce.gate_item_id == item.id).all()
     if not produce_rows:
-        raise HTTPException(status_code=409, detail={"detail": "gate_item_not_submittable"})
+        raise HTTPException(status_code=409, detail={"detail": "deviation_open_requires_produce"})
     superseded = db.get(GeTask, produce_rows[0].task_id)
     if superseded is None:
-        raise HTTPException(status_code=409, detail={"detail": "gate_item_not_submittable"})
+        raise HTTPException(status_code=409, detail={"detail": "deviation_open_requires_produce"})
     _assert_not_system(item, superseded)
 
     now = now_iso()
@@ -383,9 +426,8 @@ def activate_deviation(
     dev.status = "active"
     dev.activated_at = now
     dev.updated_at = now
-    item.planned_due = dev.remediation_due
-    item.updated_at = now
     remediation.updated_at = now
+    _sync_remediation_schedule(db, project=project, phase=phase, item=item, remediation_due=dev.remediation_due)
 
     superseded = db.get(GeTask, dev.superseded_task_id)
     affected = [remediation]
@@ -476,8 +518,8 @@ def extend_deviation(
     dev.remediation_due = due[:10]
     dev.revision = new_revision
     dev.updated_at = now
-    item.planned_due = dev.remediation_due
     item.updated_at = now
+    _sync_remediation_schedule(db, project=project, phase=phase, item=item, remediation_due=dev.remediation_due)
 
     record_audit(
         db,
@@ -746,6 +788,14 @@ def build_deviation_actions_for_user(db: Session, user_id: str) -> list[dict[str
             continue
         project = projects.get(phase.project_id)
         if project is None:
+            continue
+        has_produce = (
+            db.query(GeTaskGateItemProduce.id)
+            .filter(GeTaskGateItemProduce.gate_item_id == item.id)
+            .first()
+            is not None
+        )
+        if not has_produce:
             continue
         entry = {
             "action": "open",

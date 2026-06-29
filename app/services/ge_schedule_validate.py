@@ -4,22 +4,15 @@ from __future__ import annotations
 
 import re
 from datetime import date
-from typing import Any, Protocol
+from typing import Any
 
 from fastapi import HTTPException
 
 from app.constants import SYSTEM_END_PHASE_NAME
+from app.services.ge_schedule_derive import PhaseScheduleLike, effective_window_for_phase, program_period_ok, plan_date_to_ord
 
 PLAN_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 TASK_SCHEDULE_KEYS = frozenset({"planned_start", "planned_end", "planned_due"})
-
-
-class PhaseScheduleLike(Protocol):
-    is_system: bool
-    sequence: int
-    name: str
-    planned_start: str | None
-    planned_end: str | None
 
 
 def parse_plan_date(value: Any, *, field: str) -> str | None:
@@ -64,6 +57,11 @@ def require_business_phase_window(planned_start: str | None, planned_end: str | 
     validate_phase_window(planned_start, planned_end)
 
 
+def require_program_period(program_period: dict[str, Any] | None) -> None:
+    if not program_period_ok(program_period):
+        raise HTTPException(status_code=400, detail={"detail": "program_period_required"})
+
+
 def validate_gate_item_due_in_phase(
     planned_due: str | None,
     *,
@@ -87,10 +85,57 @@ def _end_system_phase(phases: list[PhaseScheduleLike]) -> PhaseScheduleLike | No
     return next((phase for phase in phases if phase.is_system and phase.name == SYSTEM_END_PHASE_NAME), None)
 
 
-def validate_project_schedule(phases: list[PhaseScheduleLike]) -> None:
+def _validate_program_bounds(
+    phases: list[PhaseScheduleLike],
+    program_period: dict[str, Any],
+) -> None:
+    period_start = str(program_period["period_start"])
+    period_end = str(program_period["period_end"])
+    for phase in phases:
+        win_start = phase.planned_start
+        win_end = phase.planned_end
+        if not win_start or not win_end:
+            continue
+        if plan_date_to_ord(win_start) < plan_date_to_ord(period_start):
+            raise HTTPException(status_code=400, detail={"detail": "phase_schedule_outside_program"})
+        if plan_date_to_ord(win_end) > plan_date_to_ord(period_end):
+            raise HTTPException(status_code=400, detail={"detail": "phase_schedule_outside_program"})
+
+
+def _validate_adjacent_no_overlap(
+    phases: list[PhaseScheduleLike],
+    program_period: dict[str, Any] | None,
+) -> None:
+    sorted_phases = sorted(phases, key=lambda p: p.sequence)
+    for index in range(len(sorted_phases) - 1):
+        left = sorted_phases[index]
+        right = sorted_phases[index + 1]
+        left_start, left_end = effective_window_for_phase(left, sorted_phases, program_period)
+        right_start, right_end = effective_window_for_phase(right, sorted_phases, program_period)
+        if not left_start or not left_end or not right_start or not right_end:
+            continue
+        if plan_date_to_ord(right_start) <= plan_date_to_ord(left_end):
+            raise HTTPException(status_code=400, detail={"detail": "phase_schedule_overlap"})
+
+
+def validate_project_schedule(
+    phases: list[PhaseScheduleLike],
+    *,
+    program_period: dict[str, Any] | None = None,
+    require_program: bool = False,
+) -> None:
     """Start/End system phases define project bounds; business phases must fit inside."""
+    if require_program:
+        require_program_period(program_period)
+
     for phase in phases:
         validate_phase_window(phase.planned_start, phase.planned_end)
+
+    if program_period_ok(program_period):
+        assert program_period is not None
+        _validate_program_bounds(phases, program_period)
+
+    _validate_adjacent_no_overlap(phases, program_period)
 
     start = _start_system_phase(phases)
     end = _end_system_phase(phases)
@@ -113,12 +158,16 @@ def validate_project_schedule(phases: list[PhaseScheduleLike]) -> None:
 
         project_start = start.planned_start
         project_end = end.planned_end
+        sorted_phases = sorted(phases, key=lambda p: p.sequence)
         for phase in phases:
-            if phase.is_system or phase.planned_start is None or phase.planned_end is None:
+            if phase.is_system:
                 continue
-            if plan_date_to_ord(phase.planned_start) < plan_date_to_ord(project_start):
+            win_start, win_end = effective_window_for_phase(phase, sorted_phases, program_period)
+            if not win_start or not win_end:
+                continue
+            if plan_date_to_ord(win_start) < plan_date_to_ord(project_start):
                 raise HTTPException(status_code=400, detail={"detail": "phase_schedule_outside_project"})
-            if plan_date_to_ord(phase.planned_end) > plan_date_to_ord(project_end):
+            if plan_date_to_ord(win_end) > plan_date_to_ord(project_end):
                 raise HTTPException(status_code=400, detail={"detail": "phase_schedule_outside_project"})
 
 

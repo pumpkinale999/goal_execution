@@ -84,7 +84,7 @@ def list_objectives(
 
     def program_meta(program: GeProgram) -> dict[str, Any]:
         refresh_lifecycle_on_read(db, program)
-        return program_out(program)
+        return program_out(program, db)
 
     def build_node(obj: GeObjective) -> dict[str, Any]:
         refresh_lifecycle_on_read(db, obj)
@@ -118,7 +118,7 @@ def list_programs(
     refresh_lifecycle_batch(db)
     programs = db.query(GeProgram).order_by(GeProgram.name).all()
     db.commit()
-    return [program_out(p) for p in programs]
+    return [program_out(p, db) for p in programs]
 
 
 @router.get("/programs/{program_id}")
@@ -141,7 +141,7 @@ def get_program(
     )
     visible = filter_projects_for_user(db, projects, user)
     return {
-        **program_out(program),
+        **program_out(program, db),
         "projects": [
             {
                 "id": p.id,

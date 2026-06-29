@@ -21,8 +21,9 @@ info:
     v1.17.3 (M28): KB topic org-charter (title 组织宪章) · paths org-charter/departments|teams/{slug} · see impl §4.1.4 · req v2.24.4
     v1.18.0 (M29 · runtime ☑): period_* · lifecycle_status · primary_department_id · POST /ge/objectives/years · assess · planning_year readOnly response · see impl §4.2.0.4 · req v2.26.0
     v1.19.0 (M30/M31 · runtime ☑): people-summary · goal-portfolio · migrate-primary-objectives · DELETE department 409 department_has_primary_objectives · see impl §4.2.4 · §4.1.5 · req v2.27.0
+    v1.20.0 (v2.28 · runtime ☑): Phase effective_planned_* · program_period on graph · phase_schedule_overlap · phase_schedule_outside_program · program_period_required · deviation extends Phase.planned_end · see req §4.8 · impl §4.3.2 · GE-T158
     Out of scope: skstudio BFF /api/v1/org|ge/* and POST /internal/ge/deviation-notify (see impl doc §4.0 · §5)
-  version: 1.19.0
+  version: 1.20.0
 servers:
   - url: /api/v1
     description: goal_execution service (JWT participant + service governance via skstudio BFF)
@@ -1691,6 +1692,12 @@ components:
       properties:
         project:
           $ref: '#/components/schemas/ProjectSummary'
+        program_period:
+          allOf:
+            - $ref: '#/components/schemas/StrategicFields'
+          nullable: true
+          readOnly: true
+          description: v2.28 · parent Program strategic window for phase derive/validate; null when program lacks period_*
         phases:
           type: array
           items:
@@ -1953,6 +1960,22 @@ components:
           type: string
           format: date
           nullable: true
+        effective_planned_start:
+          type: string
+          format: date
+          nullable: true
+          readOnly: true
+          description: v2.28 · persisted planned_start or §4.8.2 derive; null when program_period missing
+        effective_planned_end:
+          type: string
+          format: date
+          nullable: true
+          readOnly: true
+          description: v2.28 · persisted planned_end or §4.8.2 derive; null when program_period missing
+        planned_window_is_derived:
+          type: boolean
+          readOnly: true
+          description: v2.28 · true when both planned_start and planned_end were null and effective_* computed
         gate:
           type: object
           required: [id, is_open]

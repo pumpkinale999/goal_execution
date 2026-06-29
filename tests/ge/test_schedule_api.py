@@ -14,11 +14,11 @@ def test_patch_phase_planned_window(client):
     resp = client.patch(
         f"/api/v1/ge/phases/{dev['id']}",
         headers=jwt_headers(U_PM),
-        json={"planned_start": "2026-06-01", "planned_end": "2026-06-30"},
+        json={"planned_start": "2026-06-16", "planned_end": "2026-06-30"},
     )
     assert resp.status_code == 200, resp.text
     updated = phase_by_name(resp.json(), "开发")
-    assert updated["planned_start"] == "2026-06-01"
+    assert updated["planned_start"] == "2026-06-16"
     assert updated["planned_end"] == "2026-06-30"
 
 
@@ -78,20 +78,14 @@ def test_add_gate_item_with_valid_due(client):
     graph = get_graph(client, created["id"], U_PM)
     dev = phase_by_name(graph, "开发")
 
-    client.patch(
-        f"/api/v1/ge/phases/{dev['id']}",
-        headers=jwt_headers(U_PM),
-        json={"planned_start": "2026-06-01", "planned_end": "2026-06-30"},
-    )
-
     resp = client.post(
         f"/api/v1/ge/projects/{created['id']}/phases/{dev['id']}/gate-items",
         headers=jwt_headers(U_PM),
-        json={"name": "合规门控项", "planned_due": GOLDEN_PLANNED_DUE},
+        json={"name": "合规门控项", "planned_due": "2026-06-20"},
     )
     assert resp.status_code == 200, resp.text
     gi = next(item for item in phase_by_name(resp.json(), "开发")["gate_items"] if item["name"] == "合规门控项")
-    assert gi["planned_due"] == GOLDEN_PLANNED_DUE
+    assert gi["planned_due"] == "2026-06-20"
 
 
 def test_patch_system_phase_schedule(client):
@@ -127,6 +121,7 @@ def test_business_phase_outside_project_schedule_rejected(client):
     graph = get_graph(client, created["id"], U_PM)
     start = graph["phases"][0]
     end = graph["phases"][-1]
+    plan = phase_by_name(graph, "方案")
     dev = phase_by_name(graph, "开发")
 
     client.patch(
@@ -135,20 +130,25 @@ def test_business_phase_outside_project_schedule_rejected(client):
         json={"planned_start": "2026-06-01", "planned_end": "2026-06-30"},
     )
     client.patch(
+        f"/api/v1/ge/phases/{plan['id']}",
+        headers=jwt_headers(U_PM),
+        json={"planned_start": "2026-07-01", "planned_end": "2026-07-31"},
+    )
+    client.patch(
         f"/api/v1/ge/phases/{end['id']}",
         headers=jwt_headers(U_PM),
-        json={"planned_start": "2026-09-01", "planned_end": "2026-09-30"},
+        json={"planned_start": "2026-11-01", "planned_end": "2026-11-30"},
     )
 
     resp = client.patch(
         f"/api/v1/ge/phases/{dev['id']}",
         headers=jwt_headers(U_PM),
-        json={"planned_start": "2026-05-01", "planned_end": "2026-05-31"},
+        json={"planned_start": "2026-10-01", "planned_end": "2026-12-15"},
     )
     assert resp.status_code == 400
     detail = resp.json()["detail"]
     code = detail["detail"] if isinstance(detail, dict) else detail
-    assert code == "phase_schedule_outside_project"
+    assert code in ("phase_schedule_outside_project", "phase_schedule_overlap")
 
 
 def test_patch_task_rejects_schedule_fields(client):
@@ -179,7 +179,7 @@ def test_add_phase_without_window_rejected(client):
 
 
 def test_patch_business_phase_without_window_rejected(client):
-    created = create_project(client, U_PM)
+    created = create_project(client, U_PM, seed_schedule=False)
     graph = get_graph(client, created["id"], U_PM)
     dev = phase_by_name(graph, "开发")
 

@@ -66,30 +66,41 @@ def test_validate_project_schedule_business_outside_bounds():
 
     phases = [
         SimpleNamespace(
-            is_system=True,
-            sequence=0,
-            name="开始",
-            planned_start="2026-06-01",
-            planned_end="2026-06-30",
-        ),
-        SimpleNamespace(
             is_system=False,
             sequence=1,
             name="开发",
-            planned_start="2026-05-01",
-            planned_end="2026-05-31",
+            planned_start="2027-01-01",
+            planned_end="2027-01-31",
+        ),
+    ]
+    program = {"period_start": "2026-01-01", "period_end": "2026-12-31", "period_granularity": "year"}
+    with pytest.raises(HTTPException) as exc:
+        validate_project_schedule(phases, program_period=program, require_program=True)
+    assert exc.value.detail == {"detail": "phase_schedule_outside_program"}
+
+
+def test_validate_adjacent_overlap():
+    from types import SimpleNamespace
+
+    phases = [
+        SimpleNamespace(
+            is_system=False,
+            sequence=1,
+            name="A",
+            planned_start="2026-06-01",
+            planned_end="2026-06-15",
         ),
         SimpleNamespace(
-            is_system=True,
+            is_system=False,
             sequence=2,
-            name="结束",
-            planned_start="2026-09-01",
-            planned_end="2026-09-30",
+            name="B",
+            planned_start="2026-06-15",
+            planned_end="2026-06-30",
         ),
     ]
     with pytest.raises(HTTPException) as exc:
         validate_project_schedule(phases)
-    assert exc.value.detail == {"detail": "phase_schedule_outside_project"}
+    assert exc.value.detail == {"detail": "phase_schedule_overlap"}
 
 
 def test_parse_required_plan_date():

@@ -14,7 +14,9 @@ from app.models.ge import (
     GeGate,
     GeGateGateItemInclude,
     GeGateItem,
+    GeObjective,
     GePhase,
+    GeProgram,
     GeProject,
     GeTask,
     GeTaskGateItemPrerequisite,
@@ -31,6 +33,7 @@ def load_project_graph(db: Session, project_id: str) -> GeProject | None:
     return (
         db.query(GeProject)
         .options(
+            joinedload(GeProject.program),
             joinedload(GeProject.phases).joinedload(GePhase.gate),
             joinedload(GeProject.phases).joinedload(GePhase.gate_items),
             joinedload(GeProject.tasks),
@@ -334,6 +337,14 @@ def build_project_graph(
     is_governor: bool = False,
 ) -> dict[str, Any]:
     from app.services.ge_deviations import compute_gate_overdue_fields
+    from app.services.ge_schedule_derive import build_program_period, derive_phase_effective_window
+
+    program = project.program or db.get(GeProgram, project.program_id)
+    objective = None
+    if program is not None:
+        objective = program.objective or db.get(GeObjective, program.objective_id)
+    program_period = build_program_period(program, objective=objective)
+    sorted_phase_models = sorted(project.phases, key=lambda p: p.sequence)
 
     deviations_by_gi = {
         d.gate_item_id: d
@@ -342,7 +353,10 @@ def build_project_graph(
         .all()
     }
     phases_out: list[dict[str, Any]] = []
-    for phase in sorted(project.phases, key=lambda p: p.sequence):
+    for phase in sorted_phase_models:
+        eff_start, eff_end, is_derived = derive_phase_effective_window(
+            sorted_phase_models, program_period, target_sequence=phase.sequence
+        )
         gate = phase.gate
         gate_item_ids = _gate_item_ids_for_gate(db, gate.id) if gate else []
         phase_tasks = sorted(
@@ -358,6 +372,9 @@ def build_project_graph(
                 "is_system": bool(phase.is_system),
                 "planned_start": phase.planned_start,
                 "planned_end": phase.planned_end,
+                "effective_planned_start": eff_start,
+                "effective_planned_end": eff_end,
+                "planned_window_is_derived": is_derived,
                 "gate": {
                     "id": gate.id if gate else None,
                     "is_open": gate_is_open(db, gate, phase) if gate else False,
@@ -393,7 +410,7 @@ def build_project_graph(
                 "tasks": [_task_graph_row(db, task) for task in phase_tasks],
             }
         )
-    graph = {
+    graph: dict[str, Any] = {
         "project": {
             "id": project.id,
             "name": project.name,
@@ -406,6 +423,8 @@ def build_project_graph(
         "phases": phases_out,
         "edges": build_graph_edges(db, project),
     }
+    if program_period is not None:
+        graph["program_period"] = program_period
     if actor_user_id is not None:
         from app.services.ge_effective_status import attach_effective_status_to_graph
 

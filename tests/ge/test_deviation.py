@@ -115,6 +115,27 @@ def test_open_twice_409(client):
     assert resp.json()["detail"] == "deviation_already_open"
 
 
+def test_open_without_produce_409(client):
+    """Opening deviation requires an existing produce task."""
+    created = create_project(client, U_PM)
+    graph = get_graph(client, created["id"], U_PM)
+    gi = _gi(graph, "诊断报告")
+    task_id = task_id_by_title(graph, "编写诊断报告")
+    resp_del = client.delete(
+        f"/api/v1/ge/tasks/{task_id}/produces/{gi['id']}",
+        headers=jwt_headers(U_PM),
+    )
+    assert resp_del.status_code == 200, resp_del.text
+    with patch("app.services.ge_deviations.today_shanghai", return_value=date(2026, 6, 20)):
+        resp = client.post(
+            f"/api/v1/ge/gate-items/{gi['id']}/deviations/open",
+            headers=jwt_headers(U_PM),
+            json={"kind": "overdue"},
+        )
+    assert resp.status_code == 409
+    assert resp.json()["detail"] == "deviation_open_requires_produce"
+
+
 def test_activate_deviation(client, monkeypatch):
     """GE-T72 · activate · planned_due sync."""
     pa_calls: list[dict] = []
@@ -134,13 +155,13 @@ def test_activate_deviation(client, monkeypatch):
             "action": "activate",
             "reason": "范围扩大",
             "remediation_plan": "补交简化版",
-            "remediation_due": "2026-07-01",
+            "remediation_due": "2026-06-10",
         },
     )
     assert resp.status_code == 200, resp.text
     data = resp.json()
     assert data["deviation"]["status"] == "active"
-    assert data["gate_item"]["planned_due"] == "2026-07-01"
+    assert data["gate_item"]["planned_due"] == "2026-06-10"
     assert pa_calls
     assert pa_calls[0]["event"] == "ge.deviation.activated"
 
@@ -206,7 +227,7 @@ def test_remediation_submit_sign_close(client, monkeypatch):
             "action": "activate",
             "reason": "r",
             "remediation_plan": "p",
-            "remediation_due": "2026-07-01",
+            "remediation_due": "2026-06-10",
         },
     )
     graph2 = get_graph(client, created["id"], U_PM)
@@ -239,16 +260,16 @@ def test_extend_revision_plan_required(client, monkeypatch):
             "action": "activate",
             "reason": "r",
             "remediation_plan": "p",
-            "remediation_due": "2026-07-01",
+            "remediation_due": "2026-06-10",
         },
     )
-    for i in range(2):
+    for i, due in enumerate(("2026-06-12", "2026-06-13"), start=1):
         resp = client.patch(
             f"/api/v1/ge/deviations/{dev_id}",
             headers=jwt_headers(U_PM),
             json={
                 "action": "extend",
-                "remediation_due": f"2026-07-{10 + i}",
+                "remediation_due": due,
                 "extend_reason": f"延期{i}",
             },
         )
@@ -258,7 +279,7 @@ def test_extend_revision_plan_required(client, monkeypatch):
         headers=jwt_headers(U_PM),
         json={
             "action": "extend",
-            "remediation_due": "2026-08-01",
+            "remediation_due": "2026-06-14",
             "extend_reason": "need plan",
         },
     )
@@ -268,7 +289,7 @@ def test_extend_revision_plan_required(client, monkeypatch):
         headers=jwt_headers(U_PM),
         json={
             "action": "extend",
-            "remediation_due": "2026-08-01",
+            "remediation_due": "2026-06-14",
             "extend_reason": "need plan",
             "remediation_plan": "updated plan",
         },

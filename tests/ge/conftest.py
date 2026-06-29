@@ -86,12 +86,35 @@ def structured_submit_payload(actual_value: Any, summary: str) -> dict[str, Any]
     }
 
 
+def bootstrap_golden_phase_schedule(client: TestClient, project_id: str, user_id: str) -> None:
+    """Non-overlapping persisted windows for golden sample (v2.28 adjacency)."""
+    graph = get_graph(client, project_id, user_id)
+    start = graph["phases"][0]
+    end = graph["phases"][-1]
+    plan = phase_by_name(graph, "方案")
+    dev = phase_by_name(graph, "开发")
+    patches = [
+        (start["id"], {"planned_start": "2026-01-01", "planned_end": "2026-01-07"}),
+        (plan["id"], {"planned_start": "2026-06-01", "planned_end": "2026-06-15"}),
+        (dev["id"], {"planned_start": "2026-06-16", "planned_end": "2026-06-30"}),
+        (end["id"], {"planned_start": "2026-12-01", "planned_end": "2026-12-07"}),
+    ]
+    for phase_id, body in patches:
+        resp = client.patch(
+            f"/api/v1/ge/phases/{phase_id}",
+            headers=jwt_headers(user_id),
+            json=body,
+        )
+        assert resp.status_code == 200, resp.text
+
+
 def create_project(
     client: TestClient,
     user_id: str,
     body: dict[str, Any] | None = None,
     *,
     bootstrap_startup: bool = True,
+    seed_schedule: bool = True,
 ) -> dict[str, Any]:
     payload = dict(body or GOLDEN_PROJECT_BODY)
     if "project_note_id" not in payload:
@@ -105,6 +128,8 @@ def create_project(
     created = resp.json()
     if bootstrap_startup:
         bootstrap_startup_gate(client, created["id"], user_id)
+        if seed_schedule:
+            bootstrap_golden_phase_schedule(client, created["id"], user_id)
     return created
 
 
@@ -243,6 +268,45 @@ def get_deviation(client: TestClient, deviation_id: str, user_id: str) -> dict[s
     return resp.json()
 
 
+@pytest.fixture(autouse=True)
+def _default_program_period_for_schedule(ge_db):
+    """v2.28 T2: schedule saves require program period on default chain program."""
+    from app.constants import GE_DEFAULT_PROGRAM_ID
+    from app.db import get_session_factory
+    from app.models.ge import GeProgram
+
+    factory = get_session_factory()
+    with factory() as db:
+        program = db.get(GeProgram, GE_DEFAULT_PROGRAM_ID)
+        if program is not None:
+            program.period_start = "2026-01-01"
+            program.period_end = "2026-12-31"
+            program.period_granularity = "year"
+            db.commit()
+
+
 @pytest.fixture
 def golden_active(client):
     return create_project(client, U_PM)
+
+
+def ensure_program_period(
+    client: TestClient,
+    program_id: str,
+    *,
+    period_start: str,
+    period_end: str,
+    period_granularity: str = "year",
+    reviewer: str = "reviewer-1",
+) -> dict[str, Any]:
+    resp = client.patch(
+        f"/api/v1/ge/programs/{program_id}",
+        headers=service_headers(reviewer),
+        json={
+            "period_granularity": period_granularity,
+            "period_start": period_start,
+            "period_end": period_end,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    return resp.json()

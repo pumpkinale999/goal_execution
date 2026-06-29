@@ -233,7 +233,7 @@ def create_program(db: Session, body: dict[str, Any]) -> dict[str, Any]:
     db.add(program)
     db.commit()
     db.refresh(program)
-    return program_out(program)
+    return program_out(program, db)
 
 
 def patch_program(db: Session, program_id: str, body: dict[str, Any]) -> dict[str, Any]:
@@ -274,7 +274,7 @@ def patch_program(db: Session, program_id: str, body: dict[str, Any]) -> dict[st
     program.updated_at = now_iso()
     db.commit()
     db.refresh(program)
-    return program_out(program)
+    return program_out(program, db)
 
 
 def create_objective_year(db: Session, body: dict[str, Any], *, actor_user_id: str) -> dict[str, Any]:
@@ -541,7 +541,7 @@ def assess_program(
     )
     db.commit()
     db.refresh(program)
-    return program_out(program)
+    return program_out(program, db)
 
 
 def delete_objective(db: Session, objective_id: str) -> None:
@@ -608,8 +608,14 @@ def objective_out(obj: GeObjective) -> dict[str, Any]:
     }
 
 
-def program_out(program: GeProgram) -> dict[str, Any]:
-    return {
+def program_out(program: GeProgram, db: Session | None = None) -> dict[str, Any]:
+    from app.services.ge_schedule_derive import build_program_period
+
+    objective = None
+    if db is not None:
+        objective = program.objective if program.objective is not None else db.get(GeObjective, program.objective_id)
+    resolved = build_program_period(program, objective=objective)
+    data: dict[str, Any] = {
         "id": program.id,
         "name": program.name,
         "objective_id": program.objective_id,
@@ -617,3 +623,11 @@ def program_out(program: GeProgram) -> dict[str, Any]:
         "is_default": bool(program.is_default),
         **strategic_fields_out(program),
     }
+    if resolved:
+        data["resolved_period_start"] = resolved["period_start"]
+        data["resolved_period_end"] = resolved["period_end"]
+        data["resolved_period_granularity"] = resolved.get("period_granularity")
+        data["period_is_inherited"] = not (program.period_start and program.period_end)
+    else:
+        data["period_is_inherited"] = False
+    return data

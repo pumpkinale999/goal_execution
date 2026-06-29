@@ -13,7 +13,9 @@ from app.models.ge import (
     GeGate,
     GeGateGateItemInclude,
     GeGateItem,
+    GeObjective,
     GePhase,
+    GeProgram,
     GeProject,
     GeTask,
     GeTaskGateItemPrerequisite,
@@ -23,6 +25,7 @@ from app.constants import SYSTEM_END_PHASE_NAME, TASK_STATUS_IDLE
 from app.services.ge_access import can_govern_project
 from app.services.ge_gate_includes_sync import sync_gate_includes_for_phase
 from app.services.ge_graph import build_project_graph, load_project_graph, now_iso
+from app.services.ge_schedule_derive import build_program_period, effective_window_for_phase
 from app.services.ge_schedule_validate import (
     parse_plan_date,
     parse_required_plan_date,
@@ -40,6 +43,24 @@ from app.services.ge_deviations import (
     assert_task_delete_allowed,
     assert_task_patch_allowed,
 )
+
+
+def _project_schedule_context(db: Session, project: GeProject) -> tuple[dict[str, Any] | None, list[GePhase]]:
+    program = db.get(GeProgram, project.program_id)
+    objective = None
+    if program is not None:
+        objective = program.objective or db.get(GeObjective, program.objective_id)
+    program_period = build_program_period(program, objective=objective)
+    phases = db.query(GePhase).filter(GePhase.project_id == project.id).order_by(GePhase.sequence).all()
+    return program_period, phases
+
+
+def _phase_effective_window(
+    phase: GePhase,
+    phases: list[GePhase],
+    program_period: dict[str, Any] | None,
+) -> tuple[str | None, str | None]:
+    return effective_window_for_phase(phase, phases, program_period)
 
 
 def _assert_not_system_task(task: GeTask) -> None:
@@ -410,10 +431,12 @@ def add_gate_item(db: Session, project_id: str, phase_id: str, body: dict[str, A
     form = parse_form(body.get("form"))
     definition = definition_from_body(form, body)
     planned_due = parse_required_plan_date(body.get("planned_due"), field="planned_due")
+    program_period, project_phases = _project_schedule_context(db, project)
+    eff_start, eff_end = _phase_effective_window(phase, project_phases, program_period)
     validate_gate_item_due_in_phase(
         planned_due,
-        phase_planned_start=phase.planned_start,
-        phase_planned_end=phase.planned_end,
+        phase_planned_start=eff_start,
+        phase_planned_end=eff_end,
     )
     now = now_iso()
     gi_id = str(uuid.uuid4())
@@ -499,10 +522,12 @@ def patch_gate_item(db: Session, gate_item_id: str, body: dict[str, Any], user: 
         target_phase = new_phase
     if "planned_due" in body:
         item.planned_due = parse_required_plan_date(body.get("planned_due"), field="planned_due")
+    program_period, project_phases = _project_schedule_context(db, project)
+    eff_start, eff_end = _phase_effective_window(target_phase, project_phases, program_period)
     validate_gate_item_due_in_phase(
         item.planned_due,
-        phase_planned_start=target_phase.planned_start,
-        phase_planned_end=target_phase.planned_end,
+        phase_planned_start=eff_start,
+        phase_planned_end=eff_end,
     )
     if item.status == "draft" and not item.submitted_by and not item.signed_by and not item.rejected_by:
         from app.services.ge_gate_item_payload import definition_from_body, merge_definition_patch, parse_form
@@ -589,13 +614,14 @@ def patch_phase(db: Session, phase_id: str, body: dict[str, Any], user: AuthUser
         validate_phase_window(phase.planned_start, phase.planned_end)
     else:
         require_business_phase_window(phase.planned_start, phase.planned_end)
-    project_phases = db.query(GePhase).filter(GePhase.project_id == project.id).order_by(GePhase.sequence).all()
-    validate_project_schedule(project_phases)
+    program_period, project_phases = _project_schedule_context(db, project)
+    validate_project_schedule(project_phases, program_period=program_period, require_program=True)
+    eff_start, eff_end = _phase_effective_window(phase, project_phases, program_period)
     for gi in db.query(GeGateItem).filter(GeGateItem.phase_id == phase_id).all():
         validate_gate_item_due_in_phase(
             gi.planned_due,
-            phase_planned_start=phase.planned_start,
-            phase_planned_end=phase.planned_end,
+            phase_planned_start=eff_start,
+            phase_planned_end=eff_end,
         )
     phase.updated_at = now
     project.updated_at = now
@@ -667,8 +693,8 @@ def add_phase(db: Session, project_id: str, body: dict[str, Any], user: AuthUser
     db.add(GeGate(id=str(uuid.uuid4()), phase_id=phase_id))
     project.updated_at = now
     db.flush()
-    project_phases = db.query(GePhase).filter(GePhase.project_id == project_id).order_by(GePhase.sequence).all()
-    validate_project_schedule(project_phases)
+    program_period, project_phases = _project_schedule_context(db, project)
+    validate_project_schedule(project_phases, program_period=program_period, require_program=True)
     db.commit()
     project_loaded = load_project_graph(db, project_id)
     assert project_loaded is not None
