@@ -34,6 +34,7 @@ class GeObjective(Base):
         nullable=False,
         default=0,
     )
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[str] = mapped_column(Text, nullable=False)
     updated_at: Mapped[str] = mapped_column(Text, nullable=False)
 
@@ -62,6 +63,7 @@ class GeProgram(Base):
         nullable=False,
         default=0,
     )
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[str] = mapped_column(Text, nullable=False)
     updated_at: Mapped[str] = mapped_column(Text, nullable=False)
 
@@ -80,6 +82,7 @@ class GeProject(Base):
     status: Mapped[str] = mapped_column(Text, nullable=False)
     project_note_id: Mapped[str | None] = mapped_column(String, nullable=True)
     deleted_at: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[str] = mapped_column(Text, nullable=False)
     updated_at: Mapped[str] = mapped_column(Text, nullable=False)
 

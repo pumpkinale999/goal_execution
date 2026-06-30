@@ -13,7 +13,7 @@ from app.deps import get_current_user, get_db, require_service_user
 from app.models.ge import GeObjective, GeProgram, GeProject
 from app.services.ge_access import can_read_project, filter_projects_for_user, can_govern_project
 from app.services.ge_bootstrap import ensure_ge_bootstrap
-from app.services.ge_graph import build_project_graph, load_project_graph, reconcile_project_completion
+from app.services.ge_graph import build_project_graph, load_project_graph, now_iso, reconcile_project_completion
 from app.services.ge_graph_edit import (
     add_gate_item,
     add_phase,
@@ -56,6 +56,16 @@ from app.services.ge_strategic import (
     program_out,
 )
 from app.services.ge_strategic_lifecycle import refresh_lifecycle_batch, refresh_lifecycle_on_read
+from app.schemas.org import ReorderRequest
+from app.services.ge_sort_order import (
+    annual_root_sort_key,
+    reorder_objective,
+    reorder_program,
+    reorder_project,
+    sibling_objectives,
+    sibling_programs,
+    sibling_projects,
+)
 from app.services.ge_project_create import create_project
 from app.services.ge_queues import build_queues
 from app.services.ge_m12_read import get_gate_item_context, get_task_context, list_audit_events
@@ -75,12 +85,7 @@ def list_objectives(
 ) -> list[dict[str, Any]]:
     ensure_ge_bootstrap(db)
     refresh_lifecycle_batch(db)
-    objectives = (
-        db.query(GeObjective)
-        .options(joinedload(GeObjective.programs))
-        .order_by(GeObjective.name)
-        .all()
-    )
+    db.query(GeObjective).options(joinedload(GeObjective.programs)).all()
 
     def program_meta(program: GeProgram) -> dict[str, Any]:
         refresh_lifecycle_on_read(db, program)
@@ -88,16 +93,11 @@ def list_objectives(
 
     def build_node(obj: GeObjective) -> dict[str, Any]:
         refresh_lifecycle_on_read(db, obj)
-        children = (
-            db.query(GeObjective)
-            .filter(GeObjective.parent_id == obj.id)
-            .order_by(GeObjective.name)
-            .all()
-        )
+        children = sibling_objectives(db, obj.id)
         programs = (
             []
             if obj.level == "company"
-            else [program_meta(p) for p in obj.programs if p.is_default or p.objective_id == obj.id]
+            else [program_meta(p) for p in sibling_programs(db, obj.id) if p.is_default or p.objective_id == obj.id]
         )
         return {
             **objective_out(obj),
@@ -105,8 +105,9 @@ def list_objectives(
             "children": [build_node(child) for child in children],
         }
 
+    roots = sorted(sibling_objectives(db, None), key=annual_root_sort_key)
     db.commit()
-    return [build_node(obj) for obj in objectives if obj.parent_id is None]
+    return [build_node(obj) for obj in roots]
 
 
 @router.get("/programs")
@@ -116,7 +117,7 @@ def list_programs(
 ) -> list[dict[str, Any]]:
     ensure_ge_bootstrap(db)
     refresh_lifecycle_batch(db)
-    programs = db.query(GeProgram).order_by(GeProgram.name).all()
+    programs = db.query(GeProgram).order_by(GeProgram.sort_order, GeProgram.name).all()
     db.commit()
     return [program_out(p, db) for p in programs]
 
@@ -133,12 +134,7 @@ def get_program(
         raise HTTPException(status_code=404, detail={"detail": "not_found"})
     refresh_lifecycle_on_read(db, program)
     db.commit()
-    projects = (
-        db.query(GeProject)
-        .filter(GeProject.program_id == program_id, GeProject.deleted_at.is_(None))
-        .order_by(GeProject.name)
-        .all()
-    )
+    projects = sibling_projects(db, program_id)
     visible = filter_projects_for_user(db, projects, user)
     return {
         **program_out(program, db),
@@ -149,6 +145,7 @@ def get_program(
                 "status": p.status,
                 "pm_user_id": p.pm_user_id,
                 "program_id": p.program_id,
+                "sort_order": p.sort_order,
             }
             for p in visible
         ],
@@ -163,7 +160,7 @@ def list_projects(
     projects = (
         db.query(GeProject)
         .filter(GeProject.deleted_at.is_(None))
-        .order_by(GeProject.updated_at.desc())
+        .order_by(GeProject.program_id, GeProject.sort_order, GeProject.name)
         .all()
     )
     visible = filter_projects_for_user(db, projects, user)
@@ -176,6 +173,7 @@ def list_projects(
             "program_id": p.program_id,
             "created_by_user_id": p.created_by_user_id,
             "project_note_id": p.project_note_id,
+            "sort_order": p.sort_order,
         }
         for p in visible
     ]
@@ -675,6 +673,58 @@ def patch_program_route(
     _user: Annotated[AuthUser, Depends(require_service_user)],
 ) -> dict[str, Any]:
     return patch_program(db, program_id, body)
+
+
+@router.post("/objectives/{objective_id}/reorder")
+def reorder_objective_route(
+    objective_id: str,
+    body: ReorderRequest,
+    db: Annotated[Session, Depends(get_db)],
+    _user: Annotated[AuthUser, Depends(require_service_user)],
+) -> dict[str, Any]:
+    now = now_iso()
+    obj = reorder_objective(db, objective_id, body.direction)  # type: ignore[arg-type]
+    obj.updated_at = now
+    db.commit()
+    db.refresh(obj)
+    return objective_out(obj)
+
+
+@router.post("/programs/{program_id}/reorder")
+def reorder_program_route(
+    program_id: str,
+    body: ReorderRequest,
+    db: Annotated[Session, Depends(get_db)],
+    _user: Annotated[AuthUser, Depends(require_service_user)],
+) -> dict[str, Any]:
+    now = now_iso()
+    program = reorder_program(db, program_id, body.direction)  # type: ignore[arg-type]
+    program.updated_at = now
+    db.commit()
+    db.refresh(program)
+    return program_out(program, db)
+
+
+@router.post("/projects/{project_id}/reorder")
+def reorder_project_route(
+    project_id: str,
+    body: ReorderRequest,
+    db: Annotated[Session, Depends(get_db)],
+    _user: Annotated[AuthUser, Depends(require_service_user)],
+) -> dict[str, Any]:
+    now = now_iso()
+    project = reorder_project(db, project_id, body.direction)  # type: ignore[arg-type]
+    project.updated_at = now
+    db.commit()
+    db.refresh(project)
+    return {
+        "id": project.id,
+        "name": project.name,
+        "status": project.status,
+        "pm_user_id": project.pm_user_id,
+        "program_id": project.program_id,
+        "sort_order": project.sort_order,
+    }
 
 
 @router.delete("/objectives/{objective_id}", status_code=status.HTTP_204_NO_CONTENT)

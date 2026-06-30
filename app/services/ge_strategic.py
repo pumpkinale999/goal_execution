@@ -22,6 +22,12 @@ from app.models.org import OrgDepartment
 from app.services.ge_bootstrap import ensure_ge_bootstrap
 from app.services.ge_graph import now_iso, record_audit
 from app.services.ge_project_create import create_project
+from app.services.ge_sort_order import (
+    next_objective_sort_order,
+    next_program_sort_order,
+    sibling_objectives,
+    sibling_programs,
+)
 from app.services.ge_strategic_period import (
     LIFECYCLE_ACTIVE,
     LIFECYCLE_ARCHIVED,
@@ -166,6 +172,7 @@ def create_objective(db: Session, body: dict[str, Any]) -> dict[str, Any]:
     _validate_department(db, str(dept) if dept else None)
     obj.primary_department_id = str(dept) if dept else None
     _apply_objective_period(db, obj, body, parent=parent, is_create=True)
+    obj.sort_order = next_objective_sort_order(db, str(parent_id))
     db.add(obj)
     db.commit()
     db.refresh(obj)
@@ -234,6 +241,7 @@ def create_program(db: Session, body: dict[str, Any]) -> dict[str, Any]:
     _validate_department(db, str(dept) if dept else None)
     program.primary_department_id = str(dept) if dept else None
     _apply_program_period(db, program, body, objective=objective, is_create=True)
+    program.sort_order = next_program_sort_order(db, str(objective_id))
     db.add(program)
     db.commit()
     db.refresh(program)
@@ -314,6 +322,7 @@ def create_objective_year(db: Session, body: dict[str, Any], *, actor_user_id: s
         period_end=end,
         lifecycle_status=LIFECYCLE_ACTIVE,
         primary_department_needs_confirmation=0,
+        sort_order=next_objective_sort_order(db, None),
         created_at=now,
         updated_at=now,
     )
@@ -362,6 +371,7 @@ def _append_sample_structure(
         lifecycle_status=LIFECYCLE_ACTIVE,
         primary_department_id=dept.id if dept else None,
         primary_department_needs_confirmation=0 if dept else 1,
+        sort_order=next_objective_sort_order(db, company.id),
         created_at=now,
         updated_at=now,
     )
@@ -381,6 +391,7 @@ def _append_sample_structure(
         lifecycle_status=LIFECYCLE_ACTIVE,
         primary_department_id=dept.id if dept else sub.primary_department_id,
         primary_department_needs_confirmation=0 if dept else 1,
+        sort_order=next_program_sort_order(db, sub.id),
         created_at=now,
         updated_at=now,
     )
@@ -440,7 +451,7 @@ def _copy_year_structure(
     )
     if source is None:
         return
-    subs = db.query(GeObjective).filter(GeObjective.parent_id == source.id).all()
+    subs = sibling_objectives(db, source.id)
     for sub in subs:
         if sub.is_default:
             continue
@@ -457,12 +468,13 @@ def _copy_year_structure(
             lifecycle_status=LIFECYCLE_ACTIVE,
             primary_department_id=sub.primary_department_id,
             primary_department_needs_confirmation=sub.primary_department_needs_confirmation,
+            sort_order=sub.sort_order,
             created_at=now,
             updated_at=now,
         )
         db.add(new_sub)
         db.flush()
-        for prog in db.query(GeProgram).filter(GeProgram.objective_id == sub.id).all():
+        for prog in sibling_programs(db, sub.id):
             if prog.is_default:
                 continue
             db.add(
@@ -478,6 +490,7 @@ def _copy_year_structure(
                     lifecycle_status=LIFECYCLE_ACTIVE,
                     primary_department_id=prog.primary_department_id,
                     primary_department_needs_confirmation=prog.primary_department_needs_confirmation,
+                    sort_order=prog.sort_order,
                     created_at=now,
                     updated_at=now,
                 )
@@ -608,6 +621,7 @@ def objective_out(obj: GeObjective) -> dict[str, Any]:
         "parent_id": obj.parent_id,
         "owner_user_id": obj.owner_user_id,
         "is_default": bool(obj.is_default),
+        "sort_order": obj.sort_order,
         **strategic_fields_out(obj),
     }
 
@@ -625,6 +639,7 @@ def program_out(program: GeProgram, db: Session | None = None) -> dict[str, Any]
         "objective_id": program.objective_id,
         "owner_user_id": program.owner_user_id,
         "is_default": bool(program.is_default),
+        "sort_order": program.sort_order,
         **strategic_fields_out(program),
     }
     if resolved:

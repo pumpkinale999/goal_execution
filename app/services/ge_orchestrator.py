@@ -24,6 +24,7 @@ from app.services.ge_graph import (
 )
 from app.services.ge_system_tasks import sync_system_end_sign_task_assignee
 from app.services.ge_subtree_governor import is_subtree_governor
+from app.services.ge_sort_order import next_project_sort_order
 from app.services.ge_ws_callback import dispatch_deviation_personal_assistant
 
 
@@ -92,6 +93,7 @@ def patch_project(db: Session, project_id: str, user: AuthUser, body: dict[str, 
         if new_program_id != project.program_id:
             _require_program_migration(db, project, user, new_program_id)
             project.program_id = new_program_id
+            project.sort_order = next_project_sort_order(db, new_program_id)
             changed = True
     if not changed:
         raise HTTPException(status_code=400, detail={"detail": "no_changes"})

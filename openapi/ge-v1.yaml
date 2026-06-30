@@ -22,8 +22,9 @@ info:
     v1.18.0 (M29 · runtime ☑): period_* · lifecycle_status · primary_department_id · POST /ge/objectives/years · assess · planning_year readOnly response · see impl §4.2.0.4 · req v2.26.0
     v1.19.0 (M30/M31 · runtime ☑): people-summary · goal-portfolio · migrate-primary-objectives · DELETE department 409 department_has_primary_objectives · see impl §4.2.4 · §4.1.5 · req v2.27.0
     v1.20.0 (v2.28 · runtime ☑): Phase effective_planned_* · program_period on graph · phase_schedule_overlap · phase_schedule_outside_program · program_period_required · deviation extends Phase.planned_end · see req §4.8 · impl §4.3.2 · GE-T158
+    v1.21.0 (M32 · runtime ☑): ge_objectives/ge_programs/ge_projects sort_order · POST …/reorder · annual roots by planning_year DESC · see impl §4.2.0.5 · req v2.30.0 · GE-T162～T168
     Out of scope: skstudio BFF /api/v1/org|ge/* and POST /internal/ge/deviation-notify (see impl doc §4.0 · §5)
-  version: 1.20.0
+  version: 1.21.0
 servers:
   - url: /api/v1
     description: goal_execution service (JWT participant + service governance via skstudio BFF)
@@ -369,6 +370,34 @@ paths:
                 $ref: '#/components/schemas/ErrorDetail'
         '403':
           $ref: '#/components/responses/Forbidden'
+  /ge/objectives/{objective_id}/reorder:
+    post:
+      operationId: reorderGeObjective
+      summary: Reorder sibling sub-objectives (M32 · service · BFF subtree_governor)
+      tags: [ge-objectives]
+      parameters:
+        - $ref: '#/components/parameters/ObjectiveId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReorderRequest'
+      responses:
+        '200':
+          description: Updated objective with normalized sort_order
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ObjectiveNode'
+        '403':
+          description: default_node_immutable · strategic_locked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /ge/objectives/{objective_id}/assess:
     post:
       operationId: assessGeObjective
@@ -520,6 +549,34 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorDetail'
+  /ge/programs/{program_id}/reorder:
+    post:
+      operationId: reorderGeProgram
+      summary: Reorder sibling programs under sub-objective (M32 · service · BFF subtree_governor)
+      tags: [ge-programs]
+      parameters:
+        - $ref: '#/components/parameters/ProgramId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReorderRequest'
+      responses:
+        '200':
+          description: Updated program with normalized sort_order
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgramMetadata'
+        '403':
+          description: default_node_immutable · strategic_locked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /ge/programs/{program_id}/assess:
     post:
       operationId: assessGeProgram
@@ -654,6 +711,24 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+  /ge/projects/{project_id}/reorder:
+    post:
+      operationId: reorderGeProject
+      summary: Reorder sibling projects under program (M32 · service · BFF subtree_governor)
+      tags: [ge-projects]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReorderRequest'
+      responses:
+        '200':
+          description: Updated project summary with sort_order
+        '404':
+          $ref: '#/components/responses/NotFound'
   /ge/projects/{project_id}/program:
     patch:
       operationId: patchGeProjectProgram
@@ -1474,6 +1549,16 @@ components:
           type: integer
           readOnly: true
           description: Response only · company level · is_default=false · derived YEAR(period_start) · no DB column
+        sort_order:
+          type: integer
+          description: M32 · sibling order within same parent · step 10 · tie-break name ASC
+    ReorderRequest:
+      type: object
+      required: [direction]
+      properties:
+        direction:
+          type: string
+          enum: [up, down]
     CreateProgramRequest:
       type: object
       required: [name, objective_id, owner_user_id]

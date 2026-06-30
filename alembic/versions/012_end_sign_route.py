@@ -15,20 +15,28 @@ depends_on = None
 
 
 def upgrade() -> None:
+    from sqlalchemy import text
+
     from app.constants import SYSTEM_END_PHASE_NAME
     from app.db import session_scope
-    from app.models.ge import GePhase, GeProject
+    from app.models.ge import GePhase
     from app.services.ge_graph import now_iso, recompute_gate_and_phases, recompute_task_status
     from app.services.ge_system_tasks import ensure_end_sign_route_for_phase
 
     with session_scope() as db:
-        projects = db.query(GeProject).filter(GeProject.deleted_at.is_(None)).all()
+        project_rows = db.execute(
+            text(
+                "SELECT id, pm_user_id FROM ge_projects WHERE deleted_at IS NULL",
+            ),
+        ).fetchall()
         now = now_iso()
-        for project in projects:
+        for row in project_rows:
+            project_id = row[0]
+            pm_user_id = row[1]
             end_phase = (
                 db.query(GePhase)
                 .filter(
-                    GePhase.project_id == project.id,
+                    GePhase.project_id == project_id,
                     GePhase.is_system.is_(True),
                     GePhase.name == SYSTEM_END_PHASE_NAME,
                 )
@@ -38,15 +46,18 @@ def upgrade() -> None:
                 continue
             ensure_end_sign_route_for_phase(
                 db,
-                project_id=project.id,
-                pm_user_id=project.pm_user_id,
+                project_id=project_id,
+                pm_user_id=pm_user_id,
                 end_phase_id=end_phase.id,
                 now=now,
             )
-            project.updated_at = now
-        for project in projects:
-            recompute_gate_and_phases(db, project.id)
-            recompute_task_status(db, project.id)
+            db.execute(
+                text("UPDATE ge_projects SET updated_at = :now WHERE id = :id"),
+                {"now": now, "id": project_id},
+            )
+        for row in project_rows:
+            recompute_gate_and_phases(db, row[0])
+            recompute_task_status(db, row[0])
 
 
 def downgrade() -> None:

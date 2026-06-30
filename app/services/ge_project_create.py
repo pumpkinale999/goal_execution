@@ -24,6 +24,7 @@ from app.services.ge_graph import now_iso, record_audit, recompute_gate_and_phas
 from app.services.ge_graph_validate import validate_phases_body, validate_project_graph_db
 from app.services.ge_schedule_validate import parse_plan_date, parse_required_plan_date, validate_gate_item_due_in_phase, validate_phase_window
 from app.services.ge_subtree_governor import is_subtree_governor
+from app.services.ge_sort_order import next_project_sort_order
 
 
 def _validate_create_body(body: dict[str, Any]) -> None:
@@ -56,6 +57,7 @@ def create_project(db: Session, *, actor_user_id: str, body: dict[str, Any], com
         status="active",
         project_note_id=project_note_id,
         deleted_at=None,
+        sort_order=next_project_sort_order(db, program_id),
         created_at=now,
         updated_at=now,
     )
