@@ -259,3 +259,137 @@ def test_backfill_script_exists():
     assert script.exists()
     content = script.read_text(encoding="utf-8")
     assert "--dry-run" in content
+
+
+def test_create_sub_with_year_granularity(client):
+    """GE-T159: sub-objective may use year granularity within parent company year."""
+    company = _annual_company(client, year=2026)
+    dept_id = _create_dept(client)
+    resp = client.post(
+        "/api/v1/ge/objectives",
+        headers=service_headers("reviewer-1"),
+        json={
+            "name": "年度子目标",
+            "parent_id": company["id"],
+            "owner_user_id": "u-owner",
+            "primary_department_id": dept_id,
+            "period_granularity": "year",
+            "period_start": "2026-01-01",
+            "period_end": "2026-12-31",
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["period_granularity"] == "year"
+    assert body["period_start"] == "2026-01-01"
+    assert body["period_end"] == "2026-12-31"
+
+
+def test_create_sub_year_invalid_boundary(client):
+    """GE-T159: sub year with non-calendar boundary → 400."""
+    company = _annual_company(client, year=2026)
+    dept_id = _create_dept(client)
+    resp = client.post(
+        "/api/v1/ge/objectives",
+        headers=service_headers("reviewer-1"),
+        json={
+            "name": "非法年度子目标",
+            "parent_id": company["id"],
+            "owner_user_id": "u-owner",
+            "primary_department_id": dept_id,
+            "period_granularity": "year",
+            "period_start": "2026-01-01",
+            "period_end": "2026-06-30",
+        },
+    )
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == "period_granularity_invalid"
+
+
+def test_create_sub_year_out_of_parent_bounds(client):
+    """GE-T160: sub year outside parent company window → 400."""
+    company = _annual_company(client, year=2026)
+    dept_id = _create_dept(client)
+    resp = client.post(
+        "/api/v1/ge/objectives",
+        headers=service_headers("reviewer-1"),
+        json={
+            "name": "越界年度子目标",
+            "parent_id": company["id"],
+            "owner_user_id": "u-owner",
+            "primary_department_id": dept_id,
+            "period_granularity": "year",
+            "period_start": "2025-01-01",
+            "period_end": "2025-12-31",
+        },
+    )
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == "period_out_of_parent_bounds"
+
+
+def test_create_program_under_year_sub_defaults_quarter(client):
+    """GE-T161: program under year sub inherits default quarter, not year."""
+    company = _annual_company(client, year=2026)
+    dept_id = _create_dept(client)
+    sub = client.post(
+        "/api/v1/ge/objectives",
+        headers=service_headers("reviewer-1"),
+        json={
+            "name": "年度子目标",
+            "parent_id": company["id"],
+            "owner_user_id": "u-owner",
+            "primary_department_id": dept_id,
+            "period_granularity": "year",
+            "period_start": "2026-01-01",
+            "period_end": "2026-12-31",
+        },
+    ).json()
+    resp = client.post(
+        "/api/v1/ge/programs",
+        headers=service_headers("reviewer-1"),
+        json={
+            "name": "下属专项",
+            "objective_id": sub["id"],
+            "owner_user_id": "u-owner",
+            "primary_department_id": dept_id,
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["period_granularity"] == "quarter"
+    assert body["period_start"]
+    assert body["period_end"]
+
+
+def test_create_program_with_year_rejected(client):
+    """GE-T161: program cannot use year granularity."""
+    company = _annual_company(client, year=2026)
+    dept_id = _create_dept(client)
+    sub = client.post(
+        "/api/v1/ge/objectives",
+        headers=service_headers("reviewer-1"),
+        json={
+            "name": "季度子目标",
+            "parent_id": company["id"],
+            "owner_user_id": "u-owner",
+            "primary_department_id": dept_id,
+            "period_granularity": "quarter",
+            "period_start": "2026-04-01",
+            "period_end": "2026-06-30",
+        },
+    ).json()
+    resp = client.post(
+        "/api/v1/ge/programs",
+        headers=service_headers("reviewer-1"),
+        json={
+            "name": "非法专项",
+            "objective_id": sub["id"],
+            "owner_user_id": "u-owner",
+            "primary_department_id": dept_id,
+            "period_granularity": "year",
+            "period_start": "2026-01-01",
+            "period_end": "2026-12-31",
+        },
+    )
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == "period_granularity_invalid"

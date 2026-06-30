@@ -33,6 +33,7 @@ from app.services.ge_strategic_period import (
     period_within_bounds,
     planning_year_from_start,
     validate_company_period,
+    validate_sub_objective_period,
     validate_sub_program_period,
     year_bounds,
 )
@@ -86,7 +87,7 @@ def _apply_objective_period(
         if obj.level == "company":
             validate_company_period(obj.period_granularity, obj.period_start, obj.period_end)
         elif obj.level == "sub":
-            validate_sub_program_period(obj.period_granularity, obj.period_start, obj.period_end)
+            validate_sub_objective_period(obj.period_granularity, obj.period_start, obj.period_end)
             bounds = company_ancestor_bounds(db, obj) or company_ancestor_bounds(db, parent)
             if bounds and not period_within_bounds(obj.period_start, obj.period_end, bounds[0], bounds[1]):
                 raise HTTPException(
@@ -107,9 +108,12 @@ def _apply_program_period(
     start = body.get("period_start")
     end = body.get("period_end")
     if is_create and not start and objective.period_start and objective.period_end:
-        gran = objective.period_granularity
-        start = objective.period_start
-        end = objective.period_end
+        if objective.period_granularity == "year":
+            gran, start, end = default_sub_period()
+        else:
+            gran = objective.period_granularity
+            start = objective.period_start
+            end = objective.period_end
     if gran is not None:
         program.period_granularity = str(gran)
     if start is not None:

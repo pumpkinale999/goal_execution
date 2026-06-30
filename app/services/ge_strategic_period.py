@@ -76,6 +76,22 @@ def is_quarter_boundary(start: str, end: str) -> bool:
     return e.year == s.year and e.month == end_month and e.day == last
 
 
+def is_year_boundary(start: str, end: str) -> bool:
+    y = parse_ymd(start).year
+    return start == f"{y}-01-01" and end == f"{y}-12-31"
+
+
+def validate_sub_objective_period(granularity: str, start: str, end: str) -> None:
+    if granularity not in ("month", "quarter", "year"):
+        raise HTTPException(status_code=400, detail={"detail": "period_granularity_invalid"})
+    if granularity == "month" and not is_month_boundary(start, end):
+        raise HTTPException(status_code=400, detail={"detail": "period_granularity_invalid"})
+    if granularity == "quarter" and not is_quarter_boundary(start, end):
+        raise HTTPException(status_code=400, detail={"detail": "period_granularity_invalid"})
+    if granularity == "year" and not is_year_boundary(start, end):
+        raise HTTPException(status_code=400, detail={"detail": "period_granularity_invalid"})
+
+
 def validate_sub_program_period(granularity: str, start: str, end: str) -> None:
     if granularity not in ("month", "quarter"):
         raise HTTPException(status_code=400, detail={"detail": "period_granularity_invalid"})
@@ -88,8 +104,7 @@ def validate_sub_program_period(granularity: str, start: str, end: str) -> None:
 def validate_company_period(granularity: str, start: str, end: str) -> None:
     if granularity != "year":
         raise HTTPException(status_code=400, detail={"detail": "period_granularity_invalid"})
-    y = parse_ymd(start).year
-    if start != f"{y}-01-01" or end != f"{y}-12-31":
+    if not is_year_boundary(start, end):
         raise HTTPException(status_code=400, detail={"detail": "period_granularity_invalid"})
 
 

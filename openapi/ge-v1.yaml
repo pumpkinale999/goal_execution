@@ -1310,6 +1310,7 @@ components:
           type: string
         period_granularity:
           $ref: '#/components/schemas/PeriodGranularity'
+          description: Sub-objective only · may be year, month, or quarter
         period_start:
           type: string
           format: date
@@ -1331,17 +1332,7 @@ components:
           type: string
         period_granularity:
           $ref: '#/components/schemas/PeriodGranularity'
-        period_start:
-          type: string
-          format: date
-        period_end:
-          type: string
-          format: date
-        primary_department_id:
-          type: string
-          format: uuid
-          nullable: true
-    CreateObjectiveYearRequest:
+          description: Sub-objective patch · may be year, month, or quarter
       type: object
       required: [planning_year]
       properties:
@@ -1496,6 +1487,7 @@ components:
           type: string
         period_granularity:
           $ref: '#/components/schemas/PeriodGranularity'
+          description: Program only · month or quarter (not year)
         period_start:
           type: string
           format: date
@@ -1519,6 +1511,7 @@ components:
           format: uuid
         period_granularity:
           $ref: '#/components/schemas/PeriodGranularity'
+          description: Program patch · month or quarter (not year)
         period_start:
           type: string
           format: date
