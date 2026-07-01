@@ -198,6 +198,101 @@ def test_assess_objective_and_program(client, monkeypatch):
     assert prog_assess.json()["lifecycle_status"] == "partial_met"
 
 
+def test_delete_program_ignores_soft_deleted_projects(client):
+    """Soft-deleted projects must not block program delete (UI lists filter deleted_at)."""
+    from tests.ge.conftest import create_project
+
+    company = _annual_company(client)
+    dept_id = _create_dept(client)
+    sub = client.post(
+        "/api/v1/ge/objectives",
+        headers=service_headers("reviewer-1"),
+        json={
+            "name": "子目标",
+            "parent_id": company["id"],
+            "owner_user_id": "u-owner",
+            "primary_department_id": dept_id,
+        },
+    ).json()
+    prog = client.post(
+        "/api/v1/ge/programs",
+        headers=service_headers("reviewer-1"),
+        json={
+            "name": "空专项",
+            "objective_id": sub["id"],
+            "owner_user_id": "u-owner",
+            "primary_department_id": dept_id,
+        },
+    ).json()
+    created = create_project(
+        client,
+        "u-owner",
+        {
+            "name": "临时项目",
+            "pm_user_id": "u-owner",
+            "program_id": prog["id"],
+            "phases": [{"sequence": 1, "name": "方案", "gate_items": [], "tasks": []}],
+        },
+        bootstrap_startup=False,
+    )
+    assert (
+        client.delete(
+            f"/api/v1/ge/projects/{created['id']}",
+            headers=service_headers("reviewer-1"),
+        ).status_code
+        == 204
+    )
+    ok = client.delete(
+        f"/api/v1/ge/programs/{prog['id']}",
+        headers=service_headers("reviewer-1"),
+    )
+    assert ok.status_code == 204, ok.text
+
+
+def test_delete_program_blocked_by_active_project(client):
+    from tests.ge.conftest import create_project
+
+    company = _annual_company(client)
+    dept_id = _create_dept(client)
+    sub = client.post(
+        "/api/v1/ge/objectives",
+        headers=service_headers("reviewer-1"),
+        json={
+            "name": "子目标2",
+            "parent_id": company["id"],
+            "owner_user_id": "u-owner",
+            "primary_department_id": dept_id,
+        },
+    ).json()
+    prog = client.post(
+        "/api/v1/ge/programs",
+        headers=service_headers("reviewer-1"),
+        json={
+            "name": "非空专项",
+            "objective_id": sub["id"],
+            "owner_user_id": "u-owner",
+            "primary_department_id": dept_id,
+        },
+    ).json()
+    create_project(
+        client,
+        "u-owner",
+        {
+            "name": "仍在的项目",
+            "pm_user_id": "u-owner",
+            "program_id": prog["id"],
+            "phases": [{"sequence": 1, "name": "方案", "gate_items": [], "tasks": []}],
+        },
+        bootstrap_startup=False,
+    )
+    blocked = client.delete(
+        f"/api/v1/ge/programs/{prog['id']}",
+        headers=service_headers("reviewer-1"),
+    )
+    assert blocked.status_code == 409
+    assert blocked.json()["detail"] == "program_not_empty"
+
+
 def test_auto_not_met_after_30_days(client, monkeypatch):
     """GE-T143: pending +30d → archived via read refresh."""
     company = _annual_company(client, year=2018)

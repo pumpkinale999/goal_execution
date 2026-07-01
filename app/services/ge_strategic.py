@@ -588,9 +588,25 @@ def delete_program(db: Session, program_id: str) -> None:
         raise HTTPException(status_code=404, detail={"detail": "not_found"})
     if program.is_default or program_id == GE_DEFAULT_PROGRAM_ID:
         raise HTTPException(status_code=403, detail={"detail": "default_immutable"})
-    project = db.query(GeProject).filter(GeProject.program_id == program_id).first()
-    if project is not None:
+    active = (
+        db.query(GeProject)
+        .filter(GeProject.program_id == program_id, GeProject.deleted_at.is_(None))
+        .first()
+    )
+    if active is not None:
         raise HTTPException(status_code=409, detail={"detail": "program_not_empty"})
+    now = now_iso()
+    soft_deleted = (
+        db.query(GeProject)
+        .filter(GeProject.program_id == program_id, GeProject.deleted_at.isnot(None))
+        .all()
+    )
+    for project in soft_deleted:
+        project.program_id = GE_DEFAULT_PROGRAM_ID
+        project.updated_at = now
+    if soft_deleted:
+        db.flush()
+        db.expire(program, ["projects"])
     db.delete(program)
     db.commit()
 
