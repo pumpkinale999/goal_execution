@@ -10,7 +10,13 @@ from sqlalchemy.orm import Session
 
 from app.auth import AuthUser
 from app.models.ge import GeGate, GeGateItem, GePhase, GeProgram, GeProject, GeTask, GeTaskGateItemProduce
-from app.services.ge_access import can_govern_project, can_read_project, require_govern_project, require_govern_structure
+from app.services.ge_access import (
+    can_govern_project,
+    can_force_delete_project,
+    can_read_project,
+    require_govern_project,
+    require_govern_structure,
+)
 from app.services.ge_graph import (
     apply_phase_transition,
     eligible_signers,
@@ -48,7 +54,7 @@ def _require_read(db: Session, project: GeProject, user: AuthUser) -> None:
 def soft_delete_project(db: Session, project_id: str, user: AuthUser) -> None:
     project = _get_project_or_404(db, project_id)
     require_govern_structure(db, project, user)
-    if not project_is_empty(db, project):
+    if not project_is_empty(db, project) and not can_force_delete_project(db, project, user):
         raise HTTPException(status_code=409, detail={"detail": "project_not_empty"})
     project.deleted_at = now_iso()
     project.updated_at = now_iso()

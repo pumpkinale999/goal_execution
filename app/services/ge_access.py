@@ -60,6 +60,17 @@ def can_govern_structure(db: Session, project: GeProject, user: AuthUser) -> boo
     return can_govern_project(db, project, user)
 
 
+def can_force_delete_project(db: Session, project: GeProject, user: AuthUser) -> bool:
+    """Subtree owner or reviewer may soft-delete non-empty projects (UI must confirm)."""
+    if project.deleted_at is not None:
+        return False
+    if user.auth_method == "service":
+        return True
+    if user.auth_method == "jwt":
+        return is_subtree_governor(db, user_id=user.user_id, project_id=project.id)
+    return False
+
+
 def require_govern_project(db: Session, project: GeProject, user: AuthUser) -> None:
     if not can_govern_project(db, project, user):
         raise HTTPException(status_code=403, detail={"detail": "not_project_governor"})

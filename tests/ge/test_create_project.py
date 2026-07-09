@@ -14,6 +14,8 @@ from tests.ge.conftest import (
     get_graph,
 )
 
+U_GOVERNOR = "u-owner"
+
 
 def test_orphan_signer_400(client):
     program_id = ensure_formal_test_program(client)
@@ -87,6 +89,32 @@ def test_reviewer_service_token_can_delete_empty_project(client):
     project_id = created["id"]
     ok = client.delete(f"/api/v1/ge/projects/{project_id}", headers=service_headers("reviewer-1"))
     assert ok.status_code == 204
+
+
+def test_pm_cannot_delete_non_empty_active_project(client):
+    program_id = ensure_formal_test_program(client, owner_user_id=U_GOVERNOR)
+    body = {**GOLDEN_PROJECT_BODY, "program_id": program_id, "pm_user_id": U_ZHANGSAN}
+    created = create_project(client, U_GOVERNOR, body)
+    project_id = created["id"]
+    resp = client.delete(f"/api/v1/ge/projects/{project_id}", headers=jwt_headers(U_ZHANGSAN))
+    assert resp.status_code == 409
+    assert resp.json()["detail"] == "project_not_empty"
+
+
+def test_reviewer_can_force_delete_non_empty_project(client):
+    created = create_project(client, U_PM)
+    project_id = created["id"]
+    resp = client.delete(f"/api/v1/ge/projects/{project_id}", headers=service_headers("reviewer-1"))
+    assert resp.status_code == 204
+
+
+def test_subtree_owner_can_force_delete_non_empty_project(client):
+    program_id = ensure_formal_test_program(client, owner_user_id=U_GOVERNOR)
+    body = {**GOLDEN_PROJECT_BODY, "program_id": program_id, "pm_user_id": U_PM}
+    created = create_project(client, U_GOVERNOR, body)
+    project_id = created["id"]
+    resp = client.delete(f"/api/v1/ge/projects/{project_id}", headers=jwt_headers(U_GOVERNOR))
+    assert resp.status_code == 204
 
 
 def test_creator_read_not_pm(client):
