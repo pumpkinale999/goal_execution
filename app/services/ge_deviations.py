@@ -790,7 +790,7 @@ def build_deviation_actions_for_user(db: Session, user_id: str) -> list[dict[str
         if project is None:
             continue
         has_produce = (
-            db.query(GeTaskGateItemProduce.id)
+            db.query(GeTaskGateItemProduce.gate_item_id)
             .filter(GeTaskGateItemProduce.gate_item_id == item.id)
             .first()
             is not None

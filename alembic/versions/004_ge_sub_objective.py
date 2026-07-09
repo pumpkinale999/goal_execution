@@ -8,12 +8,10 @@ from __future__ import annotations
 
 from alembic import op
 
-from app.constants import (
-    DEFAULT_SUB_OBJECTIVE_NAME,
-    GE_DEFAULT_OBJECTIVE_ID,
-    GE_DEFAULT_PROGRAM_ID,
-    GE_DEFAULT_SUB_OBJECTIVE_ID,
-)
+GE_DEFAULT_OBJECTIVE_ID = "00000000-0000-4000-8000-0000000000b1"
+GE_DEFAULT_PROGRAM_ID = "00000000-0000-4000-8000-0000000000b2"
+GE_DEFAULT_SUB_OBJECTIVE_ID = "00000000-0000-4000-8000-0000000000b3"
+DEFAULT_SUB_OBJECTIVE_NAME = "未分类战略线"
 
 revision = "004_ge_sub_objective"
 down_revision = "003_ge_execution"

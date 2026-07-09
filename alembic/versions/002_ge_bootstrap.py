@@ -8,12 +8,10 @@ from __future__ import annotations
 
 from alembic import op
 
-from app.constants import (
-    DEFAULT_OBJECTIVE_NAME,
-    DEFAULT_PROGRAM_NAME,
-    GE_DEFAULT_OBJECTIVE_ID,
-    GE_DEFAULT_PROGRAM_ID,
-)
+GE_DEFAULT_OBJECTIVE_ID = "00000000-0000-4000-8000-0000000000b1"
+GE_DEFAULT_PROGRAM_ID = "00000000-0000-4000-8000-0000000000b2"
+DEFAULT_OBJECTIVE_NAME = "默认总目标"
+DEFAULT_PROGRAM_NAME = "未分类项目群"
 
 revision = "002_ge_bootstrap"
 down_revision = "001_ge_org"

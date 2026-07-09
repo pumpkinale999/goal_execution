@@ -4,12 +4,6 @@ from __future__ import annotations
 
 from datetime import date
 
-from app.constants import (
-    DEFAULT_OBJECTIVE_NAME,
-    GE_DEFAULT_OBJECTIVE_ID,
-    GE_DEFAULT_PROGRAM_ID,
-    GE_DEFAULT_SUB_OBJECTIVE_ID,
-)
 from app.services import ge_strategic_lifecycle
 from tests.conftest import jwt_headers, service_headers
 
@@ -38,18 +32,15 @@ def _annual_company(client, year: int = 2026) -> dict:
     return resp.json()
 
 
-def test_migration_columns_and_b1_period(client):
-    """GE-T137 / GE-T138: strategic columns exist; b1 has current-year period."""
-    resp = client.get("/api/v1/ge/objectives", headers=jwt_headers("u-1"))
-    assert resp.status_code == 200
-    b1 = next(o for o in resp.json() if o["id"] == GE_DEFAULT_OBJECTIVE_ID)
-    assert b1["period_granularity"] == "year"
+def test_migration_columns_on_annual_company(client):
+    """GE-T137 / GE-T138: strategic columns exist on formal annual roots."""
+    company = _annual_company(client)
+    assert company["period_granularity"] == "year"
     y = date.today().year
-    assert b1["period_start"] == f"{y}-01-01"
-    assert b1["period_end"] == f"{y}-12-31"
-    assert b1["lifecycle_status"] == "active"
-    default_sub = next(c for c in b1["children"] if c["id"] == GE_DEFAULT_SUB_OBJECTIVE_ID)
-    assert "lifecycle_status" in default_sub
+    assert company["period_start"] == f"{y}-01-01"
+    assert company["period_end"] == f"{y}-12-31"
+    assert company["lifecycle_status"] == "active"
+    assert company["is_default"] is False
 
 
 def test_create_sub_requires_primary_department(client):
@@ -199,7 +190,7 @@ def test_assess_objective_and_program(client, monkeypatch):
 
 
 def test_delete_program_ignores_soft_deleted_projects(client):
-    """Soft-deleted projects must not block program delete (UI lists filter deleted_at)."""
+    """Soft-deleted projects must not block program delete (orphan FK allowed)."""
     from tests.ge.conftest import create_project
 
     company = _annual_company(client)
@@ -318,7 +309,7 @@ def test_auto_not_met_after_30_days(client, monkeypatch):
 
 
 def test_create_year_does_not_copy_default_chain(client):
-    """GE-T144: years API creates business tree only; default chain unchanged."""
+    """GE-T144: years API creates business tree only."""
     first = _annual_company(client, year=2030)
     dept_id = _create_dept(client)
     client.post(
@@ -338,9 +329,7 @@ def test_create_year_does_not_copy_default_chain(client):
     )
     assert second.status_code == 201, second.text
     tree = client.get("/api/v1/ge/objectives", headers=jwt_headers("u-1")).json()
-    b1 = next(o for o in tree if o["id"] == GE_DEFAULT_OBJECTIVE_ID)
-    default_sub = next(c for c in b1["children"] if c["id"] == GE_DEFAULT_SUB_OBJECTIVE_ID)
-    assert any(p["id"] == GE_DEFAULT_PROGRAM_ID for p in default_sub["programs"])
+    assert not any(obj.get("is_default") for obj in tree)
     y2031 = second.json()
     assert y2031["planning_year"] == 2031
     assert y2031["is_default"] is False

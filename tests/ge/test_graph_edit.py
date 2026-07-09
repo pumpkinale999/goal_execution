@@ -3,13 +3,22 @@
 from __future__ import annotations
 
 from tests.conftest import jwt_headers
-from tests.ge.conftest import GOLDEN_PLANNED_DUE, U_PM, create_project, phase_by_name, task_id_by_title
+from tests.ge.conftest import (
+    GOLDEN_PLANNED_DUE,
+    U_PM,
+    create_project,
+    ensure_formal_test_program,
+    phase_by_name,
+    task_id_by_title,
+)
 
 
 def _create_empty_draft(client):
+    program_id = ensure_formal_test_program(client)
     body = {
         "name": "连线测试",
         "pm_user_id": U_PM,
+        "program_id": program_id,
         "phases": [{"sequence": 1, "name": "方案", "gate_items": [], "tasks": []}],
     }
     resp = client.post("/api/v1/ge/projects", headers=jwt_headers(U_PM), json=body)

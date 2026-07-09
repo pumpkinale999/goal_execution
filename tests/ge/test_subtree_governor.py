@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from app.constants import GE_DEFAULT_OBJECTIVE_ID, GE_DEFAULT_PROGRAM_ID, GE_DEFAULT_SUB_OBJECTIVE_ID
 from tests.conftest import jwt_headers, service_headers
 from tests.ge.conftest import (
     GOLDEN_PROJECT_BODY,
@@ -10,6 +9,7 @@ from tests.ge.conftest import (
     U_STRANGER,
     U_ZHANGSAN,
     create_project,
+    ensure_formal_test_program,
     get_graph,
     material_submit_payload,
     task_id_by_title,
@@ -17,6 +17,13 @@ from tests.ge.conftest import (
 
 U_OWNER = "u-owner"
 U_GOVERNOR = "u-governor"
+
+
+def _formal_sub_and_program(client):
+    program_id = ensure_formal_test_program(client)
+    detail = client.get(f"/api/v1/ge/programs/{program_id}", headers=jwt_headers(U_PM)).json()
+    sub_id = detail["objective_id"]
+    return sub_id, program_id
 
 
 def _patch_objective_owner(client, objective_id: str, owner_user_id: str) -> None:
@@ -37,7 +44,8 @@ def _gate_item_id(graph, name: str) -> str:
 
 
 def test_company_owner_reads_non_participant_project(client):
-    _patch_objective_owner(client, GE_DEFAULT_OBJECTIVE_ID, U_OWNER)
+    sub_id, _program_id = _formal_sub_and_program(client)
+    _patch_objective_owner(client, sub_id, U_OWNER)
     created = create_project(client, U_PM)
     project_id = created["id"]
 
@@ -57,9 +65,9 @@ def test_company_owner_reads_non_participant_project(client):
 
 
 def test_governor_program_projects_full_list(client):
-    _patch_objective_owner(client, GE_DEFAULT_OBJECTIVE_ID, U_OWNER)
-    created = create_project(client, U_PM)
-    program_id = created["program_id"]
+    sub_id, program_id = _formal_sub_and_program(client)
+    _patch_objective_owner(client, sub_id, U_OWNER)
+    created = create_project(client, U_PM, {**GOLDEN_PROJECT_BODY, "program_id": program_id})
 
     resp = client.get(f"/api/v1/ge/programs/{program_id}", headers=jwt_headers(U_OWNER))
     assert resp.status_code == 200
@@ -72,8 +80,9 @@ def test_governor_program_projects_full_list(client):
 
 def test_governor_structural_patch_and_canvas_write_allowed(client):
     """GE-T101 · steward can PATCH graph."""
-    _patch_objective_owner(client, GE_DEFAULT_OBJECTIVE_ID, U_OWNER)
-    created = create_project(client, U_PM)
+    sub_id, program_id = _formal_sub_and_program(client)
+    _patch_objective_owner(client, sub_id, U_OWNER)
+    created = create_project(client, U_PM, {**GOLDEN_PROJECT_BODY, "program_id": program_id})
     project_id = created["id"]
 
     patch = client.patch(
@@ -100,8 +109,9 @@ def test_governor_structural_patch_and_canvas_write_allowed(client):
 
 def test_steward_non_pm_can_patch_name_and_pm(client):
     """GE-T102 · steward PATCH name/pm (project activate endpoint removed)."""
-    _patch_objective_owner(client, GE_DEFAULT_OBJECTIVE_ID, U_OWNER)
-    created = create_project(client, U_PM)
+    sub_id, program_id = _formal_sub_and_program(client)
+    _patch_objective_owner(client, sub_id, U_OWNER)
+    created = create_project(client, U_PM, {**GOLDEN_PROJECT_BODY, "program_id": program_id})
     project_id = created["id"]
 
     patch_name = client.patch(
@@ -123,8 +133,9 @@ def test_steward_non_pm_can_patch_name_and_pm(client):
 
 def test_steward_can_proxy_submit_and_sign(client):
     """GE-T101 extension · steward execution write."""
-    _patch_objective_owner(client, GE_DEFAULT_OBJECTIVE_ID, U_OWNER)
-    created = create_project(client, U_PM)
+    sub_id, program_id = _formal_sub_and_program(client)
+    _patch_objective_owner(client, sub_id, U_OWNER)
+    created = create_project(client, U_PM, {**GOLDEN_PROJECT_BODY, "program_id": program_id})
     project_id = created["id"]
     graph = get_graph(client, project_id, U_PM)
     gi_x = _gate_item_id(graph, "诊断报告")
@@ -141,13 +152,20 @@ def test_steward_can_proxy_submit_and_sign(client):
 
 
 def test_non_default_program_create_requires_governor(client):
+    sub_id, _program_id = _formal_sub_and_program(client)
+    dept = client.post(
+        "/api/v1/org/departments",
+        headers=service_headers("reviewer-1"),
+        json={"name": "治理部门", "manager_user_id": U_GOVERNOR},
+    ).json()
     create_prog = client.post(
         "/api/v1/ge/programs",
         headers=service_headers("reviewer-1"),
         json={
             "name": "战略项目群",
-            "objective_id": GE_DEFAULT_SUB_OBJECTIVE_ID,
+            "objective_id": sub_id,
             "owner_user_id": U_GOVERNOR,
+            "primary_department_id": dept["id"],
         },
     )
     assert create_prog.status_code == 201
@@ -163,14 +181,21 @@ def test_non_default_program_create_requires_governor(client):
 
 
 def test_ancestor_owner_governs_nested_program(client):
-    _patch_objective_owner(client, GE_DEFAULT_OBJECTIVE_ID, U_OWNER)
+    sub_id, _program_id = _formal_sub_and_program(client)
+    _patch_objective_owner(client, sub_id, U_OWNER)
+    dept = client.post(
+        "/api/v1/org/departments",
+        headers=service_headers("reviewer-1"),
+        json={"name": "子树部门", "manager_user_id": "u-other"},
+    ).json()
     create_prog = client.post(
         "/api/v1/ge/programs",
         headers=service_headers("reviewer-1"),
         json={
             "name": "子树项目群",
-            "objective_id": GE_DEFAULT_SUB_OBJECTIVE_ID,
+            "objective_id": sub_id,
             "owner_user_id": "u-other",
+            "primary_department_id": dept["id"],
         },
     )
     assert create_prog.status_code == 201

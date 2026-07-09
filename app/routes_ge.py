@@ -8,11 +8,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, joinedload
 
 from app.auth import AuthUser
-from app.constants import GE_DEFAULT_OBJECTIVE_ID, GE_DEFAULT_PROGRAM_ID
 from app.deps import get_current_user, get_db, require_service_user
 from app.models.ge import GeObjective, GeProgram, GeProject
-from app.services.ge_access import can_read_project, filter_projects_for_user, can_govern_project
-from app.services.ge_bootstrap import ensure_ge_bootstrap
+from app.services.ge_access import can_govern_project, can_read_project, filter_projects_for_user
 from app.services.ge_graph import build_project_graph, load_project_graph, now_iso, reconcile_project_completion
 from app.services.ge_graph_edit import (
     add_gate_item,
@@ -83,7 +81,6 @@ def list_objectives(
     db: Annotated[Session, Depends(get_db)],
     _user: Annotated[AuthUser, Depends(get_current_user)],
 ) -> list[dict[str, Any]]:
-    ensure_ge_bootstrap(db)
     refresh_lifecycle_batch(db)
     db.query(GeObjective).options(joinedload(GeObjective.programs)).all()
 
@@ -97,7 +94,7 @@ def list_objectives(
         programs = (
             []
             if obj.level == "company"
-            else [program_meta(p) for p in sibling_programs(db, obj.id) if p.is_default or p.objective_id == obj.id]
+            else [program_meta(p) for p in sibling_programs(db, obj.id)]
         )
         return {
             **objective_out(obj),
@@ -115,7 +112,6 @@ def list_programs(
     db: Annotated[Session, Depends(get_db)],
     _user: Annotated[AuthUser, Depends(get_current_user)],
 ) -> list[dict[str, Any]]:
-    ensure_ge_bootstrap(db)
     refresh_lifecycle_batch(db)
     programs = db.query(GeProgram).order_by(GeProgram.sort_order, GeProgram.name).all()
     db.commit()
@@ -128,7 +124,6 @@ def get_program(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[AuthUser, Depends(get_current_user)],
 ) -> dict[str, Any]:
-    ensure_ge_bootstrap(db)
     program = db.get(GeProgram, program_id)
     if program is None:
         raise HTTPException(status_code=404, detail={"detail": "not_found"})

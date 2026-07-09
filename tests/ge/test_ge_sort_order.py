@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from app.constants import GE_DEFAULT_OBJECTIVE_ID, GE_DEFAULT_PROGRAM_ID, GE_DEFAULT_SUB_OBJECTIVE_ID
 from tests.conftest import jwt_headers, service_headers
 
 
@@ -203,25 +202,10 @@ def test_annual_roots_sorted_by_year_desc(client):
     assert years == sorted(years, reverse=True)
 
 
-def test_reorder_blocked_for_default_and_archived(client):
-    """GE-T168: default nodes and archived objectives cannot reorder."""
+def test_reorder_blocked_for_archived(client):
+    """GE-T168: archived objectives cannot reorder."""
     from app.db import session_scope
     from app.models.ge import GeObjective
-
-    resp_default = client.post(
-        f"/api/v1/ge/objectives/{GE_DEFAULT_SUB_OBJECTIVE_ID}/reorder",
-        headers=service_headers("reviewer-1"),
-        json={"direction": "down"},
-    )
-    assert resp_default.status_code == 403
-    assert resp_default.json()["detail"] == "default_node_immutable"
-
-    resp_prog_default = client.post(
-        f"/api/v1/ge/programs/{GE_DEFAULT_PROGRAM_ID}/reorder",
-        headers=service_headers("reviewer-1"),
-        json={"direction": "down"},
-    )
-    assert resp_prog_default.status_code == 403
 
     dept_id = _create_dept(client)
     company = _annual_company(client, 2026)
@@ -238,10 +222,3 @@ def test_reorder_blocked_for_default_and_archived(client):
     )
     assert resp_archived.status_code == 403
     assert resp_archived.json()["detail"] == "strategic_locked"
-
-    resp_b1 = client.post(
-        f"/api/v1/ge/objectives/{GE_DEFAULT_OBJECTIVE_ID}/reorder",
-        headers=service_headers("reviewer-1"),
-        json={"direction": "down"},
-    )
-    assert resp_b1.status_code == 403

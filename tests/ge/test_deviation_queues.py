@@ -42,7 +42,7 @@ def test_deviation_actions_queue(client):
 
 def test_submit_queue_includes_active_deviation(client):
     """GE-T80 · submit queue includes active deviation GI."""
-    created = create_project(client, U_PM)
+    created = create_project(client, U_PM, seed_schedule=False)
     graph = get_graph(client, created["id"], U_PM)
     gi = _gi(graph, "诊断报告")
     with patch("app.services.ge_deviations.today_shanghai", return_value=date(2026, 6, 20)):
@@ -53,7 +53,7 @@ def test_submit_queue_includes_active_deviation(client):
         )
     dev_id = client.get(f"/api/v1/ge/projects/{created['id']}/graph", headers=jwt_headers(U_PM)).json()
     dev = _gi(dev_id, "诊断报告")["deviation"]["id"]
-    client.patch(
+    activate = client.patch(
         f"/api/v1/ge/deviations/{dev}",
         headers=jwt_headers(U_PM),
         json={
@@ -63,6 +63,7 @@ def test_submit_queue_includes_active_deviation(client):
             "remediation_due": "2026-07-01",
         },
     )
+    assert activate.status_code == 200, activate.text
     q = client.get("/api/v1/ge/me/queues", headers=jwt_headers(U_ZHANGSAN))
     assert q.status_code == 200
     submit = q.json()["submit"]

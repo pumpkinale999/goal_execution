@@ -13,12 +13,12 @@ from app.models.ge import (
     GeGate,
     GeGateItem,
     GePhase,
+    GeProgram,
     GeProject,
     GeTask,
     GeTaskGateItemPrerequisite,
     GeTaskGateItemProduce,
 )
-from app.services.ge_bootstrap import default_program_id
 from app.services.ge_gate_includes_sync import sync_gate_includes_for_phase
 from app.services.ge_graph import now_iso, record_audit, recompute_gate_and_phases, recompute_task_status
 from app.services.ge_graph_validate import validate_phases_body, validate_project_graph_db
@@ -38,12 +38,14 @@ def _validate_create_body(body: dict[str, Any]) -> None:
 def create_project(db: Session, *, actor_user_id: str, body: dict[str, Any], commit: bool = True) -> dict[str, Any]:
     _validate_create_body(body)
     now = now_iso()
-    default_pid = default_program_id(db)
-    program_id = body.get("program_id") or default_pid
-    program_id = str(program_id)
-    if "program_id" in body and body.get("program_id") and program_id != default_pid:
-        if not is_subtree_governor(db, user_id=actor_user_id, program_id=program_id):
-            raise HTTPException(status_code=403, detail={"detail": "not_subtree_governor"})
+    raw_program_id = body.get("program_id")
+    if raw_program_id is None or not str(raw_program_id).strip():
+        raise HTTPException(status_code=400, detail={"detail": "program_id_required"})
+    program_id = str(raw_program_id).strip()
+    if db.get(GeProgram, program_id) is None:
+        raise HTTPException(status_code=404, detail={"detail": "not_found"})
+    if not is_subtree_governor(db, user_id=actor_user_id, program_id=program_id):
+        raise HTTPException(status_code=403, detail={"detail": "not_subtree_governor"})
     project_id = str(uuid.uuid4())
     project_note_id = body.get("project_note_id")
     if project_note_id is not None:

@@ -26,6 +26,7 @@ U_CREATOR = "u-creator"
 TEST_PROJECT_NOTE_ID = "a0000000-0000-4000-8000-000000000001"
 
 GOLDEN_PLANNED_DUE = "2026-06-15"
+DEV_PHASE_PLANNED_DUE = "2026-06-20"
 
 GOLDEN_PROJECT_BODY: dict[str, Any] = {
     "name": "上线 MVP",
@@ -108,6 +109,84 @@ def bootstrap_golden_phase_schedule(client: TestClient, project_id: str, user_id
         assert resp.status_code == 200, resp.text
 
 
+_cached_formal_program_id: str | None = None
+
+
+@pytest.fixture(autouse=True)
+def _reset_formal_program_cache():
+    global _cached_formal_program_id
+    _cached_formal_program_id = None
+
+
+def ensure_formal_test_program(
+    client: TestClient, *, reviewer: str = "reviewer-1", owner_user_id: str = U_PM
+) -> str:
+    """Create annual sub + program for tests that create projects (once per test DB)."""
+    global _cached_formal_program_id
+    if _cached_formal_program_id:
+        from app.db import get_session_factory
+        from app.models.ge import GeProgram
+
+        with get_session_factory()() as db:
+            if db.get(GeProgram, _cached_formal_program_id) is not None:
+                return _cached_formal_program_id
+        _cached_formal_program_id = None
+    year_resp = client.post(
+        "/api/v1/ge/objectives/years",
+        headers=service_headers(reviewer),
+        json={"planning_year": 2026},
+    )
+    assert year_resp.status_code == 201, year_resp.text
+    company_id = year_resp.json()["id"]
+    dept_resp = client.post(
+        "/api/v1/org/departments",
+        headers=service_headers(reviewer),
+        json={"name": "测试部门", "manager_user_id": owner_user_id},
+    )
+    assert dept_resp.status_code == 201, dept_resp.text
+    dept_id = dept_resp.json()["id"]
+    sub_resp = client.post(
+        "/api/v1/ge/objectives",
+        headers=service_headers(reviewer),
+        json={
+            "name": "测试子目标",
+            "parent_id": company_id,
+            "owner_user_id": owner_user_id,
+            "primary_department_id": dept_id,
+            "period_granularity": "year",
+            "period_start": "2026-01-01",
+            "period_end": "2026-12-31",
+        },
+    )
+    assert sub_resp.status_code == 201, sub_resp.text
+    sub_id = sub_resp.json()["id"]
+    prog_resp = client.post(
+        "/api/v1/ge/programs",
+        headers=service_headers(reviewer),
+        json={
+            "name": "测试专项",
+            "objective_id": sub_id,
+            "owner_user_id": owner_user_id,
+            "primary_department_id": dept_id,
+        },
+    )
+    assert prog_resp.status_code == 201, prog_resp.text
+    program_id = prog_resp.json()["id"]
+    from app.db import get_session_factory
+    from app.models.ge import GeProgram
+
+    factory = get_session_factory()
+    with factory() as db:
+        program = db.get(GeProgram, program_id)
+        assert program is not None
+        program.period_start = "2026-01-01"
+        program.period_end = "2026-12-31"
+        program.period_granularity = "year"
+        db.commit()
+    _cached_formal_program_id = program_id
+    return program_id
+
+
 def create_project(
     client: TestClient,
     user_id: str,
@@ -117,6 +196,8 @@ def create_project(
     seed_schedule: bool = True,
 ) -> dict[str, Any]:
     payload = dict(body or GOLDEN_PROJECT_BODY)
+    if not payload.get("program_id"):
+        payload["program_id"] = ensure_formal_test_program(client)
     if "project_note_id" not in payload:
         payload["project_note_id"] = TEST_PROJECT_NOTE_ID
     resp = client.post(
@@ -269,20 +350,9 @@ def get_deviation(client: TestClient, deviation_id: str, user_id: str) -> dict[s
 
 
 @pytest.fixture(autouse=True)
-def _default_program_period_for_schedule(ge_db):
-    """v2.28 T2: schedule saves require program period on default chain program."""
-    from app.constants import GE_DEFAULT_PROGRAM_ID
-    from app.db import get_session_factory
-    from app.models.ge import GeProgram
-
-    factory = get_session_factory()
-    with factory() as db:
-        program = db.get(GeProgram, GE_DEFAULT_PROGRAM_ID)
-        if program is not None:
-            program.period_start = "2026-01-01"
-            program.period_end = "2026-12-31"
-            program.period_granularity = "year"
-            db.commit()
+def _formal_program_period_for_schedule(ge_db):
+    """v2.28 T2: schedule saves require program period on the test program."""
+    pass
 
 
 @pytest.fixture

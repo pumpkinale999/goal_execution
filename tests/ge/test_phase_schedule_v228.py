@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from app.constants import GE_DEFAULT_PROGRAM_ID
 from tests.conftest import jwt_headers
-from tests.ge.conftest import U_PM, create_project, get_graph, phase_by_name
+from tests.ge.conftest import GOLDEN_PROJECT_BODY, U_PM, create_project, ensure_formal_test_program, get_graph, phase_by_name
 
 
 def _detail_code(resp) -> str:
@@ -12,13 +11,13 @@ def _detail_code(resp) -> str:
     return detail["detail"] if isinstance(detail, dict) else detail
 
 
-def _set_program_period_db(period_start: str, period_end: str, *, granularity: str = "quarter") -> None:
+def _set_program_period_db(program_id: str, period_start: str, period_end: str, *, granularity: str = "quarter") -> None:
     from app.db import get_session_factory
     from app.models.ge import GeProgram
 
     factory = get_session_factory()
     with factory() as db:
-        program = db.get(GeProgram, GE_DEFAULT_PROGRAM_ID)
+        program = db.get(GeProgram, program_id)
         assert program is not None
         program.period_start = period_start
         program.period_end = period_end
@@ -26,13 +25,13 @@ def _set_program_period_db(period_start: str, period_end: str, *, granularity: s
         db.commit()
 
 
-def _clear_resolved_program_period_db() -> None:
+def _clear_resolved_program_period_db(program_id: str) -> None:
     from app.db import get_session_factory
     from app.models.ge import GeObjective, GeProgram
 
     factory = get_session_factory()
     with factory() as db:
-        program = db.get(GeProgram, GE_DEFAULT_PROGRAM_ID)
+        program = db.get(GeProgram, program_id)
         assert program is not None
         program.period_start = None
         program.period_end = None
@@ -53,8 +52,9 @@ def test_graph_program_period_present(client):
 
 
 def test_graph_effective_on_empty_phases(client):
-    _set_program_period_db("2026-04-01", "2026-06-30")
-    created = create_project(client, U_PM, seed_schedule=False)
+    program_id = ensure_formal_test_program(client)
+    _set_program_period_db(program_id, "2026-04-01", "2026-06-30")
+    created = create_project(client, U_PM, {**GOLDEN_PROJECT_BODY, "program_id": program_id}, seed_schedule=False)
     graph = get_graph(client, created["id"], U_PM)
     start = graph["phases"][0]
     assert start["is_system"] is True
@@ -66,7 +66,7 @@ def test_graph_effective_on_empty_phases(client):
 
 def test_graph_effective_null_without_program_period(client, ge_db):
     created = create_project(client, U_PM, seed_schedule=False)
-    _clear_resolved_program_period_db()
+    _clear_resolved_program_period_db(created["program_id"])
 
     graph = get_graph(client, created["id"], U_PM)
     assert graph.get("program_period") is None
@@ -80,10 +80,11 @@ def test_graph_program_period_inherited_from_objective(client, ge_db):
     from app.db import get_session_factory
     from app.models.ge import GeObjective, GeProgram
 
-    _set_program_period_db("2026-04-01", "2026-06-30", granularity="quarter")
+    program_id = ensure_formal_test_program(client)
+    _set_program_period_db(program_id, "2026-04-01", "2026-06-30", granularity="quarter")
     factory = get_session_factory()
     with factory() as db:
-        program = db.get(GeProgram, GE_DEFAULT_PROGRAM_ID)
+        program = db.get(GeProgram, program_id)
         assert program is not None
         program.period_start = None
         program.period_end = None
@@ -95,7 +96,7 @@ def test_graph_program_period_inherited_from_objective(client, ge_db):
         objective.period_granularity = "quarter"
         db.commit()
 
-    created = create_project(client, U_PM, seed_schedule=False)
+    created = create_project(client, U_PM, {**GOLDEN_PROJECT_BODY, "program_id": program_id}, seed_schedule=False)
     graph = get_graph(client, created["id"], U_PM)
     assert graph["program_period"]["period_start"] == "2026-04-01"
     assert graph["program_period"]["period_end"] == "2026-06-30"
@@ -108,9 +109,10 @@ def test_get_program_resolved_period_inherited(client, ge_db):
     from app.db import get_session_factory
     from app.models.ge import GeObjective, GeProgram
 
+    program_id = ensure_formal_test_program(client)
     factory = get_session_factory()
     with factory() as db:
-        program = db.get(GeProgram, GE_DEFAULT_PROGRAM_ID)
+        program = db.get(GeProgram, program_id)
         assert program is not None
         program.period_start = None
         program.period_end = None
@@ -122,7 +124,7 @@ def test_get_program_resolved_period_inherited(client, ge_db):
         objective.period_granularity = "quarter"
         db.commit()
 
-    resp = client.get(f"/api/v1/ge/programs/{GE_DEFAULT_PROGRAM_ID}", headers=jwt_headers(U_PM))
+    resp = client.get(f"/api/v1/ge/programs/{program_id}", headers=jwt_headers(U_PM))
     assert resp.status_code == 200
     body = resp.json()
     assert body["period_start"] is None
@@ -132,10 +134,12 @@ def test_get_program_resolved_period_inherited(client, ge_db):
 
 
 def test_graph_planned_window_is_derived_flag(client):
-    _set_program_period_db("2026-04-01", "2026-06-30")
+    program_id = ensure_formal_test_program(client)
+    _set_program_period_db(program_id, "2026-04-01", "2026-06-30")
     body = {
         "name": "排期衍生",
         "pm_user_id": U_PM,
+        "program_id": program_id,
         "phases": [
             {"sequence": 1, "name": "方案", "gate_items": [], "tasks": []},
             {"sequence": 2, "name": "开发", "gate_items": [], "tasks": []},
@@ -169,8 +173,9 @@ def test_graph_planned_window_is_derived_flag(client):
 
 
 def test_write_response_includes_effective(client):
-    _set_program_period_db("2026-04-01", "2026-06-30")
-    created = create_project(client, U_PM, seed_schedule=False)
+    program_id = ensure_formal_test_program(client)
+    _set_program_period_db(program_id, "2026-04-01", "2026-06-30")
+    created = create_project(client, U_PM, {**GOLDEN_PROJECT_BODY, "program_id": program_id}, seed_schedule=False)
     graph = get_graph(client, created["id"], U_PM)
     start = graph["phases"][0]
     resp = client.patch(
@@ -226,7 +231,7 @@ def test_phase_outside_program_period(client):
 
 def test_patch_phase_without_program_period(client, ge_db):
     created = create_project(client, U_PM)
-    _clear_resolved_program_period_db()
+    _clear_resolved_program_period_db(created["program_id"])
 
     graph = get_graph(client, created["id"], U_PM)
     dev = phase_by_name(graph, "开发")
@@ -241,7 +246,7 @@ def test_patch_phase_without_program_period(client, ge_db):
 
 def test_add_phase_without_program_period(client, ge_db):
     created = create_project(client, U_PM)
-    _clear_resolved_program_period_db()
+    _clear_resolved_program_period_db(created["program_id"])
 
     resp = client.post(
         f"/api/v1/ge/projects/{created['id']}/phases",
@@ -253,8 +258,9 @@ def test_add_phase_without_program_period(client, ge_db):
 
 
 def test_gate_item_due_uses_effective_window(client):
-    _set_program_period_db("2026-04-01", "2026-06-30")
-    created = create_project(client, U_PM, seed_schedule=False)
+    program_id = ensure_formal_test_program(client)
+    _set_program_period_db(program_id, "2026-04-01", "2026-06-30")
+    created = create_project(client, U_PM, {**GOLDEN_PROJECT_BODY, "program_id": program_id}, seed_schedule=False)
     graph = get_graph(client, created["id"], U_PM)
     plan = phase_by_name(graph, "方案")
     resp = client.post(

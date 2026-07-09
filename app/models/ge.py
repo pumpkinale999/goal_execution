@@ -68,7 +68,11 @@ class GeProgram(Base):
     updated_at: Mapped[str] = mapped_column(Text, nullable=False)
 
     objective: Mapped[GeObjective] = relationship("GeObjective", back_populates="programs")
-    projects: Mapped[list[GeProject]] = relationship("GeProject", back_populates="program")
+    projects: Mapped[list[GeProject]] = relationship(
+        "GeProject",
+        back_populates="program",
+        passive_deletes=True,
+    )
 
 
 class GeProject(Base):

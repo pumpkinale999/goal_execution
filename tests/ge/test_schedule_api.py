@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from tests.conftest import jwt_headers
-from tests.ge.conftest import GOLDEN_PLANNED_DUE, U_PM, create_project, get_graph, phase_by_name
+from tests.ge.conftest import DEV_PHASE_PLANNED_DUE, U_PM, create_project, ensure_formal_test_program, get_graph, phase_by_name
 
 
 def test_patch_phase_planned_window(client):
@@ -46,9 +46,11 @@ def test_add_gate_item_requires_planned_due(client):
 
 
 def test_gate_item_due_outside_phase_rejected(client):
+    program_id = ensure_formal_test_program(client)
     body = {
         "name": "排期测试",
         "pm_user_id": U_PM,
+        "program_id": program_id,
         "phases": [{"sequence": 1, "name": "方案", "gate_items": [], "tasks": []}],
     }
     created = client.post("/api/v1/ge/projects", headers=jwt_headers(U_PM), json=body).json()

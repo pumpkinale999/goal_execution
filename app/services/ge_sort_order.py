@@ -85,15 +85,11 @@ def _normalize_project_orders(projects: list[GeProject]) -> None:
 
 
 def _assert_objective_reorderable(obj: GeObjective) -> None:
-    if obj.is_default:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={"detail": "default_node_immutable"})
     if (obj.lifecycle_status or LIFECYCLE_ACTIVE) != LIFECYCLE_ACTIVE:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={"detail": "strategic_locked"})
 
 
 def _assert_program_reorderable(program: GeProgram) -> None:
-    if program.is_default:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={"detail": "default_node_immutable"})
     if (program.lifecycle_status or LIFECYCLE_ACTIVE) != LIFECYCLE_ACTIVE:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={"detail": "strategic_locked"})
 
@@ -161,9 +157,7 @@ def reorder_project(db: Session, project_id: str, direction: ReorderDirection) -
 
 
 def annual_root_sort_key(obj: GeObjective) -> tuple[int, int, str]:
-    """Annual company roots: year DESC; default chain last."""
-    if obj.is_default:
-        return (1, 0, obj.name)
+    """Annual company roots: year DESC."""
     year = 0
     if obj.period_start and len(obj.period_start) >= 4:
         try:

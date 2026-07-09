@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from tests.conftest import jwt_headers
-from tests.ge.conftest import GOLDEN_PLANNED_DUE, U_PM, create_project, get_graph, phase_by_name
+from tests.ge.conftest import DEV_PHASE_PLANNED_DUE, U_PM, create_project, get_graph, phase_by_name
 
 
 def _gate_item_ids(graph: dict, phase_name: str) -> set[str]:
@@ -24,7 +24,7 @@ def test_create_gate_item_syncs_includes(client):
     added = client.post(
         f"/api/v1/ge/projects/{created['id']}/phases/{dev['id']}/gate-items",
         headers=jwt_headers(U_PM),
-        json={"name": "同步测试项", "planned_due": GOLDEN_PLANNED_DUE},
+        json={"name": "同步测试项", "planned_due": DEV_PHASE_PLANNED_DUE},
     )
     assert added.status_code == 200
     dev_after = phase_by_name(added.json(), "开发")
@@ -40,7 +40,7 @@ def test_delete_gate_item_syncs_includes(client):
     added = client.post(
         f"/api/v1/ge/projects/{created['id']}/phases/{dev['id']}/gate-items",
         headers=jwt_headers(U_PM),
-        json={"name": "待删同步项", "planned_due": GOLDEN_PLANNED_DUE},
+        json={"name": "待删同步项", "planned_due": DEV_PHASE_PLANNED_DUE},
     )
     assert added.status_code == 200
     gi_id = next(gi["id"] for gi in phase_by_name(added.json(), "开发")["gate_items"] if gi["name"] == "待删同步项")
@@ -52,7 +52,7 @@ def test_delete_gate_item_syncs_includes(client):
 
 
 def test_move_gate_item_syncs_includes(client):
-    created = create_project(client, U_PM)
+    created = create_project(client, U_PM, seed_schedule=False)
     graph = get_graph(client, created["id"], U_PM)
     dev = phase_by_name(graph, "开发")
     test_phase = phase_by_name(graph, "方案")
@@ -109,7 +109,7 @@ def test_cross_phase_produce(client):
     added = client.post(
         f"/api/v1/ge/projects/{created['id']}/phases/{dev['id']}/gate-items",
         headers=jwt_headers(U_PM),
-        json={"name": "跨阶段产出项", "planned_due": GOLDEN_PLANNED_DUE},
+        json={"name": "跨阶段产出项", "planned_due": DEV_PHASE_PLANNED_DUE},
     )
     assert added.status_code == 200
     dev_after = phase_by_name(added.json(), "开发")

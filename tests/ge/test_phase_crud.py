@@ -28,12 +28,12 @@ def test_add_phase_with_planned_window(client):
     resp = client.post(
         f"/api/v1/ge/projects/{project_id}/phases",
         headers=jwt_headers(U_PM),
-        json={"name": "验收", "planned_start": "2026-04-01", "planned_end": "2026-04-30"},
+        json={"name": "验收", "planned_start": "2026-07-01", "planned_end": "2026-07-31"},
     )
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
     phase = phase_by_name(resp.json(), "验收")
-    assert phase["planned_start"] == "2026-04-01"
-    assert phase["planned_end"] == "2026-04-30"
+    assert phase["planned_start"] == "2026-07-01"
+    assert phase["planned_end"] == "2026-07-31"
 
 
 def test_add_phase_requires_planned_window(client):
@@ -65,7 +65,7 @@ def test_patch_phase_rename(client):
     resp = client.patch(
         f"/api/v1/ge/phases/{dev['id']}",
         headers=jwt_headers(U_PM),
-        json={"name": "开发迭代", "planned_start": "2026-06-01", "planned_end": "2026-06-30"},
+        json={"name": "开发迭代", "planned_start": "2026-06-16", "planned_end": "2026-06-30"},
     )
     assert resp.status_code == 200
     renamed = phase_by_name(resp.json(), "开发迭代")
@@ -80,7 +80,7 @@ def test_delete_empty_phase(client):
     added = client.post(
         f"/api/v1/ge/projects/{project_id}/phases",
         headers=jwt_headers(U_PM),
-        json={"name": "空阶段", "planned_start": "2026-05-01", "planned_end": "2026-05-31"},
+        json={"name": "空阶段", "planned_start": "2026-07-01", "planned_end": "2026-07-31"},
     )
     assert added.status_code == 200
     empty = phase_by_name(added.json(), "空阶段")

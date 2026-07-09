@@ -9,9 +9,6 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.constants import (
-    GE_DEFAULT_OBJECTIVE_ID,
-    GE_DEFAULT_PROGRAM_ID,
-    GE_DEFAULT_SUB_OBJECTIVE_ID,
     SAMPLE_PHASE_NAME,
     SAMPLE_PROGRAM_NAME,
     SAMPLE_PROJECT_NAME,
@@ -19,7 +16,6 @@ from app.constants import (
 )
 from app.models.ge import GeObjective, GeProgram, GeProject
 from app.models.org import OrgDepartment
-from app.services.ge_bootstrap import ensure_ge_bootstrap
 from app.services.ge_graph import now_iso, record_audit
 from app.services.ge_project_create import create_project
 from app.services.ge_sort_order import (
@@ -143,7 +139,6 @@ def _apply_program_period(
 
 
 def create_objective(db: Session, body: dict[str, Any]) -> dict[str, Any]:
-    ensure_ge_bootstrap(db)
     name = str(body.get("name") or "").strip()
     parent_id = body.get("parent_id")
     if not name:
@@ -180,14 +175,12 @@ def create_objective(db: Session, body: dict[str, Any]) -> dict[str, Any]:
 
 
 def patch_objective(db: Session, objective_id: str, body: dict[str, Any]) -> dict[str, Any]:
-    ensure_ge_bootstrap(db)
     obj = db.get(GeObjective, objective_id)
     if obj is None:
         raise HTTPException(status_code=404, detail={"detail": "not_found"})
     if body.get("lifecycle_status") is not None:
         raise HTTPException(status_code=400, detail={"detail": "invalid_request"})
-    if not obj.is_default:
-        _assert_not_locked(obj)
+    _assert_not_locked(obj)
     if body.get("name") is not None:
         name = str(body["name"]).strip()
         if not name:
@@ -195,7 +188,7 @@ def patch_objective(db: Session, objective_id: str, body: dict[str, Any]) -> dic
         obj.name = name
     if "owner_user_id" in body:
         obj.owner_user_id = body.get("owner_user_id")
-    if "primary_department_id" in body and not obj.is_default and obj.level == "sub":
+    if "primary_department_id" in body and obj.level == "sub":
         dept = body.get("primary_department_id")
         if dept:
             _validate_department(db, str(dept))
@@ -211,7 +204,6 @@ def patch_objective(db: Session, objective_id: str, body: dict[str, Any]) -> dic
 
 
 def create_program(db: Session, body: dict[str, Any]) -> dict[str, Any]:
-    ensure_ge_bootstrap(db)
     name = str(body.get("name") or "").strip()
     objective_id = body.get("objective_id")
     if not name:
@@ -249,17 +241,12 @@ def create_program(db: Session, body: dict[str, Any]) -> dict[str, Any]:
 
 
 def patch_program(db: Session, program_id: str, body: dict[str, Any]) -> dict[str, Any]:
-    ensure_ge_bootstrap(db)
     program = db.get(GeProgram, program_id)
     if program is None:
         raise HTTPException(status_code=404, detail={"detail": "not_found"})
     if body.get("lifecycle_status") is not None:
         raise HTTPException(status_code=400, detail={"detail": "invalid_request"})
-    if not program.is_default:
-        _assert_not_locked(program)
-    if program.id == GE_DEFAULT_PROGRAM_ID:
-        if body.get("objective_id") is not None and str(body["objective_id"]) != program.objective_id:
-            raise HTTPException(status_code=403, detail={"detail": "default_immutable"})
+    _assert_not_locked(program)
     if body.get("name") is not None:
         name = str(body["name"]).strip()
         if not name:
@@ -274,7 +261,7 @@ def patch_program(db: Session, program_id: str, body: dict[str, Any]) -> dict[st
         program.objective_id = objective_id
     if "owner_user_id" in body:
         program.owner_user_id = body.get("owner_user_id")
-    if "primary_department_id" in body and not program.is_default:
+    if "primary_department_id" in body:
         dept = body.get("primary_department_id")
         if dept:
             _validate_department(db, str(dept))
@@ -290,7 +277,6 @@ def patch_program(db: Session, program_id: str, body: dict[str, Any]) -> dict[st
 
 
 def create_objective_year(db: Session, body: dict[str, Any], *, actor_user_id: str) -> dict[str, Any]:
-    ensure_ge_bootstrap(db)
     planning_year = body.get("planning_year")
     if planning_year is None:
         raise HTTPException(status_code=400, detail={"detail": "invalid_request"})
@@ -302,13 +288,6 @@ def create_objective_year(db: Session, body: dict[str, Any], *, actor_user_id: s
         raise HTTPException(status_code=400, detail={"detail": "duplicate_active_year"})
 
     now = now_iso()
-    b1 = db.get(GeObjective, GE_DEFAULT_OBJECTIVE_ID)
-    if b1 is None:
-        raise HTTPException(status_code=500, detail={"detail": "bootstrap_missing"})
-    b1.period_granularity = "year"
-    b1.period_start = start
-    b1.period_end = end
-    b1.updated_at = now
 
     company = GeObjective(
         id=str(uuid.uuid4()),
@@ -562,15 +541,9 @@ def assess_program(
 
 
 def delete_objective(db: Session, objective_id: str) -> None:
-    ensure_ge_bootstrap(db)
     obj = db.get(GeObjective, objective_id)
     if obj is None:
         raise HTTPException(status_code=404, detail={"detail": "not_found"})
-    if obj.is_default or objective_id in (
-        GE_DEFAULT_OBJECTIVE_ID,
-        GE_DEFAULT_SUB_OBJECTIVE_ID,
-    ):
-        raise HTTPException(status_code=403, detail={"detail": "default_immutable"})
     child = db.query(GeObjective).filter(GeObjective.parent_id == objective_id).first()
     if child is not None:
         raise HTTPException(status_code=409, detail={"detail": "objective_not_empty"})
@@ -582,12 +555,9 @@ def delete_objective(db: Session, objective_id: str) -> None:
 
 
 def delete_program(db: Session, program_id: str) -> None:
-    ensure_ge_bootstrap(db)
     program = db.get(GeProgram, program_id)
     if program is None:
         raise HTTPException(status_code=404, detail={"detail": "not_found"})
-    if program.is_default or program_id == GE_DEFAULT_PROGRAM_ID:
-        raise HTTPException(status_code=403, detail={"detail": "default_immutable"})
     active = (
         db.query(GeProject)
         .filter(GeProject.program_id == program_id, GeProject.deleted_at.is_(None))
@@ -595,18 +565,6 @@ def delete_program(db: Session, program_id: str) -> None:
     )
     if active is not None:
         raise HTTPException(status_code=409, detail={"detail": "program_not_empty"})
-    now = now_iso()
-    soft_deleted = (
-        db.query(GeProject)
-        .filter(GeProject.program_id == program_id, GeProject.deleted_at.isnot(None))
-        .all()
-    )
-    for project in soft_deleted:
-        project.program_id = GE_DEFAULT_PROGRAM_ID
-        project.updated_at = now
-    if soft_deleted:
-        db.flush()
-        db.expire(program, ["projects"])
     db.delete(program)
     db.commit()
 

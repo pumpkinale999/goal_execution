@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from sqlalchemy import text
 
-from app.constants import GE_DEFAULT_OBJECTIVE_ID
-from app.services.ge_strategic_period import current_year_bounds, default_sub_period
+from app.services.ge_strategic_period import default_sub_period
 
 
 def _guess_primary_department(connection, owner_user_id: str | None) -> tuple[str | None, bool]:
@@ -48,26 +47,8 @@ def _guess_primary_department(connection, owner_user_id: str | None) -> tuple[st
 
 
 def run_strategic_backfill(connection, *, dry_run: bool = False) -> dict[str, int]:
-    stats = {"objectives": 0, "programs": 0, "b1": 0}
-    y_start, y_end = current_year_bounds()
+    stats = {"objectives": 0, "programs": 0}
     gran, q_start, q_end = default_sub_period()
-
-    if not dry_run:
-        connection.execute(
-            text(
-                """
-                UPDATE ge_objectives
-                SET period_granularity = 'year',
-                    period_start = :start,
-                    period_end = :end,
-                    lifecycle_status = COALESCE(lifecycle_status, 'active')
-                WHERE id = :b1
-                """
-            ),
-            {"start": y_start, "end": y_end, "b1": GE_DEFAULT_OBJECTIVE_ID},
-        )
-    stats["b1"] = 1
-
     obj_rows = connection.execute(
         text(
             "SELECT id, owner_user_id, is_default, level, period_start FROM ge_objectives"

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from tests.conftest import jwt_headers
-from tests.ge.conftest import GOLDEN_PLANNED_DUE, U_PM, create_project, get_graph, material_submit_payload, phase_by_name, task_id_by_title
+from tests.ge.conftest import DEV_PHASE_PLANNED_DUE, U_PM, create_project, get_graph, material_submit_payload, phase_by_name, task_id_by_title
 
 
 def test_move_task_phase(client):
@@ -31,7 +31,7 @@ def test_move_task_phase(client):
 
 
 def test_move_draft_gate_item_phase(client):
-    created = create_project(client, U_PM)
+    created = create_project(client, U_PM, seed_schedule=False)
     project_id = created["id"]
     graph = get_graph(client, project_id, U_PM)
     plan = phase_by_name(graph, "方案")
@@ -40,7 +40,7 @@ def test_move_draft_gate_item_phase(client):
     added = client.post(
         f"/api/v1/ge/projects/{project_id}/phases/{plan['id']}/gate-items",
         headers=jwt_headers(U_PM),
-        json={"name": "可移动项", "planned_due": GOLDEN_PLANNED_DUE},
+        json={"name": "可移动项", "planned_due": DEV_PHASE_PLANNED_DUE},
     )
     assert added.status_code == 200
     plan_after_add = phase_by_name(added.json(), "方案")

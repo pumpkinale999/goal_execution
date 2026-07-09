@@ -1628,7 +1628,7 @@ components:
           description: P2 · structural migrate · source/target governor or PM
     CreateProjectRequest:
       type: object
-      required: [name, pm_user_id, phases]
+      required: [name, pm_user_id, program_id, phases]
       properties:
         name:
           type: string
@@ -1637,6 +1637,7 @@ components:
         program_id:
           type: string
           format: uuid
+          description: Required · active Program · caller must be subtree governor
         project_note_id:
           type: string
           format: uuid
