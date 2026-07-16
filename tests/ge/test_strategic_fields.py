@@ -139,6 +139,43 @@ def test_read_refresh_pending_assessment(client, monkeypatch):
     assert sub["lifecycle_status"] == "pending_assessment"
 
 
+def test_locked_objective_allows_owner_patch_rejects_period(client, monkeypatch):
+    """Pending/terminal: name+owner patch OK; strategic period patch → 409."""
+    company = _annual_company(client, year=2021)
+    dept_id = _create_dept(client)
+    sub = client.post(
+        "/api/v1/ge/objectives",
+        headers=service_headers("reviewer-1"),
+        json={
+            "name": "锁定子目标",
+            "parent_id": company["id"],
+            "owner_user_id": "u-owner",
+            "primary_department_id": dept_id,
+            "period_granularity": "quarter",
+            "period_start": "2021-01-01",
+            "period_end": "2021-03-31",
+        },
+    ).json()
+    _patch_today(monkeypatch, date(2021, 4, 2))
+    client.get("/api/v1/ge/objectives", headers=jwt_headers("u-1"))
+
+    ok = client.patch(
+        f"/api/v1/ge/objectives/{sub['id']}",
+        headers=service_headers("reviewer-1"),
+        json={"name": "锁定子目标", "owner_user_id": "anne"},
+    )
+    assert ok.status_code == 200, ok.text
+    assert ok.json()["owner_user_id"] == "anne"
+
+    blocked = client.patch(
+        f"/api/v1/ge/objectives/{sub['id']}",
+        headers=service_headers("reviewer-1"),
+        json={"period_granularity": "quarter", "period_start": "2021-04-01", "period_end": "2021-06-30"},
+    )
+    assert blocked.status_code == 409
+    assert blocked.json()["detail"] == "objective_locked"
+
+
 def test_assess_objective_and_program(client, monkeypatch):
     """GE-T142 / GE-T142b: assess API for objective and program."""
     company = _annual_company(client, year=2019)

@@ -53,10 +53,23 @@ def _require_owner(body: dict[str, Any]) -> str:
     return str(owner).strip()
 
 
-def _assert_not_locked(entity: GeObjective | GeProgram) -> None:
+def _is_lifecycle_locked(entity: GeObjective | GeProgram) -> bool:
     status = entity.lifecycle_status or LIFECYCLE_ACTIVE
-    if status in LOCKED_LIFECYCLES:
-        raise HTTPException(status_code=409, detail={"detail": "objective_locked"})
+    return status in LOCKED_LIFECYCLES
+
+
+# When lifecycle is locked (pending_assessment / terminal), still allow accountability edits.
+# Strategic fields (period / department / reparent) remain forbidden.
+_ACCOUNTABILITY_PATCH_KEYS = frozenset({"name", "owner_user_id"})
+
+
+def _assert_patch_allowed(entity: GeObjective | GeProgram, body: dict[str, Any]) -> None:
+    if not _is_lifecycle_locked(entity):
+        return
+    keys = {k for k in body.keys() if k != "lifecycle_status"}
+    if keys and keys.issubset(_ACCOUNTABILITY_PATCH_KEYS):
+        return
+    raise HTTPException(status_code=409, detail={"detail": "objective_locked"})
 
 
 def _validate_department(db: Session, department_id: str | None) -> None:
@@ -180,7 +193,7 @@ def patch_objective(db: Session, objective_id: str, body: dict[str, Any]) -> dic
         raise HTTPException(status_code=404, detail={"detail": "not_found"})
     if body.get("lifecycle_status") is not None:
         raise HTTPException(status_code=400, detail={"detail": "invalid_request"})
-    _assert_not_locked(obj)
+    _assert_patch_allowed(obj, body)
     if body.get("name") is not None:
         name = str(body["name"]).strip()
         if not name:
@@ -195,7 +208,7 @@ def patch_objective(db: Session, objective_id: str, body: dict[str, Any]) -> dic
             obj.primary_department_id = str(dept)
             obj.primary_department_needs_confirmation = 0
     parent = db.get(GeObjective, obj.parent_id) if obj.parent_id else None
-    if parent is not None:
+    if parent is not None and not _is_lifecycle_locked(obj):
         _apply_objective_period(db, obj, body, parent=parent, is_create=False)
     obj.updated_at = now_iso()
     db.commit()
@@ -246,7 +259,7 @@ def patch_program(db: Session, program_id: str, body: dict[str, Any]) -> dict[st
         raise HTTPException(status_code=404, detail={"detail": "not_found"})
     if body.get("lifecycle_status") is not None:
         raise HTTPException(status_code=400, detail={"detail": "invalid_request"})
-    _assert_not_locked(program)
+    _assert_patch_allowed(program, body)
     if body.get("name") is not None:
         name = str(body["name"]).strip()
         if not name:
@@ -268,7 +281,7 @@ def patch_program(db: Session, program_id: str, body: dict[str, Any]) -> dict[st
             program.primary_department_id = str(dept)
             program.primary_department_needs_confirmation = 0
     objective = db.get(GeObjective, program.objective_id)
-    if objective is not None:
+    if objective is not None and not _is_lifecycle_locked(program):
         _apply_program_period(db, program, body, objective=objective, is_create=False)
     program.updated_at = now_iso()
     db.commit()
