@@ -35,7 +35,7 @@ def ensure_team_lead_membership(
     user_id: str | None,
     now: str,
 ) -> None:
-    """Append team membership; same-dept direct is replaced with team. Does not change primary."""
+    """Append team membership (v2.36: keeps same-dept direct and other teams). Does not change primary."""
     if not user_id:
         return
     create_membership(

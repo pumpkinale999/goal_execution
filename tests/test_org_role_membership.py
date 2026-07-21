@@ -190,7 +190,39 @@ def test_cross_department_append_not_override(client):
     )
     promoted = _profile(client, "u-promote")
     assert _dept_membership(promoted, dept_c) is not None
-    assert _team_membership(promoted, team_c) is None
+    # v2.36: promoting to manager appends direct; keeps existing team membership
+    assert _team_membership(promoted, team_c) is not None
+
+
+def test_same_person_leads_two_teams_same_department(client):
+    """v2.36: one user may lead multiple teams under the same department."""
+    dept_id = client.post(
+        "/api/v1/org/departments",
+        headers=service_headers("reviewer-1"),
+        json={"name": "研发部"},
+    ).json()["id"]
+    team_a = client.post(
+        "/api/v1/org/teams",
+        headers=service_headers("reviewer-1"),
+        json={"department_id": dept_id, "name": "平台组", "lead_user_id": "u-multi"},
+    ).json()["id"]
+    team_b = client.post(
+        "/api/v1/org/teams",
+        headers=service_headers("reviewer-1"),
+        json={"department_id": dept_id, "name": "算法组", "lead_user_id": "u-multi"},
+    ).json()["id"]
+    assert team_a != team_b
+    profile = _profile(client, "u-multi")
+    assert _team_membership(profile, team_a) is not None
+    assert _team_membership(profile, team_b) is not None
+    depts = client.get(
+        "/api/v1/org/departments",
+        headers=service_headers("reviewer-1"),
+    ).json()
+    dept = next(d for d in depts if d["id"] == dept_id)
+    leads = {t["id"]: t.get("lead_user_id") for t in dept.get("teams") or []}
+    assert leads[team_a] == "u-multi"
+    assert leads[team_b] == "u-multi"
 
 
 def test_replace_manager_only_syncs_new_manager(client):

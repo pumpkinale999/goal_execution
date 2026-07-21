@@ -1,4 +1,4 @@
-"""OrgMembership CRUD and primary_membership_id invariant (v2.22/v2.23)."""
+"""OrgMembership CRUD and primary_membership_id invariant (v2.22/v2.23/v2.36)."""
 
 from __future__ import annotations
 
@@ -35,12 +35,15 @@ def list_memberships_for_user(db: Session, user_id: str) -> list[UserOrgMembersh
     )
 
 
-def _membership_in_dept(db: Session, user_id: str, department_id: str) -> UserOrgMembership | None:
+def _direct_membership_in_dept(
+    db: Session, user_id: str, department_id: str
+) -> UserOrgMembership | None:
     return (
         db.query(UserOrgMembership)
         .filter(
             UserOrgMembership.user_id == user_id,
             UserOrgMembership.department_id == department_id,
+            UserOrgMembership.team_id.is_(None),
         )
         .first()
     )
@@ -118,6 +121,7 @@ def create_membership(
     primary_membership_id: str | None = None,
     skip_primary_gate: bool = False,
 ) -> UserOrgMembership:
+    """Append membership (v2.36): same-dept direct + multiple teams may coexist."""
     if db.get(OrgDepartment, department_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"detail": "not_found"})
     if team_id is not None:
@@ -132,30 +136,10 @@ def create_membership(
         existing = _membership_for_team(db, user_id, team_id)
         if existing:
             return existing
-        dept_row = _membership_in_dept(db, user_id, department_id)
-        if dept_row is not None:
-            if dept_row.team_id is None:
-                # Keep direct membership; append team row (same dept direct + group coexist).
-                pass
-            elif dept_row.team_id == team_id:
-                return dept_row
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail={"detail": "department_membership_conflict"},
-                )
     else:
-        dept_row = _membership_in_dept(db, user_id, department_id)
-        if dept_row is not None:
-            if dept_row.team_id is None:
-                return dept_row
-            dept_row.team_id = None
-            dept_row.updated_at = now
-            profile = ensure_profile(db, user_id, now=now)
-            _apply_primary_after_change(
-                db, profile, now=now, explicit_primary_id=primary_membership_id
-            )
-            return dept_row
+        existing_direct = _direct_membership_in_dept(db, user_id, department_id)
+        if existing_direct is not None:
+            return existing_direct
 
     existing_count = len(list_memberships_for_user(db, user_id))
     profile = ensure_profile(db, user_id, now=now)

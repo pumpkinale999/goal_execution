@@ -74,17 +74,59 @@ def test_second_department_membership_coexists(client):
 
 
 def test_same_department_direct_and_team_coexist(client):
-    """GE-T120: direct dept + team membership in same department both kept."""
+    """GE-T120: direct + team A + team B in same department all kept (v2.36)."""
     dept_id = _create_dept(client)
-    team_id = _create_team(client, dept_id)
+    team_a = _create_team(client, dept_id, "前端组")
+    team_b = _create_team(client, dept_id, "算法组")
     _add_membership(client, "u2", department_id=dept_id)
-    resp = client.post(
+    resp_a = client.post(
         "/api/v1/org/users/u2/memberships",
         headers=service_headers("reviewer-1"),
-        json={"department_id": dept_id, "team_id": team_id},
+        json={"department_id": dept_id, "team_id": team_a},
     )
-    assert resp.status_code == 201
+    assert resp_a.status_code == 201
+    resp_b = client.post(
+        "/api/v1/org/users/u2/memberships",
+        headers=service_headers("reviewer-1"),
+        json={"department_id": dept_id, "team_id": team_b},
+    )
+    assert resp_b.status_code == 201, resp_b.text
     profile = _profile(client, "u2")
+    assert len(profile["memberships"]) == 3
+    assert _dept_membership(profile, dept_id) is not None
+    team_ids = {m.get("team_id") for m in profile["memberships"] if m.get("team_id")}
+    assert team_ids == {team_a, team_b}
+
+
+def test_two_teams_same_department_without_direct(client):
+    """v2.36: join team A then team B in same dept — no conflict."""
+    dept_id = _create_dept(client)
+    team_a = _create_team(client, dept_id, "A组")
+    team_b = _create_team(client, dept_id, "B组")
+    _add_membership(client, "u2b", department_id=dept_id, team_id=team_a)
+    resp = client.post(
+        "/api/v1/org/users/u2b/memberships",
+        headers=service_headers("reviewer-1"),
+        json={"department_id": dept_id, "team_id": team_b},
+    )
+    assert resp.status_code == 201, resp.text
+    profile = _profile(client, "u2b")
+    assert len(profile["memberships"]) == 2
+    assert {m["team_id"] for m in profile["memberships"]} == {team_a, team_b}
+
+
+def test_team_then_direct_keeps_team_row(client):
+    """v2.36: adding direct after team INSERT keeps team membership."""
+    dept_id = _create_dept(client)
+    team_id = _create_team(client, dept_id)
+    _add_membership(client, "u2c", department_id=dept_id, team_id=team_id)
+    resp = client.post(
+        "/api/v1/org/users/u2c/memberships",
+        headers=service_headers("reviewer-1"),
+        json={"department_id": dept_id},
+    )
+    assert resp.status_code == 201, resp.text
+    profile = _profile(client, "u2c")
     assert len(profile["memberships"]) == 2
     assert _dept_membership(profile, dept_id) is not None
     assert any(m.get("team_id") == team_id for m in profile["memberships"])
