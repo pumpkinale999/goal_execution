@@ -282,6 +282,16 @@ def test_patch_phase_revalidates_all_gate_items(client):
     )
     assert resp.status_code == 400
     assert _detail_code(resp) == "gate_item_schedule_outside_phase"
+    # GE http_exception_handler flattens dict detail to response root
+    body = resp.json()
+    assert body["gate_items"] == [
+        {
+            "id": next(gi["id"] for gi in dev["gate_items"] if gi["name"] == "接口规格"),
+            "name": "接口规格",
+            "planned_due": "2026-06-20",
+        }
+    ]
+    assert body["phase_window"] == {"planned_start": "2026-06-25", "planned_end": "2026-06-30"}
 
 
 def test_activate_extends_phase_end(client, monkeypatch):

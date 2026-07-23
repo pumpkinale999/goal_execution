@@ -70,9 +70,11 @@ def test_gate_item_due_outside_phase_rejected(client):
         json={"name": "越界门控项", "planned_due": "2026-06-20"},
     )
     assert resp.status_code == 400
-    detail = resp.json()["detail"]
-    code = detail["detail"] if isinstance(detail, dict) else detail
+    body = resp.json()
+    code = body["detail"]["detail"] if isinstance(body.get("detail"), dict) else body.get("detail")
     assert code == "gate_item_schedule_outside_phase"
+    assert body.get("gate_items") == [{"planned_due": "2026-06-20", "name": "越界门控项"}]
+    assert body.get("phase_window") == {"planned_start": "2026-06-01", "planned_end": "2026-06-15"}
 
 
 def test_add_gate_item_with_valid_due(client):

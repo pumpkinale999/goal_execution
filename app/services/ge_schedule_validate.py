@@ -62,19 +62,63 @@ def require_program_period(program_period: dict[str, Any] | None) -> None:
         raise HTTPException(status_code=400, detail={"detail": "program_period_required"})
 
 
+def is_gate_item_due_outside_phase(
+    planned_due: str | None,
+    *,
+    phase_planned_start: str | None,
+    phase_planned_end: str | None,
+) -> bool:
+    if planned_due is None:
+        return False
+    if phase_planned_start is None or phase_planned_end is None:
+        return False
+    due_ord = plan_date_to_ord(planned_due)
+    return due_ord < plan_date_to_ord(phase_planned_start) or due_ord > plan_date_to_ord(phase_planned_end)
+
+
+def raise_gate_items_schedule_outside_phase(
+    gate_items: list[dict[str, Any]],
+    *,
+    phase_planned_start: str | None = None,
+    phase_planned_end: str | None = None,
+) -> None:
+    """400 with concrete gate item(s) so clients can name the offender(s)."""
+    detail: dict[str, Any] = {
+        "detail": "gate_item_schedule_outside_phase",
+        "gate_items": gate_items,
+    }
+    if phase_planned_start is not None and phase_planned_end is not None:
+        detail["phase_window"] = {
+            "planned_start": phase_planned_start,
+            "planned_end": phase_planned_end,
+        }
+    raise HTTPException(status_code=400, detail=detail)
+
+
 def validate_gate_item_due_in_phase(
     planned_due: str | None,
     *,
     phase_planned_start: str | None,
     phase_planned_end: str | None,
+    gate_item_id: str | None = None,
+    gate_item_name: str | None = None,
 ) -> None:
-    if planned_due is None:
+    if not is_gate_item_due_outside_phase(
+        planned_due,
+        phase_planned_start=phase_planned_start,
+        phase_planned_end=phase_planned_end,
+    ):
         return
-    if phase_planned_start is None or phase_planned_end is None:
-        return
-    due_ord = plan_date_to_ord(planned_due)
-    if due_ord < plan_date_to_ord(phase_planned_start) or due_ord > plan_date_to_ord(phase_planned_end):
-        raise HTTPException(status_code=400, detail={"detail": "gate_item_schedule_outside_phase"})
+    item: dict[str, Any] = {"planned_due": planned_due}
+    if gate_item_id:
+        item["id"] = gate_item_id
+    if gate_item_name:
+        item["name"] = gate_item_name
+    raise_gate_items_schedule_outside_phase(
+        [item],
+        phase_planned_start=phase_planned_start,
+        phase_planned_end=phase_planned_end,
+    )
 
 
 def _start_system_phase(phases: list[PhaseScheduleLike]) -> PhaseScheduleLike | None:

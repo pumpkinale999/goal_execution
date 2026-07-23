@@ -122,6 +122,7 @@ def create_project(db: Session, *, actor_user_id: str, body: dict[str, Any], com
                 planned_due,
                 phase_planned_start=planned_start,
                 phase_planned_end=planned_end,
+                gate_item_name=str(gi_body["name"]).strip(),
             )
             db.add(
                 GeGateItem(

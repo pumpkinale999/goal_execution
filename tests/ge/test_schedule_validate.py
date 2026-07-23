@@ -58,7 +58,24 @@ def test_validate_gate_item_due_in_phase_bounds():
             phase_planned_start="2026-03-01",
             phase_planned_end="2026-03-15",
         )
-    assert exc.value.detail == {"detail": "gate_item_schedule_outside_phase"}
+    assert exc.value.detail["detail"] == "gate_item_schedule_outside_phase"
+    assert exc.value.detail["gate_items"] == [{"planned_due": "2026-03-20"}]
+    assert exc.value.detail["phase_window"] == {
+        "planned_start": "2026-03-01",
+        "planned_end": "2026-03-15",
+    }
+
+    with pytest.raises(HTTPException) as named:
+        validate_gate_item_due_in_phase(
+            "2026-03-20",
+            phase_planned_start="2026-03-01",
+            phase_planned_end="2026-03-15",
+            gate_item_id="gi-1",
+            gate_item_name="接口规格",
+        )
+    assert named.value.detail["gate_items"] == [
+        {"planned_due": "2026-03-20", "id": "gi-1", "name": "接口规格"}
+    ]
 
 
 def test_validate_project_schedule_business_outside_bounds():

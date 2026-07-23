@@ -31,6 +31,8 @@ from app.services.ge_schedule_validate import (
     parse_required_plan_date,
     reject_task_schedule_fields,
     require_business_phase_window,
+    is_gate_item_due_outside_phase,
+    raise_gate_items_schedule_outside_phase,
     validate_gate_item_due_in_phase,
     validate_phase_window,
     validate_project_schedule,
@@ -449,6 +451,7 @@ def add_gate_item(db: Session, project_id: str, phase_id: str, body: dict[str, A
         planned_due,
         phase_planned_start=eff_start,
         phase_planned_end=eff_end,
+        gate_item_name=name,
     )
     now = now_iso()
     gi_id = str(uuid.uuid4())
@@ -540,6 +543,8 @@ def patch_gate_item(db: Session, gate_item_id: str, body: dict[str, Any], user: 
         item.planned_due,
         phase_planned_start=eff_start,
         phase_planned_end=eff_end,
+        gate_item_id=item.id,
+        gate_item_name=item.name,
     )
     if item.status == "draft" and not item.submitted_by and not item.signed_by and not item.rejected_by:
         from app.services.ge_gate_item_payload import definition_from_body, merge_definition_patch, parse_form
@@ -629,9 +634,23 @@ def patch_phase(db: Session, phase_id: str, body: dict[str, Any], user: AuthUser
     program_period, project_phases = _project_schedule_context(db, project)
     validate_project_schedule(project_phases, program_period=program_period, require_program=True)
     eff_start, eff_end = _phase_effective_window(phase, project_phases, program_period)
+    offenders: list[dict[str, Any]] = []
     for gi in db.query(GeGateItem).filter(GeGateItem.phase_id == phase_id).all():
-        validate_gate_item_due_in_phase(
+        if is_gate_item_due_outside_phase(
             gi.planned_due,
+            phase_planned_start=eff_start,
+            phase_planned_end=eff_end,
+        ):
+            offenders.append(
+                {
+                    "id": gi.id,
+                    "name": gi.name,
+                    "planned_due": gi.planned_due,
+                }
+            )
+    if offenders:
+        raise_gate_items_schedule_outside_phase(
+            offenders,
             phase_planned_start=eff_start,
             phase_planned_end=eff_end,
         )
