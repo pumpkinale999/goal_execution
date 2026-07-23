@@ -36,7 +36,7 @@ _git_pull_if_branch() {
 
 if [[ "$(id -u)" -eq 0 ]]; then
   log "git pull（用户 ${_GIT_USER}）"
-  sudo -u "${_GIT_USER}" bash -c "set -euo pipefail; cd $(printf '%q' "$SRC"); $(declare -f _git_pull_if_branch); _git_pull_if_branch"
+  sudo -u "${_GIT_USER}" bash -c "set -euo pipefail; cd $(printf '%q' "$SRC"); $(declare -f log die _git_pull_if_branch); _git_pull_if_branch"
 else
   log "git pull（当前用户）"
   ( cd "$SRC" && _git_pull_if_branch )
