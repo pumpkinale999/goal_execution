@@ -39,6 +39,9 @@ def test_create_project_seeds_system_lifecycle(client):
     assert start_task["is_system"] is True
     assert end_task["is_system"] is True
     assert end_sign_task["is_system"] is True
+    assert start_task["assignee_user_id"] == U_PM
+    assert end_task["assignee_user_id"] == U_PM
+    assert end_sign_task["assignee_user_id"] == U_PM
     assert start_gi["is_system"] is True
     assert end_gi["is_system"] is True
     assert start_gi["id"] in start_task["produces"]
@@ -110,6 +113,31 @@ def test_system_task_and_gate_item_immutable(client):
     del_gi = client.delete(f"/api/v1/ge/gate-items/{gi['id']}", headers=jwt_headers(U_PM))
     assert del_gi.status_code == 403
     assert del_gi.json()["detail"] == "system_gate_item_immutable"
+
+    patch_name = client.patch(
+        f"/api/v1/ge/gate-items/{gi['id']}",
+        headers=jwt_headers(U_PM),
+        json={"name": "改名"},
+    )
+    assert patch_name.status_code == 403
+    assert patch_name.json()["detail"] == "system_gate_item_immutable"
+
+    # planned_due 可改（须落在开始阶段有效窗口内）
+    start_end = start.get("effective_planned_end") or start.get("planned_end")
+    assert start_end
+    patch_due = client.patch(
+        f"/api/v1/ge/gate-items/{gi['id']}",
+        headers=jwt_headers(U_PM),
+        json={"planned_due": start_end},
+    )
+    assert patch_due.status_code == 200, patch_due.text
+    updated = next(
+        item
+        for ph in patch_due.json()["phases"]
+        for item in ph["gate_items"]
+        if item["id"] == gi["id"]
+    )
+    assert updated["planned_due"] == start_end
 
     remove_produce = client.delete(
         f"/api/v1/ge/tasks/{task['id']}/produces/{gi['id']}",
@@ -297,12 +325,14 @@ def test_system_end_sign_task_assignee_immutable(client):
     assert patch.json()["detail"] == "system_sign_route_immutable"
 
 
-def test_patch_project_syncs_end_sign_task_assignee(client):
-    """GE-T63"""
+def test_patch_project_syncs_system_lifecycle_task_assignees(client):
+    """GE-T63 · PM 变更时启动/复盘/确认结项负责人同步为新 PM"""
     created = create_project(client, U_PM, bootstrap_startup=False)
     project_id = created["id"]
     graph = get_graph(client, project_id, U_PM)
     sign_task_id = task_id_by_title(graph, SYSTEM_END_SIGN_TASK_TITLE)
+    start_task_id = task_id_by_title(graph, SYSTEM_START_TASK_TITLE)
+    end_task_id = task_id_by_title(graph, SYSTEM_END_TASK_TITLE)
 
     patch = client.patch(
         f"/api/v1/ge/projects/{project_id}",
@@ -312,11 +342,87 @@ def test_patch_project_syncs_end_sign_task_assignee(client):
     assert patch.status_code == 200, patch.text
 
     after = get_graph(client, project_id, U_ZHANGSAN)
+    start = phase_by_name(after, "开始")
     end = phase_by_name(after, "结束")
+    start_task = next(t for t in start["tasks"] if t["id"] == start_task_id)
+    end_task = next(t for t in end["tasks"] if t["id"] == end_task_id)
     sign_task = next(t for t in end["tasks"] if t["id"] == sign_task_id)
     end_gi = next(gi for gi in end["gate_items"] if gi["name"] == SYSTEM_END_GATE_ITEM_NAME)
+    assert start_task["assignee_user_id"] == U_ZHANGSAN
+    assert end_task["assignee_user_id"] == U_ZHANGSAN
     assert sign_task["assignee_user_id"] == U_ZHANGSAN
     assert end_gi["eligible_signers"] == [U_ZHANGSAN]
+
+
+def test_graph_get_heals_empty_system_task_assignee(client):
+    """GET graph 回填系统任务空负责人 → 项目 PM"""
+    from app.db import get_session_factory
+    from app.models.ge import GeTask
+
+    created = create_project(client, U_PM, bootstrap_startup=False)
+    project_id = created["id"]
+    graph = get_graph(client, project_id, U_PM)
+    start_task_id = task_id_by_title(graph, SYSTEM_START_TASK_TITLE)
+
+    factory = get_session_factory()
+    with factory() as db:
+        task = db.get(GeTask, start_task_id)
+        assert task is not None
+        task.assignee_user_id = None
+        db.commit()
+
+    after = get_graph(client, project_id, U_PM)
+    start = phase_by_name(after, "开始")
+    start_task = next(t for t in start["tasks"] if t["id"] == start_task_id)
+    assert start_task["assignee_user_id"] == U_PM
+
+
+def test_system_start_end_assignee_heal_to_pm(client):
+    """启动/复盘可将空负责人写回 PM；不可改成非 PM"""
+    from app.db import get_session_factory
+    from app.models.ge import GeTask
+
+    created = create_project(client, U_PM, bootstrap_startup=False)
+    project_id = created["id"]
+    graph = get_graph(client, project_id, U_PM)
+    start_task_id = task_id_by_title(graph, SYSTEM_START_TASK_TITLE)
+    end_task_id = task_id_by_title(graph, SYSTEM_END_TASK_TITLE)
+
+    factory = get_session_factory()
+    with factory() as db:
+        for tid in (start_task_id, end_task_id):
+            row = db.get(GeTask, tid)
+            assert row is not None
+            row.assignee_user_id = None
+        db.commit()
+
+    heal_start = client.patch(
+        f"/api/v1/ge/tasks/{start_task_id}",
+        headers=jwt_headers(U_PM),
+        json={"assignee_user_id": U_PM},
+    )
+    assert heal_start.status_code == 200, heal_start.text
+    start_after = next(
+        t for p in heal_start.json()["phases"] for t in p["tasks"] if t["id"] == start_task_id
+    )
+    assert start_after["assignee_user_id"] == U_PM
+
+    reject = client.patch(
+        f"/api/v1/ge/tasks/{end_task_id}",
+        headers=jwt_headers(U_PM),
+        json={"assignee_user_id": U_ZHANGSAN},
+    )
+    assert reject.status_code == 403
+    assert reject.json()["detail"] == "system_task_assignee_locked_to_pm"
+
+    heal_end = client.patch(
+        f"/api/v1/ge/tasks/{end_task_id}",
+        headers=jwt_headers(U_PM),
+        json={"assignee_user_id": U_PM},
+    )
+    assert heal_end.status_code == 200, heal_end.text
+    end_after = next(t for p in heal_end.json()["phases"] for t in p["tasks"] if t["id"] == end_task_id)
+    assert end_after["assignee_user_id"] == U_PM
 
 
 def test_closure_gate_pm_submit_sign_without_manual_route(client):

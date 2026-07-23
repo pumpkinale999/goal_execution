@@ -36,7 +36,11 @@ from app.services.ge_schedule_validate import (
     validate_project_schedule,
 )
 from app.services.ge_system_phases import assert_not_system_phase, end_phase_for_project, resequence_with_system_phases
-from app.services.ge_system_tasks import is_protected_system_end_sign_prerequisite, is_system_end_sign_task
+from app.services.ge_system_tasks import (
+    is_protected_system_end_sign_prerequisite,
+    is_system_end_sign_task,
+    is_system_start_or_end_produce_task,
+)
 from app.services.ge_deviations import (
     assert_deviation_produce_mutable,
     assert_remediation_produce_link_allowed,
@@ -387,6 +391,8 @@ def patch_task(db: Session, task_id: str, body: dict[str, Any], user: AuthUser) 
         assignee = str(body.get("assignee_user_id") or "").strip()
         if not assignee:
             raise HTTPException(status_code=400, detail={"detail": "invalid_assignee"})
+        if is_system_start_or_end_produce_task(task) and assignee != project.pm_user_id:
+            raise HTTPException(status_code=403, detail={"detail": "system_task_assignee_locked_to_pm"})
         task.assignee_user_id = assignee
     if "phase_id" in body:
         new_phase_id = str(body.get("phase_id") or "").strip()

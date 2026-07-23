@@ -28,7 +28,7 @@ from app.services.ge_graph import (
     tasks_linked_to_gate_item,
     write_operation_response,
 )
-from app.services.ge_system_tasks import sync_system_end_sign_task_assignee
+from app.services.ge_system_tasks import sync_system_lifecycle_task_assignees
 from app.services.ge_subtree_governor import is_subtree_governor
 from app.services.ge_sort_order import next_project_sort_order
 from app.services.ge_ws_callback import dispatch_deviation_personal_assistant
@@ -105,7 +105,7 @@ def patch_project(db: Session, project_id: str, user: AuthUser, body: dict[str, 
         raise HTTPException(status_code=400, detail={"detail": "no_changes"})
     now = now_iso()
     project.updated_at = now
-    sync_system_end_sign_task_assignee(
+    sync_system_lifecycle_task_assignees(
         db,
         project_id=project.id,
         pm_user_id=project.pm_user_id,

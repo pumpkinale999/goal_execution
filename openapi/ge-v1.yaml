@@ -24,7 +24,7 @@ info:
     v1.20.0 (v2.28 · runtime ☑): Phase effective_planned_* · program_period on graph · phase_schedule_overlap · phase_schedule_outside_program · program_period_required · deviation extends Phase.planned_end · see req §4.8 · impl §4.3.2 · GE-T158
     v1.21.0 (M32 · runtime ☑): ge_objectives/ge_programs/ge_projects sort_order · POST …/reorder · annual roots by planning_year DESC · see impl §4.2.0.5 · req v2.30.0 · GE-T162～T168
     Out of scope: skstudio BFF /api/v1/org|ge/* and POST /internal/ge/deviation-notify (see impl doc §4.0 · §5)
-  version: 1.21.0
+  version: 1.22.0
 servers:
   - url: /api/v1
     description: goal_execution service (JWT participant + service governance via skstudio BFF)
@@ -2421,9 +2421,24 @@ components:
         remediation_task_id:
           type: string
           nullable: true
+        ready:
+          type: boolean
+          description: M36 · same Ready rule as QueueGateItem
+        block_reason:
+          type: string
+          nullable: true
+        phase_id:
+          type: string
+          nullable: true
+        phase_effective_planned_start:
+          type: string
+          format: date
+          nullable: true
+        as_governor:
+          type: boolean
     QueueGateItem:
       type: object
-      required: [gate_item_id, gate_item_name, project_id, project_name, phase_name]
+      required: [gate_item_id, gate_item_name, project_id, project_name, phase_name, ready]
       properties:
         gate_item_id:
           type: string
@@ -2438,6 +2453,23 @@ components:
         submitted_by_user_id:
           type: string
           nullable: true
+        ready:
+          type: boolean
+          description: M36 · phase effective planned_start ≤ today (Asia/Shanghai); missing start → true
+        block_reason:
+          type: string
+          nullable: true
+          description: M36 · not_yet_started when ready=false; else null
+        phase_id:
+          type: string
+          nullable: true
+        phase_effective_planned_start:
+          type: string
+          format: date
+          nullable: true
+        as_governor:
+          type: boolean
+          description: M36 · true when listed via can_govern_project proxy
     QueueActionableTask:
       type: object
       required: [task_id, task_title, project_id, project_name, phase_name, effective_status]

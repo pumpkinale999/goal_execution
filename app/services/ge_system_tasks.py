@@ -32,6 +32,19 @@ def default_system_planned_due(now: str, phase_planned_end: str | None) -> str:
     return (dt.date() + timedelta(days=30)).isoformat()
 
 
+def is_system_start_produce_task(task: GeTask) -> bool:
+    return bool(task.is_system) and task.title == SYSTEM_START_TASK_TITLE
+
+
+def is_system_end_produce_task(task: GeTask) -> bool:
+    return bool(task.is_system) and task.title == SYSTEM_END_TASK_TITLE
+
+
+def is_system_start_or_end_produce_task(task: GeTask) -> bool:
+    """启动项目 / 结项复盘：负责人恒为项目 PM。"""
+    return is_system_start_produce_task(task) or is_system_end_produce_task(task)
+
+
 def is_system_end_sign_task(task: GeTask) -> bool:
     return bool(task.is_system) and task.title == SYSTEM_END_SIGN_TASK_TITLE
 
@@ -224,21 +237,46 @@ def _ensure_end_sign_route(
 
 
 def sync_system_end_sign_task_assignee(db: Session, *, project_id: str, pm_user_id: str, now: str) -> None:
-    """Keep 确认结项 assignee aligned with project PM."""
-    end_phase = (
+    """Keep 确认结项 assignee aligned with project PM.
+
+    Prefer :func:`sync_system_lifecycle_task_assignees` (covers start/end produce too).
+    """
+    sync_system_lifecycle_task_assignees(db, project_id=project_id, pm_user_id=pm_user_id, now=now)
+
+
+def _align_system_task_assignee(task: GeTask, *, pm_user_id: str, now: str) -> bool:
+    if task.assignee_user_id == pm_user_id:
+        return False
+    task.assignee_user_id = pm_user_id
+    task.updated_at = now
+    return True
+
+
+def sync_system_lifecycle_task_assignees(
+    db: Session,
+    *,
+    project_id: str,
+    pm_user_id: str,
+    now: str,
+) -> bool:
+    """Align 启动项目 / 结项复盘 / 确认结项 assignees with project PM. Returns True if any row changed."""
+    changed = False
+    system_phases = (
         db.query(GePhase)
         .filter(GePhase.project_id == project_id, GePhase.is_system.is_(True))
-        .order_by(GePhase.sequence.desc())
-        .first()
+        .all()
     )
-    if end_phase is None:
-        return
-    sign_task = _find_system_end_sign_task(db, end_phase.id)
-    if sign_task is None:
-        return
-    if sign_task.assignee_user_id != pm_user_id:
-        sign_task.assignee_user_id = pm_user_id
-        sign_task.updated_at = now
+    for phase in system_phases:
+        start_task = _find_system_start_produce_task(db, phase.id)
+        if start_task is not None and _align_system_task_assignee(start_task, pm_user_id=pm_user_id, now=now):
+            changed = True
+        end_task = _find_system_end_produce_task(db, phase.id)
+        if end_task is not None and _align_system_task_assignee(end_task, pm_user_id=pm_user_id, now=now):
+            changed = True
+        sign_task = _find_system_end_sign_task(db, phase.id)
+        if sign_task is not None and _align_system_task_assignee(sign_task, pm_user_id=pm_user_id, now=now):
+            changed = True
+    return changed
 
 
 def _ensure_start_side(
@@ -279,6 +317,9 @@ def _ensure_start_side(
         task_count += 1
     elif legacy_complete:
         start_task.updated_at = now
+
+    assert start_task is not None
+    _align_system_task_assignee(start_task, pm_user_id=pm_user_id, now=now)
 
     if start_gi is None:
         start_gi_id = str(uuid.uuid4())
@@ -338,6 +379,9 @@ def _ensure_end_side(
         )
         db.add(end_task)
         task_count += 1
+
+    assert end_task is not None
+    _align_system_task_assignee(end_task, pm_user_id=pm_user_id, now=now)
 
     if end_gi is None:
         end_gi_id = str(uuid.uuid4())

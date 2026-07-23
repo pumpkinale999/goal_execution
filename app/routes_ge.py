@@ -12,6 +12,7 @@ from app.deps import get_current_user, get_db, require_service_user
 from app.models.ge import GeObjective, GeProgram, GeProject
 from app.services.ge_access import can_govern_project, can_read_project, filter_projects_for_user
 from app.services.ge_graph import build_project_graph, load_project_graph, now_iso, reconcile_project_completion
+from app.services.ge_system_tasks import sync_system_lifecycle_task_assignees
 from app.services.ge_graph_edit import (
     add_gate_item,
     add_phase,
@@ -219,6 +220,16 @@ def get_project_graph(
     if not can_read_project(db, project, user):
         raise HTTPException(status_code=403, detail={"detail": "not_project_participant"})
     if project.status == "active" and reconcile_project_completion(db, project_id):
+        db.commit()
+        project = load_project_graph(db, project_id)
+        if project is None:
+            raise HTTPException(status_code=404, detail={"detail": "project_not_found"})
+    if sync_system_lifecycle_task_assignees(
+        db,
+        project_id=project.id,
+        pm_user_id=project.pm_user_id,
+        now=now_iso(),
+    ):
         db.commit()
         project = load_project_graph(db, project_id)
         if project is None:
