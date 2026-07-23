@@ -316,6 +316,9 @@ def add_task(db: Session, project_id: str, phase_id: str, body: dict[str, Any], 
             updated_at=now,
         )
     )
+    from app.services.ge_project_members import ensure_member_for_assignee
+
+    ensure_member_for_assignee(db, project_id=project_id, assignee_user_id=assignee)
     project.updated_at = now
     db.commit()
     project_loaded = load_project_graph(db, project_id)
@@ -394,6 +397,9 @@ def patch_task(db: Session, task_id: str, body: dict[str, Any], user: AuthUser) 
         if is_system_start_or_end_produce_task(task) and assignee != project.pm_user_id:
             raise HTTPException(status_code=403, detail={"detail": "system_task_assignee_locked_to_pm"})
         task.assignee_user_id = assignee
+        from app.services.ge_project_members import ensure_member_for_assignee
+
+        ensure_member_for_assignee(db, project_id=project.id, assignee_user_id=assignee)
     if "phase_id" in body:
         new_phase_id = str(body.get("phase_id") or "").strip()
         if not new_phase_id:

@@ -238,6 +238,31 @@ class GeTaskGateItemPrerequisite(Base):
     gate_item_id: Mapped[str] = mapped_column(String, ForeignKey("ge_gate_items.id"), primary_key=True)
 
 
+class GeProjectRoleOption(Base):
+    __tablename__ = "ge_project_role_options"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    name: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    slug: Mapped[str | None] = mapped_column(Text, nullable=True, unique=True)
+    created_at: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class GeProjectMember(Base):
+    __tablename__ = "ge_project_members"
+    __table_args__ = (UniqueConstraint("project_id", "user_id"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    project_id: Mapped[str] = mapped_column(String, ForeignKey("ge_projects.id"), nullable=False)
+    user_id: Mapped[str] = mapped_column(String, nullable=False)
+    role_option_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("ge_project_role_options.id"),
+        nullable=False,
+    )
+    created_at: Mapped[str] = mapped_column(Text, nullable=False)
+    updated_at: Mapped[str] = mapped_column(Text, nullable=False)
+
+
 class GeAuditEvent(Base):
     __tablename__ = "ge_audit_events"
 

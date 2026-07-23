@@ -196,6 +196,14 @@ def create_project(db: Session, *, actor_user_id: str, body: dict[str, Any], com
     task_count += system_counts["task_count"]
     gate_item_count += system_counts["gate_item_count"]
 
+    from app.services.ge_project_members import (
+        ensure_members_for_project_assignees,
+        upsert_pm,
+    )
+
+    # Assignees first (member if missing); then force PM role.
+    ensure_members_for_project_assignees(db, project_id=project_id)
+    upsert_pm(db, project_id=project_id, pm_user_id=str(body["pm_user_id"]))
     db.flush()
     validate_project_graph_db(db, project_id)
     record_audit(

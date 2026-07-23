@@ -80,6 +80,8 @@ def patch_project(db: Session, project_id: str, user: AuthUser, body: dict[str, 
     if project.status not in ("draft", "active"):
         raise HTTPException(status_code=409, detail={"detail": "project_not_editable"})
     changed = False
+    old_pm_user_id = project.pm_user_id
+    pm_changed = False
     if body.get("name") is not None:
         name = str(body["name"]).strip()
         if not name:
@@ -90,6 +92,8 @@ def patch_project(db: Session, project_id: str, user: AuthUser, body: dict[str, 
         pm_user_id = str(body["pm_user_id"]).strip()
         if not pm_user_id:
             raise HTTPException(status_code=400, detail={"detail": "invalid_assignee"})
+        if pm_user_id != project.pm_user_id:
+            pm_changed = True
         project.pm_user_id = pm_user_id
         changed = True
     if body.get("program_id") is not None:
@@ -105,6 +109,15 @@ def patch_project(db: Session, project_id: str, user: AuthUser, body: dict[str, 
         raise HTTPException(status_code=400, detail={"detail": "no_changes"})
     now = now_iso()
     project.updated_at = now
+    if pm_changed:
+        from app.services.ge_project_members import replace_pm_on_change
+
+        replace_pm_on_change(
+            db,
+            project_id=project.id,
+            old_pm_user_id=old_pm_user_id,
+            new_pm_user_id=project.pm_user_id,
+        )
     sync_system_lifecycle_task_assignees(
         db,
         project_id=project.id,

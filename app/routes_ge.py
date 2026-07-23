@@ -73,6 +73,14 @@ from app.services.ge_people_summary import (
     get_program_people_summary,
     get_project_people_summary,
 )
+from app.services.ge_project_members import (
+    add_member,
+    create_role_option,
+    delete_member,
+    list_members,
+    list_role_options,
+    patch_member,
+)
 
 router = APIRouter(prefix="/ge", tags=["ge"])
 
@@ -641,6 +649,63 @@ def get_project_people_summary_route(
         user,
         include_completed=bool(include_completed),
     )
+
+
+@router.get("/project-role-options")
+def get_project_role_options_route(
+    db: Annotated[Session, Depends(get_db)],
+    _user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    return list_role_options(db)
+
+
+@router.post("/project-role-options", status_code=status.HTTP_201_CREATED)
+def post_project_role_option_route(
+    body: dict[str, Any],
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    return create_role_option(db, body, user=user)
+
+
+@router.get("/projects/{project_id}/members")
+def get_project_members_route(
+    project_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    return list_members(db, project_id, user)
+
+
+@router.post("/projects/{project_id}/members", status_code=status.HTTP_201_CREATED)
+def post_project_member_route(
+    project_id: str,
+    body: dict[str, Any],
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    return add_member(db, project_id, body, user)
+
+
+@router.patch("/projects/{project_id}/members/{user_id}")
+def patch_project_member_route(
+    project_id: str,
+    user_id: str,
+    body: dict[str, Any],
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    return patch_member(db, project_id, user_id, body, user)
+
+
+@router.delete("/projects/{project_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_project_member_route(
+    project_id: str,
+    user_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> None:
+    delete_member(db, project_id, user_id, user)
 
 
 @router.post("/objectives", status_code=status.HTTP_201_CREATED)

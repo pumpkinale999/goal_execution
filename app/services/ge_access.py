@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.auth import AuthUser
-from app.models.ge import GeProject, GeTask
+from app.models.ge import GeProject, GeProjectMember, GeTask
 from app.services.ge_subtree_governor import is_subtree_governor
 
 
@@ -15,6 +15,8 @@ def project_participant_user_ids(db: Session, project: GeProject) -> set[str]:
     for task in db.query(GeTask).filter(GeTask.project_id == project.id).all():
         if task.assignee_user_id:
             ids.add(task.assignee_user_id)
+    for member in db.query(GeProjectMember).filter(GeProjectMember.project_id == project.id).all():
+        ids.add(member.user_id)
     return ids
 
 

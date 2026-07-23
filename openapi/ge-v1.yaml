@@ -22,9 +22,10 @@ info:
     v1.18.0 (M29 · runtime ☑): period_* · lifecycle_status · primary_department_id · POST /ge/objectives/years · assess · planning_year readOnly response · see impl §4.2.0.4 · req v2.26.0
     v1.19.0 (M30/M31 · runtime ☑): people-summary · goal-portfolio · migrate-primary-objectives · DELETE department 409 department_has_primary_objectives · see impl §4.2.4 · §4.1.5 · req v2.27.0
     v1.20.0 (v2.28 · runtime ☑): Phase effective_planned_* · program_period on graph · phase_schedule_overlap · phase_schedule_outside_program · program_period_required · deviation extends Phase.planned_end · see req §4.8 · impl §4.3.2 · GE-T158
-    v1.21.0 (M32 · runtime ☑): ge_objectives/ge_programs/ge_projects sort_order · POST …/reorder · annual roots by planning_year DESC · see impl §4.2.0.5 · req v2.30.0 · GE-T162～T168
+    v1.22.0 (M36-A · runtime ☑): queues ready · as_governor · GE-T169～T171
+    v1.23.0 (M37 · runtime ☑): project-role-options · projects/{id}/members CRUD · ProjectMemberRow · see impl §4.2.5 · req v2.38.1
     Out of scope: skstudio BFF /api/v1/org|ge/* and POST /internal/ge/deviation-notify (see impl doc §4.0 · §5)
-  version: 1.22.0
+  version: 1.23.0
 servers:
   - url: /api/v1
     description: goal_execution service (JWT participant + service governance via skstudio BFF)
@@ -805,6 +806,162 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+  /ge/project-role-options:
+    get:
+      operationId: listProjectRoleOptions
+      summary: System-wide project role options (M37)
+      tags: [ge-projects]
+      responses:
+        '200':
+          description: Role options sorted by name
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectRoleOptionsResponse'
+    post:
+      operationId: createProjectRoleOption
+      summary: Create role option (service/reviewer only · JWT → 403 reviewer_required)
+      tags: [ge-projects]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                slug: { type: string, nullable: true }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectRoleOption'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          description: reviewer_required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        '409':
+          description: role_name_conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+  /ge/projects/{project_id}/members:
+    get:
+      operationId: listProjectMembers
+      summary: Project members roster (M37 · sorted by display_name)
+      tags: [ge-projects]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: Members
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectMembersResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      operationId: addProjectMember
+      summary: Add project member (can_govern_project)
+      tags: [ge-projects]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, role_option_id]
+              properties:
+                user_id: { type: string }
+                role_option_id: { type: string }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectMemberRow'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: member_already_exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+  /ge/projects/{project_id}/members/{user_id}:
+    patch:
+      operationId: patchProjectMember
+      summary: Change member primary role (can_govern_project)
+      tags: [ge-projects]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - name: user_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role_option_id]
+              properties:
+                role_option_id: { type: string }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectMemberRow'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: deleteProjectMember
+      summary: Remove member row (cannot remove current PM)
+      tags: [ge-projects]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - name: user_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '204':
+          description: Deleted
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: cannot_remove_pm
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
   /ge/projects/{project_id}/graph:
     get:
       operationId: getGeProjectGraph
@@ -1466,6 +1623,42 @@ components:
           items:
             $ref: '#/components/schemas/PeopleSummaryContributing'
         include_completed: { type: boolean }
+    ProjectRoleOption:
+      type: object
+      required: [id, name, created_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        slug: { type: string, nullable: true }
+        created_at: { type: string }
+    ProjectRoleOptionsResponse:
+      type: object
+      required: [role_options]
+      properties:
+        role_options:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectRoleOption'
+    ProjectMemberRow:
+      type: object
+      required: [user_id, display_name, role_option_id, role_name]
+      properties:
+        user_id: { type: string }
+        display_name:
+          type: string
+          description: Same helper as people-summary (often user id); FE maps via nameByGeId
+        role_option_id: { type: string }
+        role_name: { type: string }
+        role_slug: { type: string, nullable: true }
+    ProjectMembersResponse:
+      type: object
+      required: [members]
+      properties:
+        members:
+          type: array
+          description: Sorted ascending by display_name (empty names last)
+          items:
+            $ref: '#/components/schemas/ProjectMemberRow'
     GoalPortfolioPrimary:
       type: object
       properties:
