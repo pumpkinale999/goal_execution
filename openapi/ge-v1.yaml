@@ -24,8 +24,9 @@ info:
     v1.20.0 (v2.28 · runtime ☑): Phase effective_planned_* · program_period on graph · phase_schedule_overlap · phase_schedule_outside_program · program_period_required · deviation extends Phase.planned_end · see req §4.8 · impl §4.3.2 · GE-T158
     v1.22.0 (M36-A · runtime ☑): queues ready · as_governor · GE-T169～T171
     v1.23.0 (M37 · runtime ☑): project-role-options · projects/{id}/members CRUD · ProjectMemberRow · see impl §4.2.5 · req v2.38.1
+    v1.23.1 (M37 · PM roster role read-only): add/patch reject project_manager · cannot_change_pm_role · GE-T183～T185 · req v2.38.5
     Out of scope: skstudio BFF /api/v1/org|ge/* and POST /internal/ge/deviation-notify (see impl doc §4.0 · §5)
-  version: 1.23.0
+  version: 1.23.1
 servers:
   - url: /api/v1
     description: goal_execution service (JWT participant + service governance via skstudio BFF)
@@ -873,7 +874,7 @@ paths:
           $ref: '#/components/responses/NotFound'
     post:
       operationId: addProjectMember
-      summary: Add project member (can_govern_project)
+      summary: Add project member (can_govern_project · project_manager reserved)
       tags: [ge-projects]
       parameters:
         - $ref: '#/components/parameters/ProjectId'
@@ -901,7 +902,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: member_already_exists
+          description: member_already_exists | role_reserved_for_pm
           content:
             application/json:
               schema:
@@ -909,7 +910,7 @@ paths:
   /ge/projects/{project_id}/members/{user_id}:
     patch:
       operationId: patchProjectMember
-      summary: Change member primary role (can_govern_project)
+      summary: Change member primary role (can_govern_project · PM row / project_manager reserved)
       tags: [ge-projects]
       parameters:
         - $ref: '#/components/parameters/ProjectId'
@@ -939,6 +940,12 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          description: role_reserved_for_pm | cannot_change_pm_role
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
     delete:
       operationId: deleteProjectMember
       summary: Remove member row (cannot remove current PM)

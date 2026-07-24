@@ -40,6 +40,18 @@ def resolve_role_by_slug(db: Session, slug: str) -> GeProjectRoleOption:
     return role
 
 
+def _reject_manual_pm_role(role: GeProjectRoleOption) -> None:
+    """Manual add/patch must not assign project_manager (PM mirror only via upsert_pm)."""
+    if role.slug == SLUG_PROJECT_MANAGER:
+        raise HTTPException(status_code=409, detail={"detail": "role_reserved_for_pm"})
+
+
+def _reject_patch_pm_row(project: GeProject, user_id: str) -> None:
+    """Current PM roster row role is read-only; change PM via PATCH /projects."""
+    if user_id == project.pm_user_id:
+        raise HTTPException(status_code=409, detail={"detail": "cannot_change_pm_role"})
+
+
 def _member_row(member: GeProjectMember, role: GeProjectRoleOption) -> dict[str, Any]:
     return {
         "user_id": member.user_id,
@@ -119,6 +131,7 @@ def add_member(db: Session, project_id: str, body: dict[str, Any], user: AuthUse
     if not user_id or not role_option_id:
         raise HTTPException(status_code=400, detail={"detail": "invalid_request"})
     role = _role_or_404(db, role_option_id)
+    _reject_manual_pm_role(role)
     existing = (
         db.query(GeProjectMember)
         .filter(GeProjectMember.project_id == project_id, GeProjectMember.user_id == user_id)
@@ -150,10 +163,12 @@ def patch_member(
 ) -> dict[str, Any]:
     project = _project_or_404(db, project_id)
     require_govern_project(db, project, user)
+    _reject_patch_pm_row(project, user_id)
     role_option_id = str(body.get("role_option_id") or "").strip()
     if not role_option_id:
         raise HTTPException(status_code=400, detail={"detail": "invalid_request"})
     role = _role_or_404(db, role_option_id)
+    _reject_manual_pm_role(role)
     member = (
         db.query(GeProjectMember)
         .filter(GeProjectMember.project_id == project_id, GeProjectMember.user_id == user_id)

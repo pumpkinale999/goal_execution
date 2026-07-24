@@ -145,6 +145,60 @@ def test_ge_t181_cannot_delete_current_pm(client):
     assert resp.json()["detail"] == "cannot_remove_pm"
 
 
+def test_ge_t183_cannot_add_member_as_project_manager(client):
+    created = create_project(client, U_PM)
+    project_id = created["id"]
+    roles = client.get("/api/v1/ge/project-role-options", headers=jwt_headers(U_PM))
+    assert roles.status_code == 200
+    pm_role = next(r for r in roles.json()["role_options"] if r["slug"] == "project_manager")
+    resp = client.post(
+        f"/api/v1/ge/projects/{project_id}/members",
+        headers=jwt_headers(U_PM),
+        json={"user_id": U_MEMBER_ONLY, "role_option_id": pm_role["id"]},
+    )
+    assert resp.status_code == 409
+    assert resp.json()["detail"] == "role_reserved_for_pm"
+
+
+def test_ge_t184_cannot_patch_member_to_project_manager(client):
+    created = create_project(client, U_PM)
+    project_id = created["id"]
+    roles = client.get("/api/v1/ge/project-role-options", headers=jwt_headers(U_PM)).json()[
+        "role_options"
+    ]
+    member_role = next(r for r in roles if r["slug"] == "member")
+    pm_role = next(r for r in roles if r["slug"] == "project_manager")
+    add = client.post(
+        f"/api/v1/ge/projects/{project_id}/members",
+        headers=jwt_headers(U_PM),
+        json={"user_id": U_MEMBER_ONLY, "role_option_id": member_role["id"]},
+    )
+    assert add.status_code == 201, add.text
+    resp = client.patch(
+        f"/api/v1/ge/projects/{project_id}/members/{U_MEMBER_ONLY}",
+        headers=jwt_headers(U_PM),
+        json={"role_option_id": pm_role["id"]},
+    )
+    assert resp.status_code == 409
+    assert resp.json()["detail"] == "role_reserved_for_pm"
+
+
+def test_ge_t185_cannot_change_current_pm_role(client):
+    created = create_project(client, U_PM)
+    project_id = created["id"]
+    roles = client.get("/api/v1/ge/project-role-options", headers=jwt_headers(U_PM)).json()[
+        "role_options"
+    ]
+    member_role = next(r for r in roles if r["slug"] == "member")
+    resp = client.patch(
+        f"/api/v1/ge/projects/{project_id}/members/{U_PM}",
+        headers=jwt_headers(U_PM),
+        json={"role_option_id": member_role["id"]},
+    )
+    assert resp.status_code == 409
+    assert resp.json()["detail"] == "cannot_change_pm_role"
+
+
 def test_ge_t182_assignee_upserts_member_without_overwriting_role(client):
     program_id = ensure_formal_test_program(client)
     body = {
