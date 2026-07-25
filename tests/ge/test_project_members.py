@@ -17,6 +17,11 @@ from tests.ge.conftest import (
 
 U_MEMBER_ONLY = "u-member-only"
 U_NEW_ASSIGNEE = "u-new-assignee"
+U_SINGLETON_A = "u-singleton-a"
+U_SINGLETON_B = "u-singleton-b"
+U_SINGLETON_C = "u-singleton-c"
+U_MEMBER_2 = "u-member-2"
+U_MEMBER_3 = "u-member-3"
 
 
 def _members(client, project_id: str, user_id: str = U_PM) -> list[dict]:
@@ -33,6 +38,25 @@ def _member_by_user(members: list[dict], user_id: str) -> dict:
         if row["user_id"] == user_id:
             return row
     raise AssertionError(f"user {user_id} not in members: {members}")
+
+
+def _role(client, slug: str) -> dict:
+    roles = client.get("/api/v1/ge/project-role-options", headers=jwt_headers(U_PM)).json()[
+        "role_options"
+    ]
+    return next(r for r in roles if r["slug"] == slug)
+
+
+def _holders(members: list[dict], slug: str) -> list[str]:
+    return [m["user_id"] for m in members if m["role_slug"] == slug]
+
+
+def _add(client, project_id: str, user_id: str, slug: str):
+    return client.post(
+        f"/api/v1/ge/projects/{project_id}/members",
+        headers=jwt_headers(U_PM),
+        json={"user_id": user_id, "role_option_id": _role(client, slug)["id"]},
+    )
 
 
 def test_ge_t177_create_project_seeds_pm_as_project_manager(client):
@@ -93,6 +117,7 @@ def test_ge_t179_roster_only_member_can_read_graph(client):
     roles = client.get("/api/v1/ge/project-role-options", headers=jwt_headers(U_PM))
     assert roles.status_code == 200
     member_role = next(r for r in roles.json()["role_options"] if r["slug"] == "member")
+    assert member_role["name"] == "团队成员"
 
     add = client.post(
         f"/api/v1/ge/projects/{project_id}/members",
@@ -100,6 +125,7 @@ def test_ge_t179_roster_only_member_can_read_graph(client):
         json={"user_id": U_MEMBER_ONLY, "role_option_id": member_role["id"]},
     )
     assert add.status_code == 201, add.text
+    assert add.json()["role_name"] == "团队成员"
 
     ok = client.get(
         f"/api/v1/ge/projects/{project_id}/graph",
@@ -112,6 +138,26 @@ def test_ge_t179_roster_only_member_can_read_graph(client):
         headers=jwt_headers(U_STRANGER),
     )
     assert deny.status_code == 403
+
+
+def test_canonical_project_role_options_seeded(client):
+    """Migration 025: five system seeds; member display name is 团队成员."""
+    listed = client.get("/api/v1/ge/project-role-options", headers=jwt_headers(U_PM))
+    assert listed.status_code == 200
+    options = listed.json()["role_options"]
+    by_slug = {r["slug"]: r["name"] for r in options if r.get("slug")}
+    assert by_slug["project_manager"] == "项目经理"
+    assert by_slug["product_manager"] == "产品经理"
+    assert by_slug["technical_designer"] == "技术设计师"
+    assert by_slug["test_designer"] == "测试设计师"
+    assert by_slug["member"] == "团队成员"
+    assert {
+        "project_manager",
+        "product_manager",
+        "technical_designer",
+        "test_designer",
+        "member",
+    }.issubset(by_slug.keys())
 
 
 def test_ge_t180_jwt_cannot_create_role_option_service_can(client):
@@ -259,3 +305,101 @@ def test_members_sorted_by_display_name(client):
     members = _members(client, created["id"])
     names = [m["display_name"] for m in members]
     assert names == sorted(names, key=lambda n: (0, n.casefold()) if n.strip() else (1, ""))
+
+
+def test_ge_t186_patch_singleton_demotes_prior_holder(client):
+    project_id = create_project(client, U_PM)["id"]
+    assert _add(client, project_id, U_SINGLETON_A, "product_manager").status_code == 201
+    assert _add(client, project_id, U_SINGLETON_B, "member").status_code == 201
+    resp = client.patch(
+        f"/api/v1/ge/projects/{project_id}/members/{U_SINGLETON_B}",
+        headers=jwt_headers(U_PM),
+        json={"role_option_id": _role(client, "product_manager")["id"]},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json().get("detail") != "singleton_role_conflict"
+    members = _members(client, project_id)
+    assert _holders(members, "product_manager") == [U_SINGLETON_B]
+    assert _member_by_user(members, U_SINGLETON_A)["role_slug"] == "member"
+
+
+def test_ge_t187_post_singleton_demotes_prior_holder(client):
+    project_id = create_project(client, U_PM)["id"]
+    assert _add(client, project_id, U_SINGLETON_A, "technical_designer").status_code == 201
+    add = _add(client, project_id, U_SINGLETON_C, "technical_designer")
+    assert add.status_code == 201, add.text
+    members = _members(client, project_id)
+    assert _holders(members, "technical_designer") == [U_SINGLETON_C]
+    assert _member_by_user(members, U_SINGLETON_A)["role_slug"] == "member"
+
+
+def test_ge_t188_member_multi_and_singleton_idempotent(client):
+    project_id = create_project(client, U_PM)["id"]
+    assert _add(client, project_id, U_MEMBER_ONLY, "member").status_code == 201
+    assert _add(client, project_id, U_MEMBER_2, "member").status_code == 201
+    assert _add(client, project_id, U_MEMBER_3, "member").status_code == 201
+    members = _members(client, project_id)
+    member_ids = set(_holders(members, "member"))
+    assert {U_MEMBER_ONLY, U_MEMBER_2, U_MEMBER_3}.issubset(member_ids)
+
+    assert _add(client, project_id, U_SINGLETON_A, "test_designer").status_code == 201
+    again = client.patch(
+        f"/api/v1/ge/projects/{project_id}/members/{U_SINGLETON_A}",
+        headers=jwt_headers(U_PM),
+        json={"role_option_id": _role(client, "test_designer")["id"]},
+    )
+    assert again.status_code == 200, again.text
+    assert len(_holders(_members(client, project_id), "test_designer")) == 1
+
+    pm_patch = client.patch(
+        f"/api/v1/ge/projects/{project_id}/members/{U_PM}",
+        headers=jwt_headers(U_PM),
+        json={"role_option_id": _role(client, "member")["id"]},
+    )
+    assert pm_patch.status_code == 409
+    assert pm_patch.json()["detail"] == "cannot_change_pm_role"
+
+
+def test_ge_t189_cross_singleton_move(client):
+    project_id = create_project(client, U_PM)["id"]
+    assert _add(client, project_id, U_SINGLETON_A, "product_manager").status_code == 201
+    assert _add(client, project_id, U_SINGLETON_B, "technical_designer").status_code == 201
+    resp = client.patch(
+        f"/api/v1/ge/projects/{project_id}/members/{U_SINGLETON_A}",
+        headers=jwt_headers(U_PM),
+        json={"role_option_id": _role(client, "technical_designer")["id"]},
+    )
+    assert resp.status_code == 200, resp.text
+    members = _members(client, project_id)
+    assert _holders(members, "product_manager") == []
+    assert _holders(members, "technical_designer") == [U_SINGLETON_A]
+    assert _member_by_user(members, U_SINGLETON_B)["role_slug"] == "member"
+
+
+def test_ge_t190_singleton_indexes_exist_and_normal_patch_ok(client, ge_db):
+    import sqlite3
+
+    con = sqlite3.connect(ge_db)
+    names = {
+        row[0]
+        for row in con.execute(
+            "SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'uq_ge_members_singleton_%'"
+        )
+    }
+    con.close()
+    assert names == {
+        "uq_ge_members_singleton_product",
+        "uq_ge_members_singleton_tech",
+        "uq_ge_members_singleton_test",
+    }
+
+    project_id = create_project(client, U_PM)["id"]
+    assert _add(client, project_id, U_SINGLETON_A, "product_manager").status_code == 201
+    assert _add(client, project_id, U_SINGLETON_B, "member").status_code == 201
+    resp = client.patch(
+        f"/api/v1/ge/projects/{project_id}/members/{U_SINGLETON_B}",
+        headers=jwt_headers(U_PM),
+        json={"role_option_id": _role(client, "product_manager")["id"]},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json().get("detail") != "singleton_role_conflict"

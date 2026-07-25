@@ -17,6 +17,9 @@ from app.services.ge_graph import now_iso
 
 SLUG_PROJECT_MANAGER = "project_manager"
 SLUG_MEMBER = "member"
+SINGLETON_ROLE_SLUGS = frozenset(
+    {"product_manager", "technical_designer", "test_designer"}
+)
 
 
 def _project_or_404(db: Session, project_id: str) -> GeProject:
@@ -70,6 +73,32 @@ def _sort_member_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         return (0, name.casefold())
 
     return sorted(rows, key=sort_key)
+
+
+def _demote_other_singleton_holders(
+    db: Session,
+    *,
+    project_id: str,
+    role: GeProjectRoleOption,
+    keep_user_id: str,
+) -> None:
+    """If role is singleton: set other holders on this project to member."""
+    if role.slug not in SINGLETON_ROLE_SLUGS:
+        return
+    member_role = resolve_role_by_slug(db, SLUG_MEMBER)
+    now = now_iso()
+    others = (
+        db.query(GeProjectMember)
+        .filter(
+            GeProjectMember.project_id == project_id,
+            GeProjectMember.role_option_id == role.id,
+            GeProjectMember.user_id != keep_user_id,
+        )
+        .all()
+    )
+    for row in others:
+        row.role_option_id = member_role.id
+        row.updated_at = now
 
 
 def list_role_options(db: Session) -> dict[str, Any]:
@@ -132,26 +161,41 @@ def add_member(db: Session, project_id: str, body: dict[str, Any], user: AuthUse
         raise HTTPException(status_code=400, detail={"detail": "invalid_request"})
     role = _role_or_404(db, role_option_id)
     _reject_manual_pm_role(role)
-    existing = (
-        db.query(GeProjectMember)
-        .filter(GeProjectMember.project_id == project_id, GeProjectMember.user_id == user_id)
-        .first()
-    )
-    if existing is not None:
-        raise HTTPException(status_code=409, detail={"detail": "member_already_exists"})
-    now = now_iso()
-    member = GeProjectMember(
-        id=str(uuid.uuid4()),
-        project_id=project_id,
-        user_id=user_id,
-        role_option_id=role.id,
-        created_at=now,
-        updated_at=now,
-    )
-    db.add(member)
-    db.commit()
-    db.refresh(member)
-    return _member_row(member, role)
+
+    last_exc: IntegrityError | None = None
+    for _attempt in range(2):
+        try:
+            existing = (
+                db.query(GeProjectMember)
+                .filter(GeProjectMember.project_id == project_id, GeProjectMember.user_id == user_id)
+                .first()
+            )
+            if existing is not None:
+                raise HTTPException(status_code=409, detail={"detail": "member_already_exists"})
+            _demote_other_singleton_holders(
+                db, project_id=project_id, role=role, keep_user_id=user_id
+            )
+            db.flush()  # apply demote before insert so partial UNIQUE sees freed slot
+            now = now_iso()
+            member = GeProjectMember(
+                id=str(uuid.uuid4()),
+                project_id=project_id,
+                user_id=user_id,
+                role_option_id=role.id,
+                created_at=now,
+                updated_at=now,
+            )
+            db.add(member)
+            db.commit()
+            db.refresh(member)
+            return _member_row(member, role)
+        except HTTPException:
+            raise
+        except IntegrityError as exc:
+            db.rollback()
+            last_exc = exc
+            role = _role_or_404(db, role_option_id)
+    raise HTTPException(status_code=409, detail={"detail": "singleton_role_conflict"}) from last_exc
 
 
 def patch_member(
@@ -169,18 +213,33 @@ def patch_member(
         raise HTTPException(status_code=400, detail={"detail": "invalid_request"})
     role = _role_or_404(db, role_option_id)
     _reject_manual_pm_role(role)
-    member = (
-        db.query(GeProjectMember)
-        .filter(GeProjectMember.project_id == project_id, GeProjectMember.user_id == user_id)
-        .first()
-    )
-    if member is None:
-        raise HTTPException(status_code=404, detail={"detail": "member_not_found"})
-    member.role_option_id = role.id
-    member.updated_at = now_iso()
-    db.commit()
-    db.refresh(member)
-    return _member_row(member, role)
+
+    last_exc: IntegrityError | None = None
+    for _attempt in range(2):
+        try:
+            member = (
+                db.query(GeProjectMember)
+                .filter(GeProjectMember.project_id == project_id, GeProjectMember.user_id == user_id)
+                .first()
+            )
+            if member is None:
+                raise HTTPException(status_code=404, detail={"detail": "member_not_found"})
+            _demote_other_singleton_holders(
+                db, project_id=project_id, role=role, keep_user_id=user_id
+            )
+            db.flush()  # apply demote before target write so partial UNIQUE sees freed slot
+            member.role_option_id = role.id
+            member.updated_at = now_iso()
+            db.commit()
+            db.refresh(member)
+            return _member_row(member, role)
+        except HTTPException:
+            raise
+        except IntegrityError as exc:
+            db.rollback()
+            last_exc = exc
+            role = _role_or_404(db, role_option_id)
+    raise HTTPException(status_code=409, detail={"detail": "singleton_role_conflict"}) from last_exc
 
 
 def delete_member(db: Session, project_id: str, user_id: str, user: AuthUser) -> None:

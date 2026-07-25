@@ -25,8 +25,9 @@ info:
     v1.22.0 (M36-A · runtime ☑): queues ready · as_governor · GE-T169～T171
     v1.23.0 (M37 · runtime ☑): project-role-options · projects/{id}/members CRUD · ProjectMemberRow · see impl §4.2.5 · req v2.38.1
     v1.23.1 (M37 · PM roster role read-only): add/patch reject project_manager · cannot_change_pm_role · GE-T183～T185 · req v2.38.5
+    v1.23.2 (M37 singleton roles): product/tech/test designer ≤1 · demote prior holder to member · singleton_role_conflict · GE-T186～T190 · req v2.38.10
     Out of scope: skstudio BFF /api/v1/org|ge/* and POST /internal/ge/deviation-notify (see impl doc §4.0 · §5)
-  version: 1.23.1
+  version: 1.23.2
 servers:
   - url: /api/v1
     description: goal_execution service (JWT participant + service governance via skstudio BFF)
@@ -874,7 +875,7 @@ paths:
           $ref: '#/components/responses/NotFound'
     post:
       operationId: addProjectMember
-      summary: Add project member (can_govern_project · project_manager reserved)
+      summary: Add project member (can_govern_project · project_manager reserved · singleton demote)
       tags: [ge-projects]
       parameters:
         - $ref: '#/components/parameters/ProjectId'
@@ -902,7 +903,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: member_already_exists | role_reserved_for_pm
+          description: member_already_exists | role_reserved_for_pm | singleton_role_conflict
           content:
             application/json:
               schema:
@@ -910,7 +911,7 @@ paths:
   /ge/projects/{project_id}/members/{user_id}:
     patch:
       operationId: patchProjectMember
-      summary: Change member primary role (can_govern_project · PM row / project_manager reserved)
+      summary: Change member primary role (can_govern_project · PM reserved · singleton demote)
       tags: [ge-projects]
       parameters:
         - $ref: '#/components/parameters/ProjectId'
@@ -941,7 +942,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: role_reserved_for_pm | cannot_change_pm_role
+          description: role_reserved_for_pm | cannot_change_pm_role | singleton_role_conflict
           content:
             application/json:
               schema:
