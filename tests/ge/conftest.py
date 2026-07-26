@@ -134,7 +134,7 @@ def ensure_formal_test_program(
     year_resp = client.post(
         "/api/v1/ge/objectives/years",
         headers=service_headers(reviewer),
-        json={"planning_year": 2026},
+        json={"planning_year": 2026, "name": "2026 年度战略目标"},
     )
     assert year_resp.status_code == 201, year_resp.text
     company_id = year_resp.json()["id"]

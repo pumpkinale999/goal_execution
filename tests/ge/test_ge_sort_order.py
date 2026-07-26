@@ -19,7 +19,7 @@ def _annual_company(client, year: int = 2026) -> dict:
     resp = client.post(
         "/api/v1/ge/objectives/years",
         headers=service_headers("reviewer-1"),
-        json={"planning_year": year},
+        json={"planning_year": year, "name": f"{year} 年度战略目标"},
     )
     assert resp.status_code == 201, resp.text
     return resp.json()
@@ -157,7 +157,7 @@ def test_project_reorder(client):
 
 
 def test_copy_year_preserves_sort_order(client):
-    """GE-T166: copy_from_year preserves sub/program sort_order."""
+    """GE-T166: copy_from_objective_id preserves sub/program sort_order."""
     dept_id = _create_dept(client)
     source = _annual_company(client, 2026)
     sub_id = _create_sub(client, source["id"], "子线", dept_id)
@@ -172,7 +172,11 @@ def test_copy_year_preserves_sort_order(client):
     target = client.post(
         "/api/v1/ge/objectives/years",
         headers=service_headers("reviewer-1"),
-        json={"planning_year": 2027, "copy_from_year": 2026},
+        json={
+            "planning_year": 2027,
+            "name": "2027 年度战略目标",
+            "copy_from_objective_id": source["id"],
+        },
     ).json()
 
     listed = _find_company(client, target["id"])
@@ -222,3 +226,69 @@ def test_reorder_blocked_for_archived(client):
     )
     assert resp_archived.status_code == 403
     assert resp_archived.json()["detail"] == "strategic_locked"
+
+
+def test_reorder_company_roots_same_year_only(client):
+    """GE-T197: company root reorder swaps same-year siblings only."""
+    other_year = client.post(
+        "/api/v1/ge/objectives/years",
+        headers=service_headers("reviewer-1"),
+        json={"planning_year": 2025, "name": "2025 根"},
+    ).json()
+    r1 = client.post(
+        "/api/v1/ge/objectives/years",
+        headers=service_headers("reviewer-1"),
+        json={"planning_year": 2026, "name": "R1"},
+    ).json()
+    r2 = client.post(
+        "/api/v1/ge/objectives/years",
+        headers=service_headers("reviewer-1"),
+        json={"planning_year": 2026, "name": "R2"},
+    ).json()
+
+    before = client.get("/api/v1/ge/objectives", headers=jwt_headers("u-1")).json()
+    annual = [item for item in before if item.get("level") == "company" and not item.get("is_default")]
+    years_before = [item["planning_year"] for item in annual]
+    assert years_before == sorted(years_before, reverse=True)
+    same_year_before = [item["id"] for item in annual if item["planning_year"] == 2026]
+    assert same_year_before == [r1["id"], r2["id"]]
+
+    resp = client.post(
+        f"/api/v1/ge/objectives/{r2['id']}/reorder",
+        headers=service_headers("reviewer-1"),
+        json={"direction": "up"},
+    )
+    assert resp.status_code == 200, resp.text
+
+    after = client.get("/api/v1/ge/objectives", headers=jwt_headers("u-1")).json()
+    annual_after = [
+        item for item in after if item.get("level") == "company" and not item.get("is_default")
+    ]
+    same_year_after = [item["id"] for item in annual_after if item["planning_year"] == 2026]
+    assert same_year_after == [r2["id"], r1["id"]]
+    assert annual_after[0]["id"] == other_year["id"] or 2025 in [
+        item["planning_year"] for item in annual_after
+    ]
+    other_ids_before = [item["id"] for item in annual if item["planning_year"] != 2026]
+    other_ids_after = [item["id"] for item in annual_after if item["planning_year"] != 2026]
+    assert other_ids_before == other_ids_after
+
+
+def test_reorder_archived_company_root_blocked(client):
+    """GE-T198: archived company root cannot reorder."""
+    from app.db import session_scope
+    from app.models.ge import GeObjective
+
+    root = _annual_company(client, 2027)
+    with session_scope() as db:
+        obj = db.get(GeObjective, root["id"])
+        assert obj is not None
+        obj.lifecycle_status = "archived"
+        db.commit()
+    resp = client.post(
+        f"/api/v1/ge/objectives/{root['id']}/reorder",
+        headers=service_headers("reviewer-1"),
+        json={"direction": "down"},
+    )
+    assert resp.status_code == 403
+    assert resp.json()["detail"] == "strategic_locked"

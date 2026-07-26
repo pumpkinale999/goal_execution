@@ -26,7 +26,7 @@ def _annual_company(client, year: int = 2026) -> dict:
     resp = client.post(
         "/api/v1/ge/objectives/years",
         headers=service_headers("reviewer-1"),
-        json={"planning_year": year},
+        json={"planning_year": year, "name": f"{year} 年度战略目标"},
     )
     assert resp.status_code == 201, resp.text
     return resp.json()
@@ -362,7 +362,11 @@ def test_create_year_does_not_copy_default_chain(client):
     second = client.post(
         "/api/v1/ge/objectives/years",
         headers=service_headers("reviewer-1"),
-        json={"planning_year": 2031, "copy_from_year": 2030},
+        json={
+            "planning_year": 2031,
+            "name": "2031 年度战略目标",
+            "copy_from_objective_id": first["id"],
+        },
     )
     assert second.status_code == 201, second.text
     tree = client.get("/api/v1/ge/objectives", headers=jwt_headers("u-1")).json()

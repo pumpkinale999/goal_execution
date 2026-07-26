@@ -26,8 +26,9 @@ info:
     v1.23.0 (M37 · runtime ☑): project-role-options · projects/{id}/members CRUD · ProjectMemberRow · see impl §4.2.5 · req v2.38.1
     v1.23.1 (M37 · PM roster role read-only): add/patch reject project_manager · cannot_change_pm_role · GE-T183～T185 · req v2.38.5
     v1.23.2 (M37 singleton roles): product/tech/test designer ≤1 · demote prior holder to member · singleton_role_conflict · GE-T186～T190 · req v2.38.10
+    v1.24.0 (M38 · GA): POST /ge/objectives/years requires name · copy_from_objective_id · multiple company roots per year · see platform-docs M38 iter · req v2.38.22
     Out of scope: skstudio BFF /api/v1/org|ge/* and POST /internal/ge/deviation-notify (see impl doc §4.0 · §5)
-  version: 1.23.2
+  version: 1.24.0
 servers:
   - url: /api/v1
     description: goal_execution service (JWT participant + service governance via skstudio BFF)
@@ -350,7 +351,7 @@ paths:
   /ge/objectives/years:
     post:
       operationId: createGeObjectiveYear
-      summary: Create annual business objective tree (M29 · reviewer · service token via BFF)
+      summary: Create top-level strategic objective tree for a planning year (M29 · M38 · reviewer · service token via BFF)
       tags: [ge-objectives]
       requestBody:
         required: true
@@ -360,13 +361,13 @@ paths:
               $ref: '#/components/schemas/CreateObjectiveYearRequest'
       responses:
         '201':
-          description: Created annual company objective subtree; b1 period synced in same transaction
+          description: Created company objective (top-level); optional subtree copy from copy_from_objective_id
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ObjectiveNode'
         '400':
-          description: validation · duplicate active year
+          description: validation · name_required · duplicate_annual_name · annual_root_limit_exceeded · copy_from_year_deprecated · copy_source_invalid
           content:
             application/json:
               schema:
@@ -1573,20 +1574,32 @@ components:
         period_granularity:
           $ref: '#/components/schemas/PeriodGranularity'
           description: Sub-objective patch · may be year, month, or quarter
+    CreateObjectiveYearRequest:
       type: object
-      required: [planning_year]
+      required: [planning_year, name]
       properties:
         planning_year:
           type: integer
           minimum: 2000
           maximum: 2100
-          description: Calendar year; creates is_default=false company tree; syncs b1 period in same transaction
+          description: Calendar year; creates is_default=false company top-level tree (M38 · multiple per year allowed)
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Required display name (trim; unique among formal company roots in the same planning_year) (M38)
+        copy_from_objective_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Optional source top-level company objective whose subtree is copied (M38)
         copy_from_year:
           type: integer
           minimum: 2000
           maximum: 2100
           nullable: true
-          description: Optional copy structure from prior annual tree; never copies default chain b1/b2/b3
+          deprecated: true
+          description: Deprecated (M38); prefer copy_from_objective_id; ambiguous when source year has multiple roots
     StrategicAssessRequest:
       type: object
       required: [outcome]

@@ -200,6 +200,20 @@ def patch_objective(db: Session, objective_id: str, body: dict[str, Any]) -> dic
         name = str(body["name"]).strip()
         if not name:
             raise HTTPException(status_code=400, detail={"detail": "invalid_name"})
+        if (
+            obj.level == "company"
+            and not obj.is_default
+            and obj.period_start
+            and len(obj.period_start) >= 4
+        ):
+            try:
+                year = int(obj.period_start[:4])
+            except ValueError:
+                year = None
+            if year is not None:
+                if len(name) > 200:
+                    raise HTTPException(status_code=400, detail={"detail": "name_invalid"})
+                _assert_annual_name_unique(db, year=year, name=name, exclude_id=obj.id)
         obj.name = name
     if "owner_user_id" in body:
         obj.owner_user_id = body.get("owner_user_id")
@@ -294,40 +308,79 @@ def patch_program(db: Session, program_id: str, body: dict[str, Any]) -> dict[st
     return program_out(program, db)
 
 
+def _normalize_annual_name(raw: Any) -> str:
+    name = str(raw or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail={"detail": "name_required"})
+    if len(name) > 200:
+        raise HTTPException(status_code=400, detail={"detail": "name_invalid"})
+    return name
+
+
+def _formal_company_roots_for_year(db: Session, year: int) -> list[GeObjective]:
+    start, _ = year_bounds(year)
+    return (
+        db.query(GeObjective)
+        .filter(
+            GeObjective.level == "company",
+            GeObjective.is_default == 0,
+            GeObjective.period_start == start,
+        )
+        .all()
+    )
+
+
+def _assert_annual_name_unique(
+    db: Session, *, year: int, name: str, exclude_id: str | None = None
+) -> None:
+    for root in _formal_company_roots_for_year(db, year):
+        if exclude_id and root.id == exclude_id:
+            continue
+        if (root.name or "") == name:
+            raise HTTPException(status_code=400, detail={"detail": "duplicate_annual_name"})
+
+
 def create_objective_year(db: Session, body: dict[str, Any], *, actor_user_id: str) -> dict[str, Any]:
     planning_year = body.get("planning_year")
     if planning_year is None:
         raise HTTPException(status_code=400, detail={"detail": "invalid_request"})
     year = int(planning_year)
-    copy_from = body.get("copy_from_year")
+    if body.get("copy_from_year") is not None:
+        raise HTTPException(status_code=400, detail={"detail": "copy_from_year_deprecated"})
+    name = _normalize_annual_name(body.get("name"))
     start, end = year_bounds(year)
 
-    if _active_annual_for_year(db, year) is not None:
-        raise HTTPException(status_code=400, detail={"detail": "duplicate_active_year"})
+    existing = _formal_company_roots_for_year(db, year)
+    if len(existing) >= 10:
+        raise HTTPException(status_code=400, detail={"detail": "annual_root_limit_exceeded"})
+    _assert_annual_name_unique(db, year=year, name=name)
 
+    copy_from_id = body.get("copy_from_objective_id")
     now = now_iso()
 
     company = GeObjective(
         id=str(uuid.uuid4()),
-        name=f"{year} 年度战略目标",
+        name=name,
         level="company",
         parent_id=None,
-        owner_user_id=body.get("owner_user_id"),
+        owner_user_id=str(actor_user_id),
         is_default=0,
         period_granularity="year",
         period_start=start,
         period_end=end,
         lifecycle_status=LIFECYCLE_ACTIVE,
         primary_department_needs_confirmation=0,
-        sort_order=next_objective_sort_order(db, None),
+        sort_order=(
+            max((root.sort_order for root in existing), default=0) + 10 if existing else 10
+        ),
         created_at=now,
         updated_at=now,
     )
     db.add(company)
     db.flush()
 
-    if copy_from is not None:
-        _copy_year_structure(db, company, int(copy_from), now=now)
+    if copy_from_id is not None:
+        _copy_year_structure_from_objective(db, company, str(copy_from_id), now=now)
 
     if body.get("include_sample_structure"):
         _append_sample_structure(db, company, actor_user_id=actor_user_id, now=now)
@@ -340,7 +393,8 @@ def create_objective_year(db: Session, body: dict[str, Any], *, actor_user_id: s
         action="create_objective_year",
         payload={
             "planning_year": year,
-            "copy_from_year": copy_from,
+            "name": name,
+            "copy_from_objective_id": copy_from_id,
             "include_sample_structure": bool(body.get("include_sample_structure")),
         },
     )
@@ -416,39 +470,20 @@ def _append_sample_structure(
     )
 
 
-def _active_annual_for_year(db: Session, year: int) -> GeObjective | None:
-    start, _ = year_bounds(year)
-    return (
-        db.query(GeObjective)
-        .filter(
-            GeObjective.level == "company",
-            GeObjective.is_default == 0,
-            GeObjective.lifecycle_status == LIFECYCLE_ACTIVE,
-            GeObjective.period_start == start,
-        )
-        .first()
-    )
-
-
-def _copy_year_structure(
+def _copy_year_structure_from_objective(
     db: Session,
     target_company: GeObjective,
-    source_year: int,
+    source_objective_id: str,
     *,
     now: str,
 ) -> None:
-    src_start, _ = year_bounds(source_year)
-    source = (
-        db.query(GeObjective)
-        .filter(
-            GeObjective.level == "company",
-            GeObjective.is_default == 0,
-            GeObjective.period_start == src_start,
-        )
-        .first()
-    )
-    if source is None:
-        return
+    source = db.get(GeObjective, source_objective_id)
+    if (
+        source is None
+        or source.level != "company"
+        or bool(source.is_default)
+    ):
+        raise HTTPException(status_code=400, detail={"detail": "copy_source_invalid"})
     subs = sibling_objectives(db, source.id)
     for sub in subs:
         if sub.is_default:

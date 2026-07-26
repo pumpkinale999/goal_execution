@@ -9,7 +9,7 @@ def _annual_company(client, year: int = 2026) -> dict:
     resp = client.post(
         "/api/v1/ge/objectives/years",
         headers=service_headers("reviewer-1"),
-        json={"planning_year": year},
+        json={"planning_year": year, "name": f"{year} 年度战略目标"},
     )
     assert resp.status_code == 201, resp.text
     return resp.json()

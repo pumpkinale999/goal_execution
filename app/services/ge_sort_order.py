@@ -34,6 +34,22 @@ def sibling_objectives(db: Session, parent_id: str | None) -> list[GeObjective]:
     return sorted(query.all(), key=_objective_sort_key)
 
 
+def sibling_company_roots_same_year(db: Session, obj: GeObjective) -> list[GeObjective]:
+    """Formal company roots that share obj's planning year (M38 reorder siblings)."""
+    year_prefix = (obj.period_start or "")[:4]
+    roots = (
+        db.query(GeObjective)
+        .filter(
+            GeObjective.parent_id.is_(None),
+            GeObjective.level == "company",
+            GeObjective.is_default == 0,
+        )
+        .all()
+    )
+    same_year = [root for root in roots if (root.period_start or "")[:4] == year_prefix]
+    return sorted(same_year, key=_objective_sort_key)
+
+
 def sibling_programs(db: Session, objective_id: str) -> list[GeProgram]:
     programs = db.query(GeProgram).filter(GeProgram.objective_id == objective_id).all()
     return sorted(programs, key=_program_sort_key)
@@ -99,7 +115,10 @@ def reorder_objective(db: Session, objective_id: str, direction: ReorderDirectio
     if obj is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"detail": "not_found"})
     _assert_objective_reorderable(obj)
-    siblings = sibling_objectives(db, obj.parent_id)
+    if obj.level == "company" and not obj.is_default and obj.parent_id is None:
+        siblings = sibling_company_roots_same_year(db, obj)
+    else:
+        siblings = sibling_objectives(db, obj.parent_id)
     index = next((i for i, item in enumerate(siblings) if item.id == objective_id), -1)
     if index < 0:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"detail": "not_found"})
@@ -156,12 +175,12 @@ def reorder_project(db: Session, project_id: str, direction: ReorderDirection) -
     return project
 
 
-def annual_root_sort_key(obj: GeObjective) -> tuple[int, int, str]:
-    """Annual company roots: year DESC."""
+def annual_root_sort_key(obj: GeObjective) -> tuple[int, int, int, str]:
+    """Annual company roots: year DESC, then sort_order ASC, name ASC (M38)."""
     year = 0
     if obj.period_start and len(obj.period_start) >= 4:
         try:
             year = int(obj.period_start[:4])
         except ValueError:
             year = 0
-    return (0, -year, obj.name)
+    return (-year, obj.sort_order or 0, 0, obj.name or "")
