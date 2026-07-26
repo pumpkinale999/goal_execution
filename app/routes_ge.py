@@ -81,6 +81,7 @@ from app.services.ge_project_members import (
     list_role_options,
     patch_member,
 )
+from app.services.ge_project_access import build_project_access_for_user
 
 router = APIRouter(prefix="/ge", tags=["ge"])
 
@@ -181,6 +182,20 @@ def list_projects(
         }
         for p in visible
     ]
+
+
+@router.get("/me/project-access")
+def my_project_access(
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    """K27.6 · batch access table for the JWT caller (BFF X-KB-Project-Access)."""
+    if user.auth_method != "jwt":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"detail": "jwt_required"},
+        )
+    return build_project_access_for_user(db, user)
 
 
 @router.post("/projects", status_code=status.HTTP_201_CREATED)
