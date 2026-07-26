@@ -24,6 +24,7 @@ from app.services.ge_sort_order import (
     sibling_objectives,
     sibling_programs,
 )
+from app.services.ge_strategic_lifecycle import invalidate_lifecycle_refresh
 from app.services.ge_strategic_period import (
     LIFECYCLE_ACTIVE,
     LIFECYCLE_ARCHIVED,
@@ -184,6 +185,7 @@ def create_objective(db: Session, body: dict[str, Any]) -> dict[str, Any]:
     db.add(obj)
     db.commit()
     db.refresh(obj)
+    invalidate_lifecycle_refresh()
     return objective_out(obj)
 
 
@@ -213,6 +215,7 @@ def patch_objective(db: Session, objective_id: str, body: dict[str, Any]) -> dic
     obj.updated_at = now_iso()
     db.commit()
     db.refresh(obj)
+    invalidate_lifecycle_refresh()
     return objective_out(obj)
 
 
@@ -250,6 +253,7 @@ def create_program(db: Session, body: dict[str, Any]) -> dict[str, Any]:
     db.add(program)
     db.commit()
     db.refresh(program)
+    invalidate_lifecycle_refresh()
     return program_out(program, db)
 
 
@@ -286,6 +290,7 @@ def patch_program(db: Session, program_id: str, body: dict[str, Any]) -> dict[st
     program.updated_at = now_iso()
     db.commit()
     db.refresh(program)
+    invalidate_lifecycle_refresh()
     return program_out(program, db)
 
 
@@ -341,6 +346,7 @@ def create_objective_year(db: Session, body: dict[str, Any], *, actor_user_id: s
     )
     db.commit()
     db.refresh(company)
+    invalidate_lifecycle_refresh()
     return objective_out(company)
 
 
@@ -518,6 +524,7 @@ def assess_objective(
     )
     db.commit()
     db.refresh(obj)
+    invalidate_lifecycle_refresh()
     return objective_out(obj)
 
 
@@ -550,6 +557,7 @@ def assess_program(
     )
     db.commit()
     db.refresh(program)
+    invalidate_lifecycle_refresh()
     return program_out(program, db)
 
 
@@ -565,6 +573,7 @@ def delete_objective(db: Session, objective_id: str) -> None:
         raise HTTPException(status_code=409, detail={"detail": "objective_not_empty"})
     db.delete(obj)
     db.commit()
+    invalidate_lifecycle_refresh()
 
 
 def delete_program(db: Session, program_id: str) -> None:
@@ -580,6 +589,7 @@ def delete_program(db: Session, program_id: str) -> None:
         raise HTTPException(status_code=409, detail={"detail": "program_not_empty"})
     db.delete(program)
     db.commit()
+    invalidate_lifecycle_refresh()
 
 
 def strategic_fields_out(entity: GeObjective | GeProgram) -> dict[str, Any]:

@@ -208,6 +208,9 @@ def reconcile_project_completion(db: Session, project_id: str) -> bool:
         end_phase.updated_at = now
     project.status = "completed"
     project.updated_at = now
+    from app.services.ge_strategic_lifecycle import invalidate_lifecycle_refresh
+
+    invalidate_lifecycle_refresh()
     return True
 
 
@@ -229,6 +232,9 @@ def apply_phase_transition(db: Session, project: GeProject, opened_phase: GePhas
     if end_phase is not None and opened_phase.id == end_phase.id:
         project.status = "completed"
         project.updated_at = now_iso()
+        from app.services.ge_strategic_lifecycle import invalidate_lifecycle_refresh
+
+        invalidate_lifecycle_refresh()
         return {"events": events}
 
     next_phase = (

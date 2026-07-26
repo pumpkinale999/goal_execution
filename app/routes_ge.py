@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, attributes
 
 from app.auth import AuthUser
 from app.deps import get_current_user, get_db, require_service_user
@@ -54,15 +54,17 @@ from app.services.ge_strategic import (
     patch_program,
     program_out,
 )
-from app.services.ge_strategic_lifecycle import refresh_lifecycle_batch, refresh_lifecycle_on_read
+from app.services.ge_strategic_lifecycle import (
+    refresh_lifecycle_batch,
+    refresh_lifecycle_entities,
+    refresh_lifecycle_on_read,
+)
 from app.schemas.org import ReorderRequest
 from app.services.ge_sort_order import (
     annual_root_sort_key,
     reorder_objective,
     reorder_program,
     reorder_project,
-    sibling_objectives,
-    sibling_programs,
     sibling_projects,
 )
 from app.services.ge_project_create import create_project
@@ -91,8 +93,29 @@ def list_objectives(
     db: Annotated[Session, Depends(get_db)],
     _user: Annotated[AuthUser, Depends(get_current_user)],
 ) -> list[dict[str, Any]]:
-    refresh_lifecycle_batch(db)
-    db.query(GeObjective).options(joinedload(GeObjective.programs)).all()
+    # GE-PERF.1: one-shot load + in-memory tree (no per-node sibling_* queries)
+    all_objectives = db.query(GeObjective).all()
+    all_programs = db.query(GeProgram).all()
+    refresh_lifecycle_entities(db, all_objectives, all_programs)
+
+    obj_by_id = {obj.id: obj for obj in all_objectives}
+    # Attach without lazy-load (accessing .objective would SELECT)
+    for program in all_programs:
+        attributes.set_committed_value(
+            program, "objective", obj_by_id.get(program.objective_id)
+        )
+
+    children_by_parent: dict[str | None, list[GeObjective]] = {}
+    for obj in all_objectives:
+        children_by_parent.setdefault(obj.parent_id, []).append(obj)
+    for siblings in children_by_parent.values():
+        siblings.sort(key=lambda o: (o.sort_order, o.name))
+
+    programs_by_objective: dict[str, list[GeProgram]] = {}
+    for program in all_programs:
+        programs_by_objective.setdefault(program.objective_id, []).append(program)
+    for programs in programs_by_objective.values():
+        programs.sort(key=lambda p: (p.sort_order, p.name))
 
     def program_meta(program: GeProgram) -> dict[str, Any]:
         refresh_lifecycle_on_read(db, program)
@@ -100,21 +123,22 @@ def list_objectives(
 
     def build_node(obj: GeObjective) -> dict[str, Any]:
         refresh_lifecycle_on_read(db, obj)
-        children = sibling_objectives(db, obj.id)
         programs = (
             []
             if obj.level == "company"
-            else [program_meta(p) for p in sibling_programs(db, obj.id)]
+            else [program_meta(p) for p in programs_by_objective.get(obj.id, [])]
         )
         return {
             **objective_out(obj),
             "programs": programs,
-            "children": [build_node(child) for child in children],
+            "children": [build_node(child) for child in children_by_parent.get(obj.id, [])],
         }
 
-    roots = sorted(sibling_objectives(db, None), key=annual_root_sort_key)
+    roots = sorted(children_by_parent.get(None, []), key=annual_root_sort_key)
+    # Build before commit — expire_on_commit would otherwise re-SELECT every row
+    tree = [build_node(obj) for obj in roots]
     db.commit()
-    return [build_node(obj) for obj in roots]
+    return tree
 
 
 @router.get("/programs")

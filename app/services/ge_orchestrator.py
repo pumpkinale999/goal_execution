@@ -31,6 +31,7 @@ from app.services.ge_graph import (
 from app.services.ge_system_tasks import sync_system_lifecycle_task_assignees
 from app.services.ge_subtree_governor import is_subtree_governor
 from app.services.ge_sort_order import next_project_sort_order
+from app.services.ge_strategic_lifecycle import invalidate_lifecycle_refresh
 from app.services.ge_ws_callback import dispatch_deviation_personal_assistant
 
 
@@ -59,6 +60,7 @@ def soft_delete_project(db: Session, project_id: str, user: AuthUser) -> None:
     project.deleted_at = now_iso()
     project.updated_at = now_iso()
     db.commit()
+    invalidate_lifecycle_refresh()
 
 
 def _can_act_as_task_assignee(db: Session, project: GeProject, task: GeTask, user: AuthUser) -> bool:

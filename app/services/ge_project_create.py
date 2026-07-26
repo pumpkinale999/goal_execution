@@ -25,6 +25,7 @@ from app.services.ge_graph_validate import validate_phases_body, validate_projec
 from app.services.ge_schedule_validate import parse_plan_date, parse_required_plan_date, validate_gate_item_due_in_phase, validate_phase_window
 from app.services.ge_subtree_governor import is_subtree_governor
 from app.services.ge_sort_order import next_project_sort_order
+from app.services.ge_strategic_lifecycle import invalidate_lifecycle_refresh
 
 
 def _validate_create_body(body: dict[str, Any]) -> None:
@@ -221,6 +222,7 @@ def create_project(db: Session, *, actor_user_id: str, body: dict[str, Any], com
         db.commit()
     else:
         db.flush()
+    invalidate_lifecycle_refresh()
     return {
         "id": project_id,
         "name": project.name,
