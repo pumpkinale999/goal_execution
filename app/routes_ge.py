@@ -68,7 +68,7 @@ from app.services.ge_sort_order import (
     sibling_projects,
 )
 from app.services.ge_project_create import create_project
-from app.services.ge_queues import build_queues
+from app.services.ge_queues import build_project_queue_counts, build_queues
 from app.services.ge_m12_read import get_gate_item_context, get_task_context, list_audit_events
 from app.services.ge_people_summary import (
     get_objective_people_summary,
@@ -185,13 +185,23 @@ def get_program(
 def list_projects(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[AuthUser, Depends(get_current_user)],
+    program_id: str | None = Query(default=None),
+    program_ids: Annotated[list[str] | None, Query()] = None,
 ) -> list[dict[str, Any]]:
-    projects = (
-        db.query(GeProject)
-        .filter(GeProject.deleted_at.is_(None))
-        .order_by(GeProject.program_id, GeProject.sort_order, GeProject.name)
-        .all()
-    )
+    """List projects; optional ``program_ids`` (explode) / ``program_id`` (GE-PERF2.2)."""
+    filter_ids: list[str] = []
+    if program_ids is not None:
+        filter_ids.extend(pid for pid in program_ids if pid)
+    if program_id:
+        filter_ids.append(program_id)
+    # Explicit empty program_ids (and no program_id) → [] not full list (C14 / §3.3.1)
+    if program_ids is not None and not filter_ids:
+        return []
+
+    q = db.query(GeProject).filter(GeProject.deleted_at.is_(None))
+    if filter_ids:
+        q = q.filter(GeProject.program_id.in_(list(dict.fromkeys(filter_ids))))
+    projects = q.order_by(GeProject.program_id, GeProject.sort_order, GeProject.name).all()
     visible = filter_projects_for_user(db, projects, user)
     return [
         {
@@ -581,6 +591,15 @@ def get_my_queues(
     user: Annotated[AuthUser, Depends(get_current_user)],
 ) -> dict[str, Any]:
     return build_queues(db, user.user_id)
+
+
+@router.get("/me/project-queue-counts")
+def get_my_project_queue_counts(
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    """GE-PERF2.1 · tree badge counts (no queue row arrays)."""
+    return build_project_queue_counts(db, user.user_id)
 
 
 @router.get("/audit-events")

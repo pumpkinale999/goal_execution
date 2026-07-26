@@ -371,6 +371,9 @@ def open_deviation(
         payload={"deviation_id": dev.id},
     )
     db.commit()
+    from app.services.ge_queues import invalidate_project_queue_counts
+
+    invalidate_project_queue_counts()
 
     return write_operation_response(
         db,
@@ -442,6 +445,9 @@ def activate_deviation(
         payload={"reason": reason, "remediation_due": dev.remediation_due},
     )
     db.commit()
+    from app.services.ge_queues import invalidate_project_queue_counts
+
+    invalidate_project_queue_counts()
 
     recipients = notification_recipients(
         db,
@@ -530,6 +536,9 @@ def extend_deviation(
         payload={"revision": new_revision, "extend_reason": extend_reason},
     )
     db.commit()
+    from app.services.ge_queues import invalidate_project_queue_counts
+
+    invalidate_project_queue_counts()
 
     include_chain = new_revision >= 2
     recipients = notification_recipients(
@@ -629,6 +638,9 @@ def cancel_deviation(
         },
     )
     db.commit()
+    from app.services.ge_queues import invalidate_project_queue_counts
+
+    invalidate_project_queue_counts()
 
     return write_operation_response(
         db,

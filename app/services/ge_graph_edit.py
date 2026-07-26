@@ -421,6 +421,9 @@ def patch_task(db: Session, task_id: str, body: dict[str, Any], user: AuthUser) 
     task.updated_at = now
     project.updated_at = now
     db.commit()
+    from app.services.ge_queues import invalidate_project_queue_counts
+
+    invalidate_project_queue_counts()
     project_loaded = load_project_graph(db, project.id)
     assert project_loaded is not None
     return build_editable_project_graph(db, project_loaded, user)
@@ -657,6 +660,9 @@ def patch_phase(db: Session, phase_id: str, body: dict[str, Any], user: AuthUser
     phase.updated_at = now
     project.updated_at = now
     db.commit()
+    from app.services.ge_queues import invalidate_project_queue_counts
+
+    invalidate_project_queue_counts()
     project_loaded = load_project_graph(db, project.id)
     assert project_loaded is not None
     return build_editable_project_graph(db, project_loaded, user)

@@ -1,7 +1,12 @@
-"""Execution queues (§4.4 · M23 actionable_tasks · M36 ready / governor)."""
+"""Execution queues (§4.4 · M23 actionable_tasks · M36 ready / governor).
+
+GE-PERF2.1: ``build_project_queue_counts`` aggregates tree badge counts with a
+process-local per-user TTL (≤60s); writers call ``invalidate_project_queue_counts``.
+"""
 
 from __future__ import annotations
 
+import time
 from datetime import date
 from typing import Any
 
@@ -266,3 +271,52 @@ def build_queues(db: Session, user_id: str) -> dict:
         "ready_tasks": actionable_tasks,
         "deviation_actions": deviation_actions,
     }
+
+
+# GE-PERF2.1 · C6 — process-local TTL ≤60s, keyed by user_id
+PROJECT_QUEUE_COUNTS_TTL_SECONDS = 60.0
+_queue_counts_cache: dict[str, tuple[float, dict[str, int]]] = {}
+
+
+def invalidate_project_queue_counts() -> None:
+    """Drop all cached project-queue-counts (prefer over-invalidating)."""
+    _queue_counts_cache.clear()
+
+
+def _counts_from_queues(queues: dict[str, Any]) -> dict[str, int]:
+    """Align with frontend ``buildProjectMyQueueCountMap`` (ready !== false)."""
+    counts: dict[str, int] = {}
+
+    def bump(item: dict[str, Any]) -> None:
+        if item.get("ready") is False:
+            return
+        pid = item.get("project_id")
+        if not isinstance(pid, str) or not pid:
+            return
+        counts[pid] = counts.get(pid, 0) + 1
+
+    for item in queues.get("submit") or []:
+        if isinstance(item, dict):
+            bump(item)
+    for item in queues.get("sign") or []:
+        if isinstance(item, dict):
+            bump(item)
+    for item in queues.get("deviation_actions") or []:
+        if isinstance(item, dict):
+            bump(item)
+    return counts
+
+
+def build_project_queue_counts(db: Session, user_id: str) -> dict[str, Any]:
+    """Return ``{"counts": {project_id: int}}`` — no queue row arrays (GE-PERF2-09)."""
+    now = time.monotonic()
+    cached = _queue_counts_cache.get(user_id)
+    if cached is not None:
+        ts, counts = cached
+        if (now - ts) < PROJECT_QUEUE_COUNTS_TTL_SECONDS:
+            return {"counts": dict(counts)}
+
+    queues = build_queues(db, user_id)
+    counts = _counts_from_queues(queues)
+    _queue_counts_cache[user_id] = (now, counts)
+    return {"counts": dict(counts)}
