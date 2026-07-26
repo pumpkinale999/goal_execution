@@ -357,13 +357,19 @@ def create_objective_year(db: Session, body: dict[str, Any], *, actor_user_id: s
 
     copy_from_id = body.get("copy_from_objective_id")
     now = now_iso()
+    raw_owner = body.get("owner_user_id")
+    owner_user_id = (
+        str(raw_owner).strip()
+        if raw_owner is not None and str(raw_owner).strip()
+        else str(actor_user_id)
+    )
 
     company = GeObjective(
         id=str(uuid.uuid4()),
         name=name,
         level="company",
         parent_id=None,
-        owner_user_id=str(actor_user_id),
+        owner_user_id=owner_user_id,
         is_default=0,
         period_granularity="year",
         period_start=start,
@@ -394,6 +400,7 @@ def create_objective_year(db: Session, body: dict[str, Any], *, actor_user_id: s
         payload={
             "planning_year": year,
             "name": name,
+            "owner_user_id": owner_user_id,
             "copy_from_objective_id": copy_from_id,
             "include_sample_structure": bool(body.get("include_sample_structure")),
         },

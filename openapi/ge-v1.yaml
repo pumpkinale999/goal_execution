@@ -27,8 +27,9 @@ info:
     v1.23.1 (M37 · PM roster role read-only): add/patch reject project_manager · cannot_change_pm_role · GE-T183～T185 · req v2.38.5
     v1.23.2 (M37 singleton roles): product/tech/test designer ≤1 · demote prior holder to member · singleton_role_conflict · GE-T186～T190 · req v2.38.10
     v1.24.0 (M38 · GA): POST /ge/objectives/years requires name · copy_from_objective_id · multiple company roots per year · see platform-docs M38 iter · req v2.38.22
+    v1.25.0 (M39 MS1): CreateObjectiveYearRequest.owner_user_id optional · omit/blank → actor · see platform-docs M39 · impl §10.39
     Out of scope: skstudio BFF /api/v1/org|ge/* and POST /internal/ge/deviation-notify (see impl doc §4.0 · §5)
-  version: 1.24.0
+  version: 1.25.0
 servers:
   - url: /api/v1
     description: goal_execution service (JWT participant + service governance via skstudio BFF)
@@ -1588,6 +1589,10 @@ components:
           minLength: 1
           maxLength: 200
           description: Required display name (trim; unique among formal company roots in the same planning_year) (M38)
+        owner_user_id:
+          type: string
+          nullable: true
+          description: Optional steward user id (M39); omit or blank → actor (X-Actor-User-Id); when set, must not be overwritten by actor
         copy_from_objective_id:
           type: string
           format: uuid
