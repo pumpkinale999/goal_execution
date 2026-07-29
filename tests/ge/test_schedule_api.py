@@ -88,7 +88,9 @@ def test_add_gate_item_with_valid_due(client):
         json={"name": "合规门控项", "planned_due": "2026-06-20"},
     )
     assert resp.status_code == 200, resp.text
-    gi = next(item for item in phase_by_name(resp.json(), "开发")["gate_items"] if item["name"] == "合规门控项")
+    body = resp.json()
+    gi = next(item for item in phase_by_name(body, "开发")["gate_items"] if item["name"] == "合规门控项")
+    assert body["gate_item_id"] == gi["id"]
     assert gi["planned_due"] == "2026-06-20"
 
 

@@ -89,6 +89,7 @@ def test_mouse_link_flow(client):
     assert task.status_code == 200
     plan = phase_by_name(task.json(), "方案")
     task_id = plan["tasks"][0]["id"]
+    assert task.json()["task_id"] == task_id
 
     gate = client.post(
         f"/api/v1/ge/projects/{project_id}/phases/{phase_id}/gate-items",
@@ -97,6 +98,7 @@ def test_mouse_link_flow(client):
     )
     assert gate.status_code == 200
     gate_item_id = phase_by_name(gate.json(), "方案")["gate_items"][0]["id"]
+    assert gate.json()["gate_item_id"] == gate_item_id
 
     sign_task = client.post(
         f"/api/v1/ge/projects/{project_id}/phases/{phase_id}/tasks",

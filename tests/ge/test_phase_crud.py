@@ -31,7 +31,9 @@ def test_add_phase_with_planned_window(client):
         json={"name": "验收", "planned_start": "2026-07-01", "planned_end": "2026-07-31"},
     )
     assert resp.status_code == 200, resp.text
-    phase = phase_by_name(resp.json(), "验收")
+    body = resp.json()
+    phase = phase_by_name(body, "验收")
+    assert body["phase_id"] == phase["id"]
     assert phase["planned_start"] == "2026-07-01"
     assert phase["planned_end"] == "2026-07-31"
 

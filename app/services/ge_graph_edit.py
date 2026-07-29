@@ -305,9 +305,10 @@ def add_task(db: Session, project_id: str, phase_id: str, body: dict[str, Any], 
     )
     canvas_order = int(max_order_row[0]) + 1 if max_order_row else 0
     now = now_iso()
+    task_id = str(uuid.uuid4())
     db.add(
         GeTask(
-            id=str(uuid.uuid4()),
+            id=task_id,
             project_id=project_id,
             phase_id=phase_id,
             assignee_user_id=assignee,
@@ -325,7 +326,9 @@ def add_task(db: Session, project_id: str, phase_id: str, body: dict[str, Any], 
     db.commit()
     project_loaded = load_project_graph(db, project_id)
     assert project_loaded is not None
-    return build_editable_project_graph(db, project_loaded, user)
+    graph = build_editable_project_graph(db, project_loaded, user)
+    graph["task_id"] = task_id
+    return graph
 
 
 def reorder_phase_tasks(
@@ -476,7 +479,9 @@ def add_gate_item(db: Session, project_id: str, phase_id: str, body: dict[str, A
     db.commit()
     project_loaded = load_project_graph(db, project_id)
     assert project_loaded is not None
-    return build_editable_project_graph(db, project_loaded, user)
+    graph = build_editable_project_graph(db, project_loaded, user)
+    graph["gate_item_id"] = gi_id
+    return graph
 
 
 def delete_task(db: Session, task_id: str, user: AuthUser) -> dict[str, Any]:
@@ -735,4 +740,6 @@ def add_phase(db: Session, project_id: str, body: dict[str, Any], user: AuthUser
     db.commit()
     project_loaded = load_project_graph(db, project_id)
     assert project_loaded is not None
-    return build_editable_project_graph(db, project_loaded, user)
+    graph = build_editable_project_graph(db, project_loaded, user)
+    graph["phase_id"] = phase_id
+    return graph
