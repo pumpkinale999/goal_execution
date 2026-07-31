@@ -238,7 +238,8 @@ def post_project(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[AuthUser, Depends(get_current_user)],
 ) -> dict[str, Any]:
-    if user.auth_method != "jwt":
+    # M3: create is BFF-only (service token + X-Actor-User-Id).
+    if user.auth_method != "service":
         raise HTTPException(status_code=403, detail={"detail": "service_token_required"})
     return create_project(db, actor_user_id=user.user_id, body=body)
 
