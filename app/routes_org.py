@@ -1,4 +1,9 @@
-"""Organization REST routes (P0 · §4.1)."""
+"""Organization REST routes — **unmounted** (legacy import source).
+
+Organization authority is skstudio (`org_local` / `/api/v1/org`). This module is
+kept for one-off import scripts and historical reference; ``app.main`` no longer
+includes the router. GE org tables may still exist until DROP (see cutover checklist).
+"""
 
 from __future__ import annotations
 

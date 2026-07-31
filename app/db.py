@@ -1,8 +1,9 @@
-"""SQLAlchemy engine and session."""
+"""SQLAlchemy engine and session — SQLite or Postgres (M1 · D4/D8)."""
 
 from __future__ import annotations
 
 import logging
+import os
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
@@ -11,6 +12,7 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+from sqlalchemy.pool import NullPool, QueuePool
 
 from app.config import get_settings
 
@@ -25,14 +27,52 @@ class Base(DeclarativeBase):
     pass
 
 
+def _env_require_postgres(settings_flag: bool) -> bool:
+    raw = os.getenv("REQUIRE_POSTGRES", "").strip().lower()
+    if raw in ("0", "false", "no", "off"):
+        return False
+    if raw in ("1", "true", "yes", "on"):
+        return True
+    return bool(settings_flag)
+
+
+def resolve_database_url() -> tuple[str, bool]:
+    settings = get_settings()
+    url = (getattr(settings, "database_url", None) or "").strip()
+    if not url:
+        raise RuntimeError(
+            "DATABASE_URL is required (postgresql+psycopg://...). "
+            "Tests may set DATABASE_URL=sqlite:///... with REQUIRE_POSTGRES=0."
+        )
+    is_sqlite = url.startswith("sqlite")
+    require_pg = _env_require_postgres(bool(getattr(settings, "require_postgres", True)))
+    if require_pg and is_sqlite:
+        raise RuntimeError(
+            "PG-01: REQUIRE_POSTGRES is set but database_url is sqlite; "
+            "set DATABASE_URL to postgresql+psycopg://..."
+        )
+    return url, is_sqlite
+
+
 def get_engine():
     global _engine, _SessionLocal
     if _engine is None:
-        settings = get_settings()
-        db_path = settings.goal_execution_db_path.expanduser().resolve()
-        db_path.parent.mkdir(parents=True, exist_ok=True)
-        url = f"sqlite:///{db_path}"
-        _engine = create_engine(url, connect_args={"check_same_thread": False})
+        url, is_sqlite = resolve_database_url()
+        if is_sqlite:
+            _engine = create_engine(
+                url,
+                connect_args={"check_same_thread": False, "timeout": 30},
+                poolclass=NullPool,
+            )
+        else:
+            _engine = create_engine(
+                url,
+                poolclass=QueuePool,
+                pool_size=10,
+                max_overflow=20,
+                pool_pre_ping=True,
+                pool_recycle=3600,
+            )
         _SessionLocal = sessionmaker(bind=_engine, autoflush=False, autocommit=False)
     return _engine
 
@@ -58,16 +98,18 @@ def session_scope() -> Generator[Session, None, None]:
 
 
 def run_migrations() -> None:
-    """Apply Alembic revisions (001–003) to the configured DB."""
+    """Apply Alembic revisions to the configured DB."""
     global _migrations_applied
     if _migrations_applied:
         return
-    settings = get_settings()
-    db_path = settings.goal_execution_db_path.expanduser().resolve()
-    db_path.parent.mkdir(parents=True, exist_ok=True)
+    url, _ = resolve_database_url()
+    if url.startswith("sqlite"):
+        settings = get_settings()
+        db_path = settings.goal_execution_db_path.expanduser().resolve()
+        db_path.parent.mkdir(parents=True, exist_ok=True)
     repo_root = Path(__file__).resolve().parents[1]
     cfg = Config(str(repo_root / "alembic.ini"))
-    cfg.set_main_option("sqlalchemy.url", f"sqlite:///{db_path}")
+    cfg.set_main_option("sqlalchemy.url", url)
     cfg.attributes["skip_log_config"] = True
     command.upgrade(cfg, "head")
     _migrations_applied = True

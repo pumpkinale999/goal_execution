@@ -1,17 +1,12 @@
-"""GET/PATCH /org/users/{id}/profile access tests."""
+"""GET/PATCH /org/users/{id}/profile access tests (M3: service-token only)."""
 
 from __future__ import annotations
 
-from tests.conftest import jwt_headers, service_headers
+from tests.conftest import raw_user_jwt_headers, service_headers
 
 
-def test_jwt_self_profile_not_found(client):
-    resp = client.get("/api/v1/org/users/u-self/profile", headers=jwt_headers("u-self"))
-    assert resp.status_code == 404
-
-
-def test_jwt_other_profile_forbidden(client):
-    resp = client.get("/api/v1/org/users/u-other/profile", headers=jwt_headers("u-self"))
+def test_user_jwt_profile_forbidden(client):
+    resp = client.get("/api/v1/org/users/u-self/profile", headers=raw_user_jwt_headers("u-self"))
     assert resp.status_code == 403
 
 
@@ -33,12 +28,12 @@ def test_service_can_read_any_profile(client):
     assert read.json()["proficiency"] == "senior"
 
 
-def test_jwt_self_read_after_patch(client):
+def test_service_self_read_after_patch(client):
     client.patch(
         "/api/v1/org/users/u-self/profile",
         headers=service_headers("reviewer-1"),
         json={"proficiency": "mid"},
     )
-    resp = client.get("/api/v1/org/users/u-self/profile", headers=jwt_headers("u-self"))
+    resp = client.get("/api/v1/org/users/u-self/profile", headers=service_headers("u-self"))
     assert resp.status_code == 200
     assert resp.json()["proficiency"] == "mid"

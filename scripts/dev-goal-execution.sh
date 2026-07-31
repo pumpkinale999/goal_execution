@@ -21,7 +21,7 @@ usage() {
   cat <<'EOF'
 用法: scripts/dev-goal-execution.sh [选项]
 
-  默认：创建/激活 .venv · 复制 .env · 启动 uvicorn --reload :8092
+  默认：创建/激活 .venv · 复制 .env · 确保 schema · 启动 uvicorn --reload :8092
 
   --check-only     只检查环境
   --install-deps   强制 pip install -e ".[dev]"
@@ -29,9 +29,12 @@ usage() {
   --port PORT      监听端口（默认 8092）
   -h, --help       帮助
 
+说明:
+  需要 Postgres（DATABASE_URL=postgresql+psycopg://…）。
+  schema 由 scripts/ensure_dev_schema.py（create_all + stamp head）保证。
+
 环境变量:
   SKSTUDIO_BACKEND  同步 JWT_SECRET / GOAL_EXECUTION_SERVICE_TOKEN（默认 ../skstudio/backend）
-  HERMES_SHARED_ROOT  默认 $HOME/.hermes
 EOF
 }
 
@@ -109,16 +112,38 @@ sync_from_skstudio() {
   sync_ge_service_token
 }
 
+is_postgres_url() {
+  local url=$1
+  [[ "$url" == postgresql* || "$url" == postgres:* ]]
+}
+
+require_postgres_env() {
+  local envf=$1
+  local db_url
+  db_url="$(read_env_value "$envf" DATABASE_URL)"
+  if [[ -z "$db_url" ]]; then
+    db_url="$(read_env_value "$envf" GOAL_EXECUTION_DATABASE_URL)"
+  fi
+  is_postgres_url "$db_url" || die "需要 Postgres DATABASE_URL（见 .env.example），当前: ${db_url:-空}"
+  patch_env_key "$envf" REQUIRE_POSTGRES "1"
+  log "DATABASE_URL → Postgres（REQUIRE_POSTGRES=1）"
+}
+
 ensure_dotenv() {
   local envf="$REPO_ROOT/.env"
-  local hermes_root="${HERMES_SHARED_ROOT:-$HOME/.hermes}"
   if [[ ! -f "$envf" ]]; then
     cp "$REPO_ROOT/.env.example" "$envf"
     log "已复制 .env"
   fi
-  patch_env_key "$envf" GOAL_EXECUTION_DB_PATH "$hermes_root/goal-execution/data/ge.db"
+  require_postgres_env "$envf"
   patch_env_key "$envf" SKSTUDIO_INTERNAL_URL "http://127.0.0.1:8000"
   sync_from_skstudio
+}
+
+ensure_schema() {
+  [[ "${CHECK_ONLY}" == 1 ]] && return 0
+  log "确保 Postgres schema（create_all + stamp）…"
+  (cd "$REPO_ROOT" && python scripts/ensure_dev_schema.py)
 }
 
 ensure_venv() {
@@ -185,8 +210,7 @@ main() {
   # shellcheck disable=SC1091
   source "$REPO_ROOT/.env"
   set +a
-  log "运行 Alembic 迁移…"
-  python -m alembic upgrade head
+  ensure_schema
   run_uvicorn
 }
 

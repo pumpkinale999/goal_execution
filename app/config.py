@@ -11,7 +11,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    goal_execution_db_path: Path = Path("./data/ge.db")
+    goal_execution_db_path: Path = Path("./data/ge.db")  # tests only (ALLOW_SQLITE)
+    database_url: str = "postgresql+psycopg://skstudio:skstudio@127.0.0.1:5432/goal_execution"
+    require_postgres: bool = True
     goal_execution_jwt_secret: str = ""
     goal_execution_jwt_algorithm: str = "HS256"
     goal_execution_service_token: str = ""

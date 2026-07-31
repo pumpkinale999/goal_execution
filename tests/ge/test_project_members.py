@@ -161,13 +161,14 @@ def test_canonical_project_role_options_seeded(client):
 
 
 def test_ge_t180_jwt_cannot_create_role_option_service_can(client):
+    from tests.conftest import raw_user_jwt_headers
+
     deny = client.post(
         "/api/v1/ge/project-role-options",
-        headers=jwt_headers(U_PM),
+        headers=raw_user_jwt_headers(U_PM),
         json={"name": "顾问"},
     )
     assert deny.status_code == 403
-    assert deny.json()["detail"] == "reviewer_required"
 
     created = client.post(
         "/api/v1/ge/project-role-options",

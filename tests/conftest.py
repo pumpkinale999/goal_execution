@@ -19,6 +19,13 @@ def run_migrations(db_path: Path) -> None:
 
 
 def jwt_headers(user_id: str, *, secret: str = "test-jwt-secret") -> dict[str, str]:
+    """Compat shim (M3): satellites reject user JWT — tests use BFF service dialect."""
+    _ = secret
+    return service_headers(user_id)
+
+
+def raw_user_jwt_headers(user_id: str, *, secret: str = "test-jwt-secret") -> dict[str, str]:
+    """Real user JWT for AUTH-BFF-01 negative tests."""
     token = jwt.encode({"uid": user_id}, secret, algorithm="HS256")
     return {"Authorization": f"Bearer {token}"}
 
@@ -30,12 +37,24 @@ def service_headers(actor_user_id: str, *, token: str = "test-service-token") ->
     }
 
 
+def pytest_collection_modifyitems(config, items):
+    """GE /org HTTP routes are unmounted; skip legacy org API tests."""
+    skip_org = pytest.mark.skip(reason="org authority moved to skstudio; GE /org routes unmounted")
+    for item in items:
+        name = getattr(item, "path", None) or getattr(item, "fspath", None)
+        path = str(name) if name is not None else ""
+        if "test_org_" in path:
+            item.add_marker(skip_org)
+
+
 @pytest.fixture
 def ge_db(tmp_path, monkeypatch):
     from app.config import get_settings
     from app.db import reset_engine_cache
 
     db_path = tmp_path / "ge.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_path}")
+    monkeypatch.setenv("REQUIRE_POSTGRES", "0")
     monkeypatch.setenv("GOAL_EXECUTION_DB_PATH", str(db_path))
     monkeypatch.setenv("GOAL_EXECUTION_JWT_SECRET", "test-jwt-secret")
     monkeypatch.setenv("GOAL_EXECUTION_SERVICE_TOKEN", "test-service-token")

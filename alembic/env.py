@@ -19,10 +19,15 @@ target_metadata = Base.metadata
 
 
 def get_url() -> str:
-    settings = get_settings()
-    db_path = settings.goal_execution_db_path.expanduser().resolve()
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    return f"sqlite:///{db_path}"
+    from app.db import resolve_database_url
+
+    url, is_sqlite = resolve_database_url()
+    if is_sqlite:
+        # Ensure parent dir exists for sqlite file URLs
+        settings = get_settings()
+        db_path = settings.goal_execution_db_path.expanduser().resolve()
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+    return url
 
 
 def run_migrations_offline() -> None:

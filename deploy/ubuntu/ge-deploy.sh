@@ -155,7 +155,8 @@ configure() {
   sudo cp "$GE_ENV" "${GE_ENV}.bak.$(date +%Y%m%d%H%M%S)" 2>/dev/null || true
   set_env_key "$GE_ENV" GOAL_EXECUTION_JWT_SECRET "$jwt"
   set_env_key "$GE_ENV" GOAL_EXECUTION_SERVICE_TOKEN "$ge_token"
-  set_env_key "$GE_ENV" GOAL_EXECUTION_DB_PATH "${GE_HOME}/goal-execution/data/ge.db"
+  set_env_key "$GE_ENV" REQUIRE_POSTGRES "1"
+  # DATABASE_URL 须运维手填 Postgres（见 goal-execution.env.example）；不再写 SQLite 路径
   set_env_key "$GE_ENV" SKSTUDIO_INTERNAL_URL "http://127.0.0.1:8000"
   set_env_key "$GE_ENV" HOST "127.0.0.1"
   set_env_key "$GE_ENV" PORT "$GE_PORT"
@@ -188,19 +189,23 @@ install_app() {
 }
 
 migrate_db() {
-  log "Database：alembic upgrade head（root source ${GE_ENV} 后 runuser -u ${GE_USER}）"
+  log "Database：ensure_dev_schema（Postgres create_all + stamp；root source ${GE_ENV}）"
   ensure_sudo
   check_env_file
-  sudo mkdir -p "${GE_HOME}/goal-execution/data"
-  sudo chown -R "${GE_USER}:${GE_USER}" "${GE_HOME}/goal-execution" 2>/dev/null || true
   sudo bash -lc "
     set -euo pipefail
     command -v runuser >/dev/null 2>&1 || { echo '缺少 runuser（util-linux）' >&2; exit 1; }
     set -a
     source \"${GE_ENV}\"
     set +a
+    case \"\${DATABASE_URL:-}\" in
+      postgresql*|postgres:*) ;;
+      *) echo \"DATABASE_URL 须为 Postgres（见 goal-execution.env.example）\" >&2; exit 1 ;;
+    esac
+    export REQUIRE_POSTGRES=1
     cd \"${APP_ROOT}\"
-    runuser -u ${GE_USER} -- env HOME=\"${GE_HOME}\" TMPDIR=/tmp ./.venv/bin/alembic upgrade head
+    runuser -u ${GE_USER} -- env HOME=\"${GE_HOME}\" TMPDIR=/tmp REQUIRE_POSTGRES=1 \
+      ./.venv/bin/python scripts/ensure_dev_schema.py
   "
 }
 
@@ -257,7 +262,7 @@ usage() {
 
   bootstrap    创建 ge 用户、数据目录、systemd unit、env 模板
   configure    从 /etc/skstudio/skstudio.env 同步 JWT + service token
-  deploy       pip install + alembic upgrade head + 启动 goal-execution.service + health
+  deploy       pip install + ensure_dev_schema + 启动 goal-execution.service + health
   health       仅 curl /api/v1/health
 
 环境变量: APP_ROOT GE_PORT HERMES_SHARED_ROOT GE_USER SKSTUDIO_ENV

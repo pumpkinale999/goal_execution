@@ -8,7 +8,7 @@ from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
-from app.auth import AuthUser, decode_jwt_user, verify_service_token
+from app.auth import AuthUser, verify_service_token
 from app.config import get_settings
 from app.db import get_session_factory
 
@@ -28,6 +28,7 @@ def get_current_user(
     creds: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
     x_actor_user_id: Annotated[str | None, Header(alias="X-Actor-User-Id")] = None,
 ) -> AuthUser:
+    """M3 · AUTH-BFF-01: only BFF service token + X-Actor-User-Id (reject user JWT)."""
     if creds is None or creds.scheme.lower() != "bearer":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -43,7 +44,10 @@ def get_current_user(
             )
         verify_service_token(token)
         return AuthUser(user_id=x_actor_user_id, auth_method="service")
-    return decode_jwt_user(token)
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail={"detail": "service_token_required"},
+    )
 
 
 def require_service_user(

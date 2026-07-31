@@ -10,7 +10,6 @@ from fastapi.responses import JSONResponse
 from app.db import db_ok, init_db
 from app.routes_ge import router as ge_router
 from app.routes_ge_internal import router as ge_internal_router
-from app.routes_org import router as org_router
 
 API_PREFIX = "/api/v1"
 
@@ -23,7 +22,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="goal_execution", version="0.1.0-m1", lifespan=lifespan)
 
-app.include_router(org_router, prefix=API_PREFIX)
+# Org authority is skstudio (/api/v1/org). GE routes_org.py kept as import/reference only.
 app.include_router(ge_router, prefix=API_PREFIX)
 app.include_router(ge_internal_router, prefix=API_PREFIX)
 

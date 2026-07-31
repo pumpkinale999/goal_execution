@@ -84,11 +84,13 @@ def test_create_objective_requires_owner_user_id(client):
 
 
 def test_jwt_cannot_create_program_directly(client):
+    from tests.conftest import raw_user_jwt_headers
+
     company = _annual_company(client, year=2028)
     sub = _create_sub(client, company)
     resp = client.post(
         "/api/v1/ge/programs",
-        headers=jwt_headers("u-owner"),
+        headers=raw_user_jwt_headers("u-owner"),
         json={
             "name": "JWT 禁止",
             "objective_id": sub["id"],
