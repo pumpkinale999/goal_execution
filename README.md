@@ -30,4 +30,5 @@ skstudio BFF          ──► goal_execution REST（service token + X-Actor-Us
 
 schema：`scripts/ensure_dev_schema.py`（create_all + alembic stamp；勿对空库盲跑历史 Alembic）。
 
-生产：`deploy/ubuntu/ge-deploy.sh` + `goal-execution.env.example`（须填 `DATABASE_URL`）。
+生产：见 [`deploy/ubuntu/README.md`](deploy/ubuntu/README.md) 与  
+[platform-docs/migration/production_deploy.md](https://github.com/pumpkinale999/platform-docs/blob/main/migration/production_deploy.md)。

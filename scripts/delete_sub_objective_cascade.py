@@ -25,10 +25,11 @@ Usage (from goal_execution repo root)::
 
 Production (SSH · read-only plan first)::
 
-    ssh devops@10.20.20.65
-    sudo -u ge env GOAL_EXECUTION_DB_PATH=/var/lib/ge/goal-execution/data/ge.db \\
-      bash -lc 'cd /opt/goal_execution && source .venv/bin/activate && \\
-      python scripts/delete_sub_objective_cascade.py --name \"…\"'
+    # Load Postgres DATABASE_URL from /etc/goal-execution/goal-execution.env
+    ssh devops@prod
+    sudo bash -lc 'set -a; source /etc/goal-execution/goal-execution.env; set +a; \\
+      cd /opt/goal_execution && sudo -u ge env HOME=/var/lib/ge \\
+      .venv/bin/python scripts/delete_sub_objective_cascade.py --name \"…\"'
     # only after reviewing the plan:
     # … same command … --apply
     # then: skstudio cleanup_orphan_project_notes.py --apply

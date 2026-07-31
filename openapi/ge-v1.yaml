@@ -1,10 +1,16 @@
 openapi: 3.0.3
 info:
-  title: skstudio Project Governance (ge/org) API
+  title: skstudio Project Governance (ge) API
   description: |
-    Normative OpenAPI for P1 project governance domain (v1.1.3 · P1 spec frozen).
-    Full spec: docs/目标与执行及其组织支撑(实现与测试).md §4.9
-    Business rules: docs/目标与执行及其组织支撑(需求).md v2.16.0
+    **RUNTIME (2026-07)**: Organization authority is **skstudio** `/api/v1/org/*`.
+    This service **does not mount** `/org/*`. Paths under `/org/` below are **historical /
+    deprecated** (import reference only). Clients must not call `/ge-api/org/*` (BFF returns 410).
+    Auth: **service token only** + `X-Actor-User-Id` (user JWT rejected).
+    DB: **Postgres** (`DATABASE_URL` + `REQUIRE_POSTGRES=1`).
+
+    Normative OpenAPI for P1 project governance domain (ge paths remain current).
+    Full spec: platform-docs/目标与执行及其组织支撑(实现与测试).md §4.9 (+ 文首「现行运行时」)
+    Business rules: platform-docs/目标与执行及其组织支撑(需求).md
     M20: system lifecycle tasks (启动项目/结项复盘/确认结项) · is_system on Task/GateItem
     M20b: 结项复盘 auto-seeded PM sign route (确认结项 prerequisite) · system_sign_route_immutable
     M21: permission simplification · PM=reviewer governance · not_project_governor
