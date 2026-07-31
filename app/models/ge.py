@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from sqlalchemy import ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -19,20 +19,16 @@ class GeObjective(Base):
     level: Mapped[str] = mapped_column(Text, nullable=False)
     parent_id: Mapped[str | None] = mapped_column(String, ForeignKey("ge_objectives.id"), nullable=True)
     owner_user_id: Mapped[str | None] = mapped_column(String, nullable=True)
-    is_default: Mapped[bool] = mapped_column(Integer, nullable=False, default=0)
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     period_granularity: Mapped[str | None] = mapped_column(Text, nullable=True)
     period_start: Mapped[str | None] = mapped_column(Text, nullable=True)
     period_end: Mapped[str | None] = mapped_column(Text, nullable=True)
     lifecycle_status: Mapped[str] = mapped_column(Text, nullable=False, default="active")
-    primary_department_id: Mapped[str | None] = mapped_column(
-        String,
-        ForeignKey("org_departments.id"),
-        nullable=True,
-    )
+    primary_department_id: Mapped[str | None] = mapped_column(String, nullable=True)
     primary_department_needs_confirmation: Mapped[bool] = mapped_column(
-        Integer,
+        Boolean,
         nullable=False,
-        default=0,
+        default=False,
     )
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[str] = mapped_column(Text, nullable=False)
@@ -48,20 +44,16 @@ class GeProgram(Base):
     name: Mapped[str] = mapped_column(Text, nullable=False)
     objective_id: Mapped[str] = mapped_column(String, ForeignKey("ge_objectives.id"), nullable=False)
     owner_user_id: Mapped[str | None] = mapped_column(String, nullable=True)
-    is_default: Mapped[bool] = mapped_column(Integer, nullable=False, default=0)
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     period_granularity: Mapped[str | None] = mapped_column(Text, nullable=True)
     period_start: Mapped[str | None] = mapped_column(Text, nullable=True)
     period_end: Mapped[str | None] = mapped_column(Text, nullable=True)
     lifecycle_status: Mapped[str] = mapped_column(Text, nullable=False, default="active")
-    primary_department_id: Mapped[str | None] = mapped_column(
-        String,
-        ForeignKey("org_departments.id"),
-        nullable=True,
-    )
+    primary_department_id: Mapped[str | None] = mapped_column(String, nullable=True)
     primary_department_needs_confirmation: Mapped[bool] = mapped_column(
-        Integer,
+        Boolean,
         nullable=False,
-        default=0,
+        default=False,
     )
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[str] = mapped_column(Text, nullable=False)
@@ -108,7 +100,7 @@ class GePhase(Base):
     sequence: Mapped[int] = mapped_column(Integer, nullable=False)
     name: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False)
-    is_system: Mapped[bool] = mapped_column(Integer, nullable=False, default=0)
+    is_system: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     planned_start: Mapped[str | None] = mapped_column(Text, nullable=True)
     planned_end: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[str] = mapped_column(Text, nullable=False)
@@ -153,7 +145,7 @@ class GeGateItem(Base):
     rejected_at: Mapped[str | None] = mapped_column(Text, nullable=True)
     reject_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     planned_due: Mapped[str | None] = mapped_column(Text, nullable=True)
-    is_system: Mapped[bool] = mapped_column(Integer, nullable=False, default=0)
+    is_system: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[str] = mapped_column(Text, nullable=False)
     updated_at: Mapped[str] = mapped_column(Text, nullable=False)
 
@@ -183,7 +175,7 @@ class GeTask(Base):
     status: Mapped[str] = mapped_column(Text, nullable=False)
     canvas_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     deviation_id: Mapped[str | None] = mapped_column(String, ForeignKey("ge_deviations.id"), nullable=True)
-    is_system: Mapped[bool] = mapped_column(Integer, nullable=False, default=0)
+    is_system: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     started_at: Mapped[str | None] = mapped_column(Text, nullable=True)
     done_at: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[str] = mapped_column(Text, nullable=False)

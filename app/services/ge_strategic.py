@@ -15,7 +15,6 @@ from app.constants import (
     SAMPLE_SUB_OBJECTIVE_NAME,
 )
 from app.models.ge import GeObjective, GeProgram, GeProject
-from app.models.org import OrgDepartment
 from app.services.ge_graph import now_iso, record_audit
 from app.services.ge_project_create import create_project
 from app.services.ge_sort_order import (
@@ -74,10 +73,10 @@ def _assert_patch_allowed(entity: GeObjective | GeProgram, body: dict[str, Any])
 
 
 def _validate_department(db: Session, department_id: str | None) -> None:
+    """Org authority is skstudio; GE only stores primary_department_id as opaque id."""
+    del db  # kept for call-site compatibility
     if not department_id:
         raise HTTPException(status_code=400, detail={"detail": "primary_department_required"})
-    if db.get(OrgDepartment, department_id) is None:
-        raise HTTPException(status_code=404, detail={"detail": "not_found"})
 
 
 def _apply_objective_period(
@@ -415,7 +414,7 @@ def _append_sample_structure(
     db: Session, company: GeObjective, *, actor_user_id: str, now: str
 ) -> None:
     owner = str(actor_user_id)
-    dept = db.query(OrgDepartment).order_by(OrgDepartment.sort_order, OrgDepartment.id).first()
+    # Org tables no longer live in GE; sample structure leaves dept for user to set in UI.
     sub_gran, sub_start, sub_end = default_sub_period()
     sub = GeObjective(
         id=str(uuid.uuid4()),
@@ -428,8 +427,8 @@ def _append_sample_structure(
         period_start=sub_start,
         period_end=sub_end,
         lifecycle_status=LIFECYCLE_ACTIVE,
-        primary_department_id=dept.id if dept else None,
-        primary_department_needs_confirmation=0 if dept else 1,
+        primary_department_id=None,
+        primary_department_needs_confirmation=1,
         sort_order=next_objective_sort_order(db, company.id),
         created_at=now,
         updated_at=now,
@@ -448,8 +447,8 @@ def _append_sample_structure(
         period_start=prog_start,
         period_end=prog_end,
         lifecycle_status=LIFECYCLE_ACTIVE,
-        primary_department_id=dept.id if dept else sub.primary_department_id,
-        primary_department_needs_confirmation=0 if dept else 1,
+        primary_department_id=sub.primary_department_id,
+        primary_department_needs_confirmation=1,
         sort_order=next_program_sort_order(db, sub.id),
         created_at=now,
         updated_at=now,
