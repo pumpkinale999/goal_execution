@@ -600,6 +600,11 @@ def delete_gate_item(db: Session, gate_item_id: str, user: AuthUser) -> dict[str
     if has_produce or has_prereq:
         raise HTTPException(status_code=409, detail={"detail": "gate_item_has_links"})
     phase_id = item.phase_id
+    # Postgres enforces FKs at flush; drop include rows before deleting the item
+    # (sync_gate_includes_for_phase would rebuild them, but only after flush).
+    db.query(GeGateGateItemInclude).filter(
+        GeGateGateItemInclude.gate_item_id == gate_item_id
+    ).delete(synchronize_session=False)
     db.delete(item)
     db.flush()
     sync_gate_includes_for_phase(db, phase_id)
