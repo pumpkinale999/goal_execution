@@ -36,6 +36,99 @@ def test_add_phase_with_planned_window(client):
     assert body["phase_id"] == phase["id"]
     assert phase["planned_start"] == "2026-07-01"
     assert phase["planned_end"] == "2026-07-31"
+    # Default insert: after last business, before End
+    end = phase_by_name(body, "结束")
+    assert phase["sequence"] == end["sequence"] - 1
+
+
+def test_add_phase_after_start(client):
+    created = create_project(client, U_PM)
+    project_id = created["id"]
+    graph = get_graph(client, project_id, U_PM)
+    start = phase_by_name(graph, "开始")
+    plan = phase_by_name(graph, "方案")
+
+    resp = client.post(
+        f"/api/v1/ge/projects/{project_id}/phases",
+        headers=jwt_headers(U_PM),
+        json={
+            "name": "预研",
+            "after_phase_id": start["id"],
+            "planned_start": "2026-02-01",
+            "planned_end": "2026-02-28",
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    new = phase_by_name(body, "预研")
+    plan_after = phase_by_name(body, "方案")
+    assert new["sequence"] == start["sequence"] + 1
+    assert plan_after["sequence"] == plan["sequence"] + 1
+    assert new["sequence"] < plan_after["sequence"]
+
+
+def test_add_phase_after_business_middle(client):
+    created = create_project(client, U_PM)
+    project_id = created["id"]
+    graph = get_graph(client, project_id, U_PM)
+    plan = phase_by_name(graph, "方案")
+    # Open a gap between 方案 and 开发 so the new window does not overlap.
+    dev = phase_by_name(graph, "开发")
+    gi = next(item for item in dev["gate_items"] if item["name"] == "接口规格")
+    widen = client.patch(
+        f"/api/v1/ge/phases/{dev['id']}",
+        headers=jwt_headers(U_PM),
+        json={"planned_start": "2026-06-16", "planned_end": "2026-07-15"},
+    )
+    assert widen.status_code == 200, widen.text
+    due = client.patch(
+        f"/api/v1/ge/gate-items/{gi['id']}",
+        headers=jwt_headers(U_PM),
+        json={"planned_due": "2026-07-10"},
+    )
+    assert due.status_code == 200, due.text
+    shrink = client.patch(
+        f"/api/v1/ge/phases/{dev['id']}",
+        headers=jwt_headers(U_PM),
+        json={"planned_start": "2026-07-01", "planned_end": "2026-07-15"},
+    )
+    assert shrink.status_code == 200, shrink.text
+
+    resp = client.post(
+        f"/api/v1/ge/projects/{project_id}/phases",
+        headers=jwt_headers(U_PM),
+        json={
+            "name": "评审",
+            "after_phase_id": plan["id"],
+            "planned_start": "2026-06-16",
+            "planned_end": "2026-06-30",
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    names = [p["name"] for p in sorted(body["phases"], key=lambda p: p["sequence"])]
+    assert names == ["开始", "方案", "评审", "开发", "结束"]
+
+
+def test_add_phase_rejects_after_end(client):
+    created = create_project(client, U_PM)
+    project_id = created["id"]
+    end = phase_by_name(get_graph(client, project_id, U_PM), "结束")
+
+    resp = client.post(
+        f"/api/v1/ge/projects/{project_id}/phases",
+        headers=jwt_headers(U_PM),
+        json={
+            "name": "非法",
+            "after_phase_id": end["id"],
+            "planned_start": "2026-07-01",
+            "planned_end": "2026-07-31",
+        },
+    )
+    assert resp.status_code == 400
+    detail = resp.json()["detail"]
+    code = detail["detail"] if isinstance(detail, dict) else detail
+    assert code == "after_phase_invalid"
 
 
 def test_add_phase_requires_planned_window(client):

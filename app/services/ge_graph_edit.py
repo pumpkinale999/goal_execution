@@ -706,6 +706,41 @@ def delete_phase(db: Session, phase_id: str, user: AuthUser) -> dict[str, Any]:
     return build_editable_project_graph(db, project_loaded, user)
 
 
+def _resolve_add_phase_anchor(db: Session, project_id: str, after_phase_id: str | None) -> GePhase:
+    """Phase after which the new business phase is inserted. End is never a valid anchor."""
+    end_phase = end_phase_for_project(db, project_id)
+    if end_phase is None:
+        raise HTTPException(status_code=400, detail={"detail": "invalid_request"})
+
+    if after_phase_id is None or str(after_phase_id).strip() == "":
+        # Default: after last business phase (or Start when none) — same as legacy "before End".
+        business = (
+            db.query(GePhase)
+            .filter(GePhase.project_id == project_id, GePhase.is_system.is_(False))
+            .order_by(GePhase.sequence.desc())
+            .first()
+        )
+        if business is not None:
+            return business
+        start = (
+            db.query(GePhase)
+            .filter(GePhase.project_id == project_id, GePhase.is_system.is_(True), GePhase.sequence == 0)
+            .first()
+        )
+        if start is None:
+            raise HTTPException(status_code=400, detail={"detail": "invalid_request"})
+        return start
+
+    anchor = db.get(GePhase, str(after_phase_id).strip())
+    if anchor is None or anchor.project_id != project_id:
+        raise HTTPException(status_code=404, detail={"detail": "not_found"})
+    if anchor.is_system and anchor.name == SYSTEM_END_PHASE_NAME:
+        raise HTTPException(status_code=400, detail={"detail": "after_phase_invalid"})
+    if anchor.id == end_phase.id:
+        raise HTTPException(status_code=400, detail={"detail": "after_phase_invalid"})
+    return anchor
+
+
 def add_phase(db: Session, project_id: str, body: dict[str, Any], user: AuthUser) -> dict[str, Any]:
     project = _get_project_or_404(db, project_id)
     _require_graph_editable(db, project, user)
@@ -715,29 +750,50 @@ def add_phase(db: Session, project_id: str, body: dict[str, Any], user: AuthUser
     planned_start = parse_plan_date(body.get("planned_start"), field="planned_start")
     planned_end = parse_plan_date(body.get("planned_end"), field="planned_end")
     require_business_phase_window(planned_start, planned_end)
-    end_phase = end_phase_for_project(db, project_id)
-    if end_phase is None:
-        raise HTTPException(status_code=400, detail={"detail": "invalid_request"})
-    sequence = end_phase.sequence
-    end_phase.sequence = sequence + 1
-    end_phase.updated_at = now_iso()
+
+    after = _resolve_add_phase_anchor(db, project_id, body.get("after_phase_id"))
+    phases = (
+        db.query(GePhase)
+        .filter(GePhase.project_id == project_id)
+        .order_by(GePhase.sequence)
+        .all()
+    )
+    # UNIQUE(project_id, sequence): park everyone, then rebuild order with the new phase.
+    for index, phase in enumerate(phases):
+        phase.sequence = 10_000 + index
+    db.flush()
+
+    ordered: list[GePhase] = []
+    for phase in phases:
+        ordered.append(phase)
+        if phase.id == after.id:
+            break
+    else:
+        raise HTTPException(status_code=400, detail={"detail": "after_phase_invalid"})
+    trailing = [phase for phase in phases if phase.id not in {p.id for p in ordered}]
+
     now = now_iso()
     phase_id = str(uuid.uuid4())
-    db.add(
-        GePhase(
-            id=phase_id,
-            project_id=project_id,
-            sequence=sequence,
-            name=name,
-            status="pending",
-            is_system=False,
-            planned_start=planned_start,
-            planned_end=planned_end,
-            created_at=now,
-            updated_at=now,
-        )
+    new_phase = GePhase(
+        id=phase_id,
+        project_id=project_id,
+        sequence=10_000 + len(phases),
+        name=name,
+        status="pending",
+        is_system=False,
+        planned_start=planned_start,
+        planned_end=planned_end,
+        created_at=now,
+        updated_at=now,
     )
+    db.add(new_phase)
     db.add(GeGate(id=str(uuid.uuid4()), phase_id=phase_id))
+    db.flush()
+
+    final_order = ordered + [new_phase] + trailing
+    for index, phase in enumerate(final_order):
+        phase.sequence = index
+        phase.updated_at = now
     project.updated_at = now
     db.flush()
     program_period, project_phases = _project_schedule_context(db, project)

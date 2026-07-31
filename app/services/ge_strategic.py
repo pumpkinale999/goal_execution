@@ -170,9 +170,9 @@ def create_objective(db: Session, body: dict[str, Any]) -> dict[str, Any]:
         level=level,
         parent_id=str(parent_id),
         owner_user_id=owner_user_id,
-        is_default=0,
+        is_default=False,
         lifecycle_status=LIFECYCLE_ACTIVE,
-        primary_department_needs_confirmation=0,
+        primary_department_needs_confirmation=False,
         created_at=now,
         updated_at=now,
     )
@@ -221,7 +221,7 @@ def patch_objective(db: Session, objective_id: str, body: dict[str, Any]) -> dic
         if dept:
             _validate_department(db, str(dept))
             obj.primary_department_id = str(dept)
-            obj.primary_department_needs_confirmation = 0
+            obj.primary_department_needs_confirmation = False
     parent = db.get(GeObjective, obj.parent_id) if obj.parent_id else None
     if parent is not None and not _is_lifecycle_locked(obj):
         _apply_objective_period(db, obj, body, parent=parent, is_create=False)
@@ -250,9 +250,9 @@ def create_program(db: Session, body: dict[str, Any]) -> dict[str, Any]:
         name=name,
         objective_id=str(objective_id),
         owner_user_id=owner_user_id,
-        is_default=0,
+        is_default=False,
         lifecycle_status=LIFECYCLE_ACTIVE,
-        primary_department_needs_confirmation=0,
+        primary_department_needs_confirmation=False,
         created_at=now,
         updated_at=now,
     )
@@ -296,7 +296,7 @@ def patch_program(db: Session, program_id: str, body: dict[str, Any]) -> dict[st
         if dept:
             _validate_department(db, str(dept))
             program.primary_department_id = str(dept)
-            program.primary_department_needs_confirmation = 0
+            program.primary_department_needs_confirmation = False
     objective = db.get(GeObjective, program.objective_id)
     if objective is not None and not _is_lifecycle_locked(program):
         _apply_program_period(db, program, body, objective=objective, is_create=False)
@@ -322,7 +322,7 @@ def _formal_company_roots_for_year(db: Session, year: int) -> list[GeObjective]:
         db.query(GeObjective)
         .filter(
             GeObjective.level == "company",
-            GeObjective.is_default == 0,
+            GeObjective.is_default.is_(False),
             GeObjective.period_start == start,
         )
         .all()
@@ -369,12 +369,12 @@ def create_objective_year(db: Session, body: dict[str, Any], *, actor_user_id: s
         level="company",
         parent_id=None,
         owner_user_id=owner_user_id,
-        is_default=0,
+        is_default=False,
         period_granularity="year",
         period_start=start,
         period_end=end,
         lifecycle_status=LIFECYCLE_ACTIVE,
-        primary_department_needs_confirmation=0,
+        primary_department_needs_confirmation=False,
         sort_order=(
             max((root.sort_order for root in existing), default=0) + 10 if existing else 10
         ),
@@ -422,13 +422,13 @@ def _append_sample_structure(
         level="sub",
         parent_id=company.id,
         owner_user_id=owner,
-        is_default=0,
+        is_default=False,
         period_granularity=sub_gran,
         period_start=sub_start,
         period_end=sub_end,
         lifecycle_status=LIFECYCLE_ACTIVE,
         primary_department_id=None,
-        primary_department_needs_confirmation=1,
+        primary_department_needs_confirmation=True,
         sort_order=next_objective_sort_order(db, company.id),
         created_at=now,
         updated_at=now,
@@ -442,13 +442,13 @@ def _append_sample_structure(
         name=SAMPLE_PROGRAM_NAME,
         objective_id=sub.id,
         owner_user_id=owner,
-        is_default=0,
+        is_default=False,
         period_granularity=gran,
         period_start=prog_start,
         period_end=prog_end,
         lifecycle_status=LIFECYCLE_ACTIVE,
         primary_department_id=sub.primary_department_id,
-        primary_department_needs_confirmation=1,
+        primary_department_needs_confirmation=True,
         sort_order=next_program_sort_order(db, sub.id),
         created_at=now,
         updated_at=now,
@@ -500,7 +500,7 @@ def _copy_year_structure_from_objective(
             level="sub",
             parent_id=target_company.id,
             owner_user_id=sub.owner_user_id,
-            is_default=0,
+            is_default=False,
             period_granularity=sub.period_granularity,
             period_start=sub.period_start,
             period_end=sub.period_end,
@@ -522,7 +522,7 @@ def _copy_year_structure_from_objective(
                     name=prog.name,
                     objective_id=new_sub.id,
                     owner_user_id=prog.owner_user_id,
-                    is_default=0,
+                    is_default=False,
                     period_granularity=prog.period_granularity,
                     period_start=prog.period_start,
                     period_end=prog.period_end,

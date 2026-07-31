@@ -113,12 +113,12 @@ def _rollup_for_users(
 
     objectives = (
         db.query(GeObjective)
-        .filter(GeObjective.owner_user_id.in_(uid_list), GeObjective.is_default == 0)
+        .filter(GeObjective.owner_user_id.in_(uid_list), GeObjective.is_default.is_(False))
         .all()
     )
     programs = (
         db.query(GeProgram)
-        .filter(GeProgram.owner_user_id.in_(uid_list), GeProgram.is_default == 0)
+        .filter(GeProgram.owner_user_id.in_(uid_list), GeProgram.is_default.is_(False))
         .all()
     )
     projects_q = db.query(GeProject).filter(
@@ -245,13 +245,13 @@ def get_department_goal_portfolio(
     if uid_list:
         obj_clauses.append(GeObjective.owner_user_id.in_(uid_list))
     objectives = (
-        db.query(GeObjective).filter(GeObjective.is_default == 0, or_(*obj_clauses)).all()
+        db.query(GeObjective).filter(GeObjective.is_default.is_(False), or_(*obj_clauses)).all()
     )
 
     prog_clauses = [GeProgram.primary_department_id == department_id]
     if uid_list:
         prog_clauses.append(GeProgram.owner_user_id.in_(uid_list))
-    programs = db.query(GeProgram).filter(GeProgram.is_default == 0, or_(*prog_clauses)).all()
+    programs = db.query(GeProgram).filter(GeProgram.is_default.is_(False), or_(*prog_clauses)).all()
 
     for obj in objectives:
         refresh_lifecycle_on_read(db, obj)

@@ -170,7 +170,7 @@ def primary_entries_for_department(db: Session, department_id: str) -> list[dict
     entries: list[dict[str, Any]] = []
     objectives = (
         db.query(GeObjective)
-        .filter(GeObjective.primary_department_id == department_id, GeObjective.is_default == 0)
+        .filter(GeObjective.primary_department_id == department_id, GeObjective.is_default.is_(False))
         .all()
     )
     for obj in objectives:
@@ -186,7 +186,7 @@ def primary_entries_for_department(db: Session, department_id: str) -> list[dict
         entries.append(item)
     programs = (
         db.query(GeProgram)
-        .filter(GeProgram.primary_department_id == department_id, GeProgram.is_default == 0)
+        .filter(GeProgram.primary_department_id == department_id, GeProgram.is_default.is_(False))
         .all()
     )
     for prog in programs:
@@ -238,12 +238,12 @@ def can_read_program_scope(db: Session, user: AuthUser, program_id: str) -> bool
 def user_accountable_for_user_id(db: Session, user_id: str) -> tuple[list[GeObjective], list[GeProgram], list[GeProject]]:
     objectives = (
         db.query(GeObjective)
-        .filter(GeObjective.owner_user_id == user_id, GeObjective.is_default == 0)
+        .filter(GeObjective.owner_user_id == user_id, GeObjective.is_default.is_(False))
         .all()
     )
     programs = (
         db.query(GeProgram)
-        .filter(GeProgram.owner_user_id == user_id, GeProgram.is_default == 0)
+        .filter(GeProgram.owner_user_id == user_id, GeProgram.is_default.is_(False))
         .all()
     )
     projects = (

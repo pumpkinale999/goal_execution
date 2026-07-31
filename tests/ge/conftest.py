@@ -138,13 +138,8 @@ def ensure_formal_test_program(
     )
     assert year_resp.status_code == 201, year_resp.text
     company_id = year_resp.json()["id"]
-    dept_resp = client.post(
-        "/api/v1/org/departments",
-        headers=service_headers(reviewer),
-        json={"name": "测试部门", "manager_user_id": owner_user_id},
-    )
-    assert dept_resp.status_code == 201, dept_resp.text
-    dept_id = dept_resp.json()["id"]
+    # Org authority is skstudio; GE only stores opaque primary_department_id.
+    dept_id = "test-dept-formal"
     sub_resp = client.post(
         "/api/v1/ge/objectives",
         headers=service_headers(reviewer),

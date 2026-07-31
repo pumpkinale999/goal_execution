@@ -263,6 +263,7 @@ def get_project(
         "program_id": project.program_id,
         "created_by_user_id": project.created_by_user_id,
         "project_note_id": project.project_note_id,
+        "sort_order": project.sort_order,
     }
 
 

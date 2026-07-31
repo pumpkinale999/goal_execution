@@ -116,9 +116,9 @@ def refresh_lifecycle_entities(
 def refresh_lifecycle_batch(db: Session) -> None:
     if not _lifecycle_batch_due():
         return
-    for obj in db.query(GeObjective).filter(GeObjective.is_default == 0).all():
+    for obj in db.query(GeObjective).filter(GeObjective.is_default.is_(False)).all():
         _apply_refresh_with_db(db, obj, entity_type="objective")
-    for prog in db.query(GeProgram).filter(GeProgram.is_default == 0).all():
+    for prog in db.query(GeProgram).filter(GeProgram.is_default.is_(False)).all():
         _apply_refresh_with_db(db, prog, entity_type="program")
     _mark_lifecycle_batch_done()
     db.flush()

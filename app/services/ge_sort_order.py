@@ -42,7 +42,7 @@ def sibling_company_roots_same_year(db: Session, obj: GeObjective) -> list[GeObj
         .filter(
             GeObjective.parent_id.is_(None),
             GeObjective.level == "company",
-            GeObjective.is_default == 0,
+            GeObjective.is_default.is_(False),
         )
         .all()
     )

@@ -14,14 +14,14 @@ from app.models.org import OrgDepartment
 def department_has_primary_objectives(db: Session, department_id: str) -> bool:
     obj = (
         db.query(GeObjective.id)
-        .filter(GeObjective.primary_department_id == department_id, GeObjective.is_default == 0)
+        .filter(GeObjective.primary_department_id == department_id, GeObjective.is_default.is_(False))
         .first()
     )
     if obj is not None:
         return True
     prog = (
         db.query(GeProgram.id)
-        .filter(GeProgram.primary_department_id == department_id, GeProgram.is_default == 0)
+        .filter(GeProgram.primary_department_id == department_id, GeProgram.is_default.is_(False))
         .first()
     )
     return prog is not None
@@ -44,12 +44,12 @@ def migrate_primary_objectives(
     now = datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     objectives = (
         db.query(GeObjective)
-        .filter(GeObjective.primary_department_id == source_department_id, GeObjective.is_default == 0)
+        .filter(GeObjective.primary_department_id == source_department_id, GeObjective.is_default.is_(False))
         .all()
     )
     programs = (
         db.query(GeProgram)
-        .filter(GeProgram.primary_department_id == source_department_id, GeProgram.is_default == 0)
+        .filter(GeProgram.primary_department_id == source_department_id, GeProgram.is_default.is_(False))
         .all()
     )
     for obj in objectives:
