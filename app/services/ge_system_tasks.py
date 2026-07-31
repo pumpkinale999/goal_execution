@@ -232,6 +232,7 @@ def _ensure_end_sign_route(
             sign_task.updated_at = now
         added = 0
 
+    db.flush()
     _ensure_prerequisite_link(db, sign_task.id, end_gi_id)
     return added
 
@@ -343,6 +344,8 @@ def _ensure_start_side(
         start_gi.updated_at = now
 
     assert start_task is not None and start_gi is not None
+    # Postgres enforces FKs at flush; ensure parent rows exist before link rows.
+    db.flush()
     _ensure_produce_link(db, start_task.id, start_gi.id)
     sync_gate_includes_for_phase(db, start_phase_id)
     return task_count, gate_item_count
@@ -401,6 +404,7 @@ def _ensure_end_side(
         gate_item_count += 1
 
     assert end_task is not None and end_gi is not None
+    db.flush()
     _ensure_produce_link(db, end_task.id, end_gi.id)
     task_count += _ensure_end_sign_route(
         db,
