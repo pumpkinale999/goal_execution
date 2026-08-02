@@ -1,6 +1,6 @@
 # goal_execution — Ubuntu 部署
 
-与 skstudio / knowledge_base 同机配套。Nginx **`/ge-api/`** 反代到 **skstudio**（再 BFF → 本服务 `:8092`），**不要**把 `/ge-api` 直接指到 8092。
+与 skstudio / knowledge_base 同机配套。浏览器经 skstudio **`/api/v1/ge/`** 到达本服务 `:8092`（**不要**把 Nginx 直接指到 8092；**无** `/ge-api`；skstudio **不再** mint GE 用户 JWT）。探活：`GET /api/v1/ge/health`。
 
 **生产总入口**：[platform-docs/migration/production_deploy.md](https://github.com/pumpkinale999/platform-docs/blob/main/migration/production_deploy.md)。
 

@@ -29,7 +29,7 @@ from app.services.ge_graph import (
     write_operation_response,
 )
 from app.services.ge_system_tasks import sync_system_lifecycle_task_assignees
-from app.services.ge_subtree_governor import is_subtree_governor
+from app.services.ge_goal_subtree_governor import is_goal_subtree_governor
 from app.services.ge_sort_order import next_project_sort_order
 from app.services.ge_queues import invalidate_project_queue_counts
 from app.services.ge_strategic_lifecycle import invalidate_lifecycle_refresh
@@ -158,13 +158,13 @@ def _can_migrate_program(
     source_program_id: str,
     target_program_id: str,
 ) -> bool:
-    if user.auth_method == "service":
+    if user.is_reviewer:
         return True
-    if user.auth_method == "jwt" and user.user_id == project.pm_user_id:
+    if user.user_id == project.pm_user_id:
         return True
-    return is_subtree_governor(db, user_id=user.user_id, program_id=source_program_id) and is_subtree_governor(
-        db, user_id=user.user_id, program_id=target_program_id
-    )
+    return is_goal_subtree_governor(
+        db, user_id=user.user_id, program_id=source_program_id
+    ) and is_goal_subtree_governor(db, user_id=user.user_id, program_id=target_program_id)
 
 
 def _require_program_migration(
@@ -182,7 +182,7 @@ def _require_program_migration(
         source_program_id=project.program_id,
         target_program_id=target_program_id,
     ):
-        raise HTTPException(status_code=403, detail={"detail": "not_subtree_governor"})
+        raise HTTPException(status_code=403, detail={"detail": "not_goal_subtree_governor"})
 
 
 def migrate_project_program(

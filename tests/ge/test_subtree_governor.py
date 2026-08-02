@@ -29,7 +29,7 @@ def _formal_sub_and_program(client):
 def _patch_objective_owner(client, objective_id: str, owner_user_id: str) -> None:
     resp = client.patch(
         f"/api/v1/ge/objectives/{objective_id}",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={"owner_user_id": owner_user_id},
     )
     assert resp.status_code == 200, resp.text
@@ -153,19 +153,14 @@ def test_steward_can_proxy_submit_and_sign(client):
 
 def test_non_default_program_create_requires_governor(client):
     sub_id, _program_id = _formal_sub_and_program(client)
-    dept = client.post(
-        "/api/v1/org/departments",
-        headers=service_headers("reviewer-1"),
-        json={"name": "治理部门", "manager_user_id": U_GOVERNOR},
-    ).json()
     create_prog = client.post(
         "/api/v1/ge/programs",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={
             "name": "战略项目群",
             "objective_id": sub_id,
             "owner_user_id": U_GOVERNOR,
-            "primary_department_id": dept["id"],
+            "primary_department_id": "test-dept-gov",
         },
     )
     assert create_prog.status_code == 201
@@ -174,7 +169,8 @@ def test_non_default_program_create_requires_governor(client):
     body = {**GOLDEN_PROJECT_BODY, "program_id": program_id}
     forbidden = client.post("/api/v1/ge/projects", headers=jwt_headers(U_STRANGER), json=body)
     assert forbidden.status_code == 403
-    assert forbidden.json()["detail"] == "not_subtree_governor"
+    d = forbidden.json()["detail"]
+    assert d == "not_goal_subtree_governor" or (isinstance(d, dict) and d.get("detail") == "not_goal_subtree_governor")
 
     allowed = client.post("/api/v1/ge/projects", headers=jwt_headers(U_GOVERNOR), json=body)
     assert allowed.status_code == 201
@@ -183,19 +179,14 @@ def test_non_default_program_create_requires_governor(client):
 def test_ancestor_owner_governs_nested_program(client):
     sub_id, _program_id = _formal_sub_and_program(client)
     _patch_objective_owner(client, sub_id, U_OWNER)
-    dept = client.post(
-        "/api/v1/org/departments",
-        headers=service_headers("reviewer-1"),
-        json={"name": "子树部门", "manager_user_id": "u-other"},
-    ).json()
     create_prog = client.post(
         "/api/v1/ge/programs",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={
             "name": "子树项目群",
             "objective_id": sub_id,
             "owner_user_id": "u-other",
-            "primary_department_id": dept["id"],
+            "primary_department_id": "test-dept-nested",
         },
     )
     assert create_prog.status_code == 201

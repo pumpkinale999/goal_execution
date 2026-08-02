@@ -55,7 +55,9 @@ from app.services.ge_orchestrator import soft_delete_project
 from app.services.ge_strategic import delete_objective, delete_program
 
 
-SERVICE_ACTOR = AuthUser(user_id="cascade-delete-script", auth_method="service")
+SERVICE_ACTOR = AuthUser(
+    user_id="cascade-delete-script", auth_method="service", is_reviewer=True
+)
 
 
 @dataclass

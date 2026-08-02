@@ -2,10 +2,15 @@ openapi: 3.0.3
 info:
   title: skstudio Project Governance (ge) API
   description: |
-    **RUNTIME (2026-07)**: Organization authority is **skstudio** `/api/v1/org/*`.
-    This service **does not mount** `/org/*`. Paths under `/org/` below are **historical /
-    deprecated** (import reference only). Clients must not call `/ge-api/org/*` (BFF returns 410).
-    Auth: **service token only** + `X-Actor-User-Id` (user JWT rejected).
+    **RUNTIME (GE-AUTHZ-API · 2026-08)**: This service exposes **only** `/api/v1/ge/*`.
+    Auth: **service token** + `X-Actor-User-Id` + `X-Actor-Is-Reviewer` (0|1). User JWT rejected.
+    Domain authz is in GE (no service god-mode). Browser reaches GE only via skstudio `/api/v1/ge/*`.
+    Organization CRUD authority is **skstudio** `/api/v1/org/*` (not mounted here).
+    Portfolios: `/ge/portfolios/*` (not `/org/.../goal-portfolio`).
+    Portfolio authz (M8): Is-Reviewer or `X-Actor-Org-Portfolio-Department-Ids` / `…-Team-Ids`
+    (+ `X-Target-Org-Department-Id` / `…-Team-Id` for user portfolio). See consensus §3.2 / §5.4.
+    Health: `/ge/health`. Governor check: `/ge/goal-subtree-governor/check` (ignores reviewer).
+    Callbacks (skstudio): `POST /api/v1/callbacks/ge/deviation-notify`.
     DB: **Postgres** (`DATABASE_URL` + `REQUIRE_POSTGRES=1`).
 
     Normative OpenAPI for P1 project governance domain (ge paths remain current).
@@ -20,9 +25,9 @@ info:
     v1.11.1: WriteOperationResponse.deviation · AffectedTask P3 fields · Deviation cancel snapshots · submit/done 409 deviation_not_activated
     v1.11.2: M22 deviation structure guards · produce unlink/rebind · patch deviated · delete remediation → 409 deviation_produce_immutable / task_deviated_immutable / remediation_task_not_deletable
     v1.12.0: REST-only workbench · DROP ge_execution_notifications · no skstudio ws-fanout
-    v1.13.0 (P2 · M8): owner subtree_governor · structural CRUD objectives/programs · JWT read extension · service/BFF write (see impl §4.2.0.1)
+    v1.13.0 (P2 · M8): owner is_goal_subtree_governor · structural CRUD objectives/programs · service+Actor read/write · domain authz in GE (see impl §4.2.0.1)
     v1.14.0 (M23 · B′): Task effective_status read-time derivation (viewer/actor-relative) · actionable_tasks queue · Deprecated POST …/tasks/{id}/start|done · legacy ge_tasks.status stop-write · **spec draft ☑ · runtime pending**
-    v1.15.0 (M24): can_govern_project includes subtree_governor (GE-26 superseded) · graph write for steward · ProjectGraph graph_editable/graph_deletable
+    v1.15.0 (M24): can_govern_project includes is_goal_subtree_governor (GE-26 superseded) · graph write for steward · ProjectGraph graph_editable/graph_deletable
     v1.16.0 (v2.22/v2.23 · runtime ☑): user_org_memberships · primary_membership_id · membership CRUD · primary_membership_required 409 · see impl §4.1.3 · req v2.23.2 invariant
     v1.17.3 (M28): KB topic org-charter (title 组织宪章) · paths org-charter/departments|teams/{slug} · see impl §4.1.4 · req v2.24.4
     v1.18.0 (M29 · runtime ☑): period_* · lifecycle_status · primary_department_id · POST /ge/objectives/years · assess · planning_year readOnly response · see impl §4.2.0.4 · req v2.26.0
@@ -34,12 +39,61 @@ info:
     v1.23.2 (M37 singleton roles): product/tech/test designer ≤1 · demote prior holder to member · singleton_role_conflict · GE-T186～T190 · req v2.38.10
     v1.24.0 (M38 · GA): POST /ge/objectives/years requires name · copy_from_objective_id · multiple company roots per year · see platform-docs M38 iter · req v2.38.22
     v1.25.0 (M39 MS1): CreateObjectiveYearRequest.owner_user_id optional · omit/blank → actor · see platform-docs M39 · impl §10.39
-    Out of scope: skstudio BFF /api/v1/org|ge/* and POST /internal/ge/deviation-notify (see impl doc §4.0 · §5)
-  version: 1.25.0
+    v1.26.0 (GE-AUTHZ-API): X-Actor-Is-Reviewer · is_goal_subtree_governor · /ge/health · /ge/portfolios · /ge/goal-subtree-governor/check · /ge/users/{id}/project-access · no /ge-api
+    v1.26.1 (GE-AUTHZ docs): consensus v0.1.9 · Org portfolio headers §3.2 · summaries service+Actor (no JWT participant wording)
+    Out of scope: skstudio BFF orchestration /api/v1/org|ge/* · GE-AUTHZ consensus v0.1.9 (see impl §1.4 · §4.0 · §10.42)
+  version: 1.26.1
 servers:
   - url: /api/v1
-    description: goal_execution service (JWT participant + service governance via skstudio BFF)
+    description: goal_execution service (service + Actor + Is-Reviewer only · GE-AUTHZ)
 paths:
+
+  /ge/health:
+    get:
+      operationId: geHealth
+      summary: Process health (GE-AUTHZ E3)
+      tags: [ge]
+      responses:
+        '200':
+          description: ok / db_ok / service
+  /ge/goal-subtree-governor/check:
+    get:
+      operationId: checkGoalSubtreeGovernor
+      summary: Pure goal-tree governor query (ignores is_reviewer)
+      tags: [ge]
+      parameters:
+        - name: user_id
+          in: query
+          required: true
+          schema: { type: string }
+        - name: objective_id
+          in: query
+          schema: { type: string }
+        - name: program_id
+          in: query
+          schema: { type: string }
+        - name: project_id
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: '{ is_governor: bool }'
+  /ge/users/{user_id}/project-access:
+    get:
+      operationId: getUserProjectAccess
+      summary: Batch project access table (K27.6 · service)
+      tags: [ge]
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: all_visible
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: '{ projects: [...] }'
   /org/departments:
     get:
       operationId: listOrgDepartments
@@ -91,7 +145,7 @@ paths:
           description: Deleted
         '409':
           description: department_has_teams · department_has_primary_objectives (M31)
-  /org/departments/{department_id}/goal-portfolio:
+  /ge/portfolios/departments/{department_id}:
     get:
       operationId: getDepartmentGoalPortfolio
       summary: Department primary + participation rollup (M31 · service · BFF permission)
@@ -113,7 +167,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GoalPortfolio'
-  /org/departments/{department_id}/migrate-primary-objectives:
+  /ge/portfolios/departments/{department_id}/migrate-primary-objectives:
     post:
       operationId: migrateDepartmentPrimaryObjectives
       summary: Batch retarget primary_department_id (M31 · reviewer BFF)
@@ -141,7 +195,7 @@ paths:
                 properties:
                   objectives_migrated: { type: integer }
                   programs_migrated: { type: integer }
-  /org/teams/{team_id}/goal-portfolio:
+  /ge/portfolios/teams/{team_id}:
     get:
       operationId: getTeamGoalPortfolio
       summary: Team member participation rollup (M31)
@@ -163,7 +217,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GoalPortfolio'
-  /org/users/{user_id}/goal-portfolio:
+  /ge/portfolios/users/{user_id}:
     get:
       operationId: getUserGoalPortfolio
       summary: User accountable + contributing portfolio (M31)
@@ -193,7 +247,7 @@ paths:
   /org/users/{user_id}/profile:
     get:
       operationId: getOrgUserProfile
-      summary: Read org profile (JWT self only; reviewer others via skstudio BFF)
+      summary: Read org profile (service+Actor self only; reviewer others via skstudio→GE)
       tags: [org]
       parameters:
         - $ref: '#/components/parameters/UserId'
@@ -274,7 +328,7 @@ paths:
   /ge/objectives:
     get:
       operationId: listGeObjectives
-      summary: Objective tree with nested program metadata (P2 · JWT subtree_governor sees full subtree project names via programs/projects endpoints)
+      summary: Objective tree with nested program metadata (P2 · is_goal_subtree_governor sees full subtree via programs/projects; service+Actor)
       tags: [ge-objectives]
       responses:
         '200':
@@ -287,7 +341,7 @@ paths:
                   $ref: '#/components/schemas/ObjectiveNode'
     post:
       operationId: createGeObjective
-      summary: Create sub-objective (P2 · service token · BFF subtree_governor or reviewer)
+      summary: Create sub-objective (P2 · service+Actor; is_goal_subtree_governor ∨ reviewer)
       tags: [ge-objectives]
       requestBody:
         required: true
@@ -384,7 +438,7 @@ paths:
   /ge/objectives/{objective_id}/reorder:
     post:
       operationId: reorderGeObjective
-      summary: Reorder sibling sub-objectives (M32 · service · BFF subtree_governor)
+      summary: Reorder sibling sub-objectives (M32 · service+Actor; is_goal_subtree_governor ∨ reviewer)
       tags: [ge-objectives]
       parameters:
         - $ref: '#/components/parameters/ObjectiveId'
@@ -477,7 +531,7 @@ paths:
                   $ref: '#/components/schemas/ProgramMetadata'
     post:
       operationId: createGeProgram
-      summary: Create non-default program (P2 · service · BFF subtree_governor or reviewer)
+      summary: Create non-default program (P2 · service+Actor; is_goal_subtree_governor ∨ reviewer)
       tags: [ge-programs]
       requestBody:
         required: true
@@ -503,7 +557,7 @@ paths:
   /ge/programs/{program_id}:
     get:
       operationId: getGeProgram
-      summary: Program detail with projects[] (JWT participant ∪ draft creator ∪ subtree_governor P2; reviewer via BFF)
+      summary: Program detail with projects[] (service+Actor+Is-Reviewer; can_read_project (participant∪creator∪governor∨reviewer))
       tags: [ge-programs]
       parameters:
         - $ref: '#/components/parameters/ProgramId'
@@ -563,7 +617,7 @@ paths:
   /ge/programs/{program_id}/reorder:
     post:
       operationId: reorderGeProgram
-      summary: Reorder sibling programs under sub-objective (M32 · service · BFF subtree_governor)
+      summary: Reorder sibling programs under sub-objective (M32 · service+Actor; is_goal_subtree_governor ∨ reviewer)
       tags: [ge-programs]
       parameters:
         - $ref: '#/components/parameters/ProgramId'
@@ -642,7 +696,7 @@ paths:
   /ge/projects:
     get:
       operationId: listGeProjects
-      summary: List projects (JWT participant ∪ draft creator ∪ subtree_governor P2; reviewer via skstudio BFF)
+      summary: List projects (service+Actor+Is-Reviewer; can_read_project (participant∪creator∪governor∨reviewer))
       tags: [ge-projects]
       responses:
         '200':
@@ -655,7 +709,7 @@ paths:
                   $ref: '#/components/schemas/ProjectSummary'
     post:
       operationId: createGeProject
-      summary: Atomically create project graph (draft · default Program any user · non-default Program subtree_governor P2)
+      summary: Atomically create project graph (draft · default Program any user · non-default Program is_goal_subtree_governor P2)
       tags: [ge-projects]
       requestBody:
         required: true
@@ -688,7 +742,7 @@ paths:
           $ref: '#/components/responses/NotFound'
     patch:
       operationId: patchGeProject
-      summary: Update name, pm_user_id, or program_id (P2 · structural · PM or subtree_governor or reviewer service)
+      summary: Update name, pm_user_id, or program_id (P2 · structural · PM or is_goal_subtree_governor or reviewer service)
       tags: [ge-projects]
       parameters:
         - $ref: '#/components/parameters/ProjectId'
@@ -709,7 +763,7 @@ paths:
           $ref: '#/components/responses/Conflict'
     delete:
       operationId: deleteGeProject
-      summary: Soft-delete empty project (PM or subtree_governor or reviewer · project_is_empty)
+      summary: Soft-delete empty project (PM or is_goal_subtree_governor or reviewer · project_is_empty)
       tags: [ge-projects]
       parameters:
         - $ref: '#/components/parameters/ProjectId'
@@ -725,7 +779,7 @@ paths:
   /ge/projects/{project_id}/reorder:
     post:
       operationId: reorderGeProject
-      summary: Reorder sibling projects under program (M32 · service · BFF subtree_governor)
+      summary: Reorder sibling projects under program (M32 · service+Actor; is_goal_subtree_governor ∨ reviewer)
       tags: [ge-projects]
       parameters:
         - $ref: '#/components/parameters/ProjectId'
@@ -743,7 +797,7 @@ paths:
   /ge/projects/{project_id}/program:
     patch:
       operationId: patchGeProjectProgram
-      summary: Migrate project to another program (P2 · source/target subtree_governor or PM or reviewer · AuditEvent)
+      summary: Migrate project to another program (P2 · source/target is_goal_subtree_governor or PM or reviewer · AuditEvent)
       tags: [ge-projects]
       parameters:
         - $ref: '#/components/parameters/ProjectId'
@@ -830,7 +884,7 @@ paths:
                 $ref: '#/components/schemas/ProjectRoleOptionsResponse'
     post:
       operationId: createProjectRoleOption
-      summary: Create role option (service/reviewer only · JWT → 403 reviewer_required)
+      summary: Create role option (service+Actor; reviewer only · else 403 reviewer_required)
       tags: [ge-projects]
       requestBody:
         required: true
@@ -999,7 +1053,7 @@ paths:
   /ge/projects/{project_id}/phases/{phase_id}/tasks:
     post:
       operationId: addGePhaseTask
-      summary: Add task to phase (pm or subtree_governor; assignee_user_id required)
+      summary: Add task to phase (pm or is_goal_subtree_governor; assignee_user_id required)
       description: |
         Creates a task in the given phase. assignee_user_id is required;
         the server does not fall back to pm_user_id when omitted or empty.
@@ -1030,7 +1084,7 @@ paths:
   /ge/projects/{project_id}/phases/{phase_id}/gate-items:
     post:
       operationId: addGePhaseGateItem
-      summary: Add gate item to phase (pm or subtree_governor)
+      summary: Add gate item to phase (pm or is_goal_subtree_governor)
       tags: [ge-gate-items]
       parameters:
         - $ref: '#/components/parameters/ProjectId'
@@ -1055,7 +1109,7 @@ paths:
   /ge/phases/{phase_id}:
     patch:
       operationId: patchGePhase
-      summary: Update business phase name and planned window (pm or subtree_governor)
+      summary: Update business phase name and planned window (pm or is_goal_subtree_governor)
       tags: [ge-phases]
       parameters:
         - $ref: '#/components/parameters/PhaseId'
@@ -1089,7 +1143,7 @@ paths:
           $ref: '#/components/responses/NotFound'
     delete:
       operationId: deleteGePhase
-      summary: Delete empty non-active business phase (pm or subtree_governor)
+      summary: Delete empty non-active business phase (pm or is_goal_subtree_governor)
       tags: [ge-phases]
       parameters:
         - $ref: '#/components/parameters/PhaseId'
@@ -1122,7 +1176,7 @@ paths:
           $ref: '#/components/responses/NotFound'
     patch:
       operationId: patchGeTask
-      summary: Update assignee_user_id, title, or phase_id (pm or subtree_governor)
+      summary: Update assignee_user_id, title, or phase_id (pm or is_goal_subtree_governor)
       tags: [ge-tasks]
       parameters:
         - $ref: '#/components/parameters/TaskId'
@@ -1151,7 +1205,7 @@ paths:
           $ref: '#/components/responses/Conflict'
     delete:
       operationId: deleteGeTask
-      summary: Delete task with no produce/prerequisite links (pm or subtree_governor)
+      summary: Delete task with no produce/prerequisite links (pm or is_goal_subtree_governor)
       tags: [ge-tasks]
       parameters:
         - $ref: '#/components/parameters/TaskId'
@@ -1216,7 +1270,7 @@ paths:
           $ref: '#/components/responses/NotFound'
     patch:
       operationId: patchGeGateItem
-      summary: Update gate item name, phase_id, planned_due, form, or definition fields (pm or subtree_governor; draft only for form)
+      summary: Update gate item name, phase_id, planned_due, form, or definition fields (pm or is_goal_subtree_governor; draft only for form)
       tags: [ge-gate-items]
       parameters:
         - $ref: '#/components/parameters/GateItemId'
@@ -1257,7 +1311,7 @@ paths:
           $ref: '#/components/responses/NotFound'
     delete:
       operationId: deleteGeGateItem
-      summary: Delete draft gate item with no links (pm or subtree_governor)
+      summary: Delete draft gate item with no links (pm or is_goal_subtree_governor)
       tags: [ge-gate-items]
       parameters:
         - $ref: '#/components/parameters/GateItemId'
@@ -1544,7 +1598,7 @@ components:
       properties:
         detail:
           type: string
-          description: e.g. project_not_found, gate_item_orphan_signer, note_title_conflict, project_note_required, deviation_not_activated, deviation_already_open, system_node_not_deviatable, deviation_produce_immutable, task_deviated_immutable, remediation_task_not_deletable, owner_required, has_children, default_node_immutable, not_subtree_governor, not_project_governor
+          description: e.g. project_not_found, gate_item_orphan_signer, note_title_conflict, project_note_required, deviation_not_activated, deviation_already_open, system_node_not_deviatable, deviation_produce_immutable, task_deviated_immutable, remediation_task_not_deletable, owner_required, has_children, default_node_immutable, not_is_goal_subtree_governor, not_project_governor
     CreateObjectiveRequest:
       type: object
       required: [name, parent_id, owner_user_id]
@@ -2008,7 +2062,7 @@ components:
             $ref: '#/components/schemas/PhaseGraph'
         graph_editable:
           type: boolean
-          description: M24 · caller may edit graph (PM or subtree_governor or reviewer service)
+          description: M24 · caller may edit graph (PM or is_goal_subtree_governor or reviewer service)
         graph_deletable:
           type: boolean
           description: M24 · caller may delete graph nodes
@@ -2092,7 +2146,7 @@ components:
           properties:
             projects:
               type: array
-              description: JWT filtered to participant ∪ draft creator ∪ subtree_governor (P2)
+              description: filtered to participant ∪ draft creator ∪ is_goal_subtree_governor ∨ reviewer (P2)
               items:
                 $ref: '#/components/schemas/ProjectSummary'
     UserOrgProfile:
@@ -2359,7 +2413,7 @@ components:
     TaskEffectiveStatus:
       type: string
       enum: [waiting, actionable, complete, deviated]
-      description: M23 B′ read-time derived task progress relative to JWT subject (actor) · normative · 需求 §4.6.2
+      description: M23 B′ read-time derived task progress relative to service+Actor subject (actor) · normative · 需求 §4.6.2
     TaskGraph:
       type: object
       description: produces/prerequisites are ge_gate_items.id (UUID), not create-request keys

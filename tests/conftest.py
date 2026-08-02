@@ -30,10 +30,16 @@ def raw_user_jwt_headers(user_id: str, *, secret: str = "test-jwt-secret") -> di
     return {"Authorization": f"Bearer {token}"}
 
 
-def service_headers(actor_user_id: str, *, token: str = "test-service-token") -> dict[str, str]:
+def service_headers(
+    actor_user_id: str,
+    *,
+    token: str = "test-service-token",
+    is_reviewer: bool = False,
+) -> dict[str, str]:
     return {
         "Authorization": f"Bearer {token}",
         "X-Actor-User-Id": actor_user_id,
+        "X-Actor-Is-Reviewer": "1" if is_reviewer else "0",
     }
 
 

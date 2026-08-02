@@ -10,20 +10,16 @@ from tests.conftest import jwt_headers, service_headers
 from tests.ge.conftest import GOLDEN_PROJECT_BODY, U_PM, U_ZHANGSAN, bootstrap_startup_gate
 
 
-def _create_dept(client, name: str, manager: str = "u-owner") -> str:
-    resp = client.post(
-        "/api/v1/org/departments",
-        headers=service_headers("reviewer-1"),
-        json={"name": name, "manager_user_id": manager},
-    )
-    assert resp.status_code == 201, resp.text
-    return resp.json()["id"]
+def _create_dept(client, name: str = "研发部", manager: str = "u-owner") -> str:
+    """Opaque dept id — GE org HTTP unmounted; authority lives in skstudio."""
+    _ = (client, manager)
+    return f"test-dept-{name}"
 
 
 def _annual_company(client, year: int = 2026) -> dict:
     resp = client.post(
         "/api/v1/ge/objectives/years",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={"planning_year": year, "name": f"{year} 年度战略目标"},
     )
     assert resp.status_code == 201, resp.text
@@ -33,7 +29,7 @@ def _annual_company(client, year: int = 2026) -> dict:
 def _create_sub_and_program(client, company_id: str, dept_id: str, *, owner: str) -> tuple[dict, dict]:
     sub = client.post(
         "/api/v1/ge/objectives",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={
             "name": f"子目标-{owner}",
             "parent_id": company_id,
@@ -44,7 +40,7 @@ def _create_sub_and_program(client, company_id: str, dept_id: str, *, owner: str
     assert sub.status_code == 201, sub.text
     prog = client.post(
         "/api/v1/ge/programs",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={
             "name": f"专项-{owner}",
             "objective_id": sub.json()["id"],
@@ -59,7 +55,7 @@ def _create_sub_and_program(client, company_id: str, dept_id: str, *, owner: str
 def _membership(client, user_id: str, department_id: str) -> None:
     resp = client.post(
         f"/api/v1/org/users/{user_id}/memberships",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={"department_id": department_id},
     )
     assert resp.status_code == 201, resp.text
@@ -112,8 +108,8 @@ def test_ge_perf_05_no_per_user_accountable_and_sql_cap(client, monkeypatch):
     event.listen(engine, "before_cursor_execute", _before)
     try:
         resp = client.get(
-            f"/api/v1/org/departments/{dept_id}/goal-portfolio",
-            headers=service_headers("reviewer-1"),
+            f"/api/v1/ge/portfolios/departments/{dept_id}",
+            headers=service_headers("reviewer-1", is_reviewer=True),
         )
     finally:
         event.remove(engine, "before_cursor_execute", _before)
@@ -135,8 +131,8 @@ def test_ge_perf_07_portfolio_matches_prior_shape(client):
     _project(client, prog["id"], pm=U_PM, creator="u-owner")
 
     resp = client.get(
-        f"/api/v1/org/departments/{dept_id}/goal-portfolio",
-        headers=service_headers("reviewer-1"),
+        f"/api/v1/ge/portfolios/departments/{dept_id}",
+        headers=service_headers("reviewer-1", is_reviewer=True),
     )
     assert resp.status_code == 200, resp.text
     body = resp.json()

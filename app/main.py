@@ -1,4 +1,4 @@
-"""FastAPI application entry (M1 scaffold)."""
+"""FastAPI application entry (GE-AUTHZ-API · routes only under /api/v1/ge/*)."""
 
 from __future__ import annotations
 
@@ -7,9 +7,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from app.db import db_ok, init_db
+from app.db import init_db
 from app.routes_ge import router as ge_router
-from app.routes_ge_internal import router as ge_internal_router
+from app.routes_ge_portfolios import router as ge_portfolios_router
 
 API_PREFIX = "/api/v1"
 
@@ -20,11 +20,12 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="goal_execution", version="0.1.0-m1", lifespan=lifespan)
+app = FastAPI(title="goal_execution", version="0.2.0-authz", lifespan=lifespan)
 
-# Org authority is skstudio (/api/v1/org). GE routes_org.py kept as import/reference only.
+# Org authority is skstudio (/api/v1/org). GE routes_org.py is unmounted legacy.
+# M2: only /api/v1/ge/* (including health, portfolios, check, users project-access).
 app.include_router(ge_router, prefix=API_PREFIX)
-app.include_router(ge_internal_router, prefix=API_PREFIX)
+app.include_router(ge_portfolios_router, prefix=API_PREFIX)
 
 
 @app.exception_handler(HTTPException)
@@ -32,12 +33,3 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     if isinstance(exc.detail, dict) and "detail" in exc.detail:
         return JSONResponse(status_code=exc.status_code, content=exc.detail)
     return JSONResponse(status_code=exc.status_code, content={"detail": str(exc.detail)})
-
-
-@app.get(f"{API_PREFIX}/health")
-def health() -> dict[str, bool | str]:
-    return {
-        "ok": db_ok(),
-        "db_ok": db_ok(),
-        "service": "goal_execution",
-    }

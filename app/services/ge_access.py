@@ -1,7 +1,7 @@
-"""Project access control (§4.0 · §4.2.1 · M21 governance · M24 subtree steward).
+"""Project access control (GE-AUTHZ-API M1 · actor + is_reviewer predicates).
 
 GE-PERF.2: ``filter_projects_for_user`` uses set precompute — no per-project
-``is_subtree_governor`` in the list loop.
+``is_goal_subtree_governor`` in the list loop.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import AuthUser
 from app.models.ge import GeObjective, GeProgram, GeProject, GeProjectMember, GeTask
-from app.services.ge_subtree_governor import is_subtree_governor
+from app.services.ge_goal_subtree_governor import is_goal_subtree_governor
 
 
 def project_participant_user_ids(db: Session, project: GeProject) -> set[str]:
@@ -31,15 +31,13 @@ def is_participant(db: Session, project: GeProject, user_id: str) -> bool:
 def can_read_project(db: Session, project: GeProject, user: AuthUser) -> bool:
     if project.deleted_at is not None:
         return False
-    if user.auth_method == "service":
+    if user.is_reviewer:
         return True
     if is_participant(db, project, user.user_id):
         return True
     if project.created_by_user_id == user.user_id:
         return True
-    if user.auth_method == "jwt":
-        return is_subtree_governor(db, user_id=user.user_id, project_id=project.id)
-    return False
+    return is_goal_subtree_governor(db, user_id=user.user_id, project_id=project.id)
 
 
 def _governed_program_ids_for_user(db: Session, user_id: str) -> set[str]:
@@ -94,19 +92,16 @@ def _participant_project_ids(db: Session, user_id: str, project_ids: list[str]) 
 
 
 def filter_projects_for_user(db: Session, projects: list[GeProject], user: AuthUser) -> list[GeProject]:
-    if user.auth_method == "service":
-        return [p for p in projects if p.deleted_at is None]
-
     active = [p for p in projects if p.deleted_at is None]
     if not active:
         return []
+    if user.is_reviewer:
+        return active
 
     uid = user.user_id
     project_ids = [p.id for p in active]
     participant_ids = _participant_project_ids(db, uid, project_ids)
-    governed_programs = (
-        _governed_program_ids_for_user(db, uid) if user.auth_method == "jwt" else set()
-    )
+    governed_programs = _governed_program_ids_for_user(db, uid)
 
     visible: list[GeProject] = []
     for project in active:
@@ -126,31 +121,48 @@ def filter_projects_for_user(db: Session, projects: list[GeProject], user: AuthU
 
 
 def can_govern_project(db: Session, project: GeProject, user: AuthUser) -> bool:
-    """Structure + execution governance: PM, subtree_governor (M24), or reviewer (service)."""
+    """Structure + execution governance: PM, goal_subtree_governor, or reviewer."""
     if project.deleted_at is not None:
         return False
-    if user.auth_method == "service":
+    if user.is_reviewer:
         return True
-    if user.auth_method == "jwt":
-        if user.user_id == project.pm_user_id:
-            return True
-        return is_subtree_governor(db, user_id=user.user_id, project_id=project.id)
-    return False
+    if user.user_id == project.pm_user_id:
+        return True
+    return is_goal_subtree_governor(db, user_id=user.user_id, project_id=project.id)
 
 
 def can_govern_structure(db: Session, project: GeProject, user: AuthUser) -> bool:
-    """Alias for can_govern_project (M24 · GE-29 · no dual-track)."""
     return can_govern_project(db, project, user)
 
 
 def can_force_delete_project(db: Session, project: GeProject, user: AuthUser) -> bool:
-    """Subtree owner or reviewer may soft-delete non-empty projects (UI must confirm)."""
+    """Goal-subtree governor or reviewer may soft-delete non-empty projects."""
     if project.deleted_at is not None:
         return False
-    if user.auth_method == "service":
+    if user.is_reviewer:
         return True
-    if user.auth_method == "jwt":
-        return is_subtree_governor(db, user_id=user.user_id, project_id=project.id)
+    return is_goal_subtree_governor(db, user_id=user.user_id, project_id=project.id)
+
+
+def can_create_project(db: Session, user: AuthUser, *, program_id: str) -> bool:
+    if user.is_reviewer:
+        return True
+    return is_goal_subtree_governor(db, user_id=user.user_id, program_id=program_id)
+
+
+def can_struct_objective(db: Session, user: AuthUser, *, objective_id: str) -> bool:
+    if user.is_reviewer:
+        return True
+    return is_goal_subtree_governor(db, user_id=user.user_id, objective_id=objective_id)
+
+
+def can_struct_program(db: Session, user: AuthUser, *, program_id: str | None = None, objective_id: str | None = None) -> bool:
+    if user.is_reviewer:
+        return True
+    if program_id is not None:
+        return is_goal_subtree_governor(db, user_id=user.user_id, program_id=program_id)
+    if objective_id is not None:
+        return is_goal_subtree_governor(db, user_id=user.user_id, objective_id=objective_id)
     return False
 
 
@@ -163,9 +175,13 @@ def require_govern_structure(db: Session, project: GeProject, user: AuthUser) ->
     require_govern_project(db, project, user)
 
 
-def list_governed_project_ids(db: Session, user_id: str, *, auth_method: str = "jwt") -> list[str]:
+def forbid_detail_not_goal_subtree_governor() -> dict[str, str]:
+    return {"detail": "not_goal_subtree_governor"}
+
+
+def list_governed_project_ids(db: Session, user_id: str, *, auth_method: str = "jwt", is_reviewer: bool = False) -> list[str]:
     q = db.query(GeProject).filter(GeProject.deleted_at.is_(None), GeProject.status == "active")
-    if auth_method == "service":
+    if is_reviewer:
         return [p.id for p in q.all()]
     projects = q.all()
     governed_programs = _governed_program_ids_for_user(db, user_id)

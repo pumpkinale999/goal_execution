@@ -8,9 +8,17 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, attributes
 
 from app.auth import AuthUser
-from app.deps import get_current_user, get_db, require_service_user
+from app.db import db_ok
+from app.deps import get_current_user, get_db, require_reviewer, require_service_user
 from app.models.ge import GeObjective, GeProgram, GeProject
-from app.services.ge_access import can_govern_project, can_read_project, filter_projects_for_user
+from app.services.ge_access import (
+    can_govern_project,
+    can_read_project,
+    can_struct_objective,
+    can_struct_program,
+    filter_projects_for_user,
+)
+from app.services.ge_goal_subtree_governor import is_goal_subtree_governor
 from app.services.ge_graph import build_project_graph, load_project_graph, now_iso, reconcile_project_completion
 from app.services.ge_system_tasks import sync_system_lifecycle_task_assignees
 from app.services.ge_graph_edit import (
@@ -222,14 +230,11 @@ def list_projects(
 def my_project_access(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[AuthUser, Depends(get_current_user)],
+    all_visible: int = Query(default=0, ge=0, le=1),
 ) -> dict[str, Any]:
-    """K27.6 · batch access table for the JWT caller (BFF X-KB-Project-Access)."""
-    if user.auth_method != "jwt":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={"detail": "jwt_required"},
-        )
-    return build_project_access_for_user(db, user)
+    """K27.6 · batch access for BFF service+actor (GE-AUTHZ-T08)."""
+    force = bool(all_visible) and user.is_reviewer
+    return build_project_access_for_user(db, user, force_member_all=force)
 
 
 @router.post("/projects", status_code=status.HTTP_201_CREATED)
@@ -238,10 +243,10 @@ def post_project(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[AuthUser, Depends(get_current_user)],
 ) -> dict[str, Any]:
-    # M3: create is BFF-only (service token + X-Actor-User-Id).
+    # Create is BFF-only (service token + X-Actor-User-Id + optional Is-Reviewer).
     if user.auth_method != "service":
         raise HTTPException(status_code=403, detail={"detail": "service_token_required"})
-    return create_project(db, actor_user_id=user.user_id, body=body)
+    return create_project(db, user=user, body=body)
 
 
 @router.get("/projects/{project_id}")
@@ -637,7 +642,7 @@ def get_gate_item(
 def post_objective_year(
     body: dict[str, Any],
     db: Annotated[Session, Depends(get_db)],
-    user: Annotated[AuthUser, Depends(require_service_user)],
+    user: Annotated[AuthUser, Depends(require_reviewer)],
 ) -> dict[str, Any]:
     return create_objective_year(db, body, actor_user_id=user.user_id)
 
@@ -647,7 +652,7 @@ def post_assess_objective(
     objective_id: str,
     body: dict[str, Any],
     db: Annotated[Session, Depends(get_db)],
-    user: Annotated[AuthUser, Depends(require_service_user)],
+    user: Annotated[AuthUser, Depends(require_reviewer)],
 ) -> dict[str, Any]:
     return assess_objective(db, objective_id, body, actor_user_id=user.user_id)
 
@@ -657,7 +662,7 @@ def post_assess_program(
     program_id: str,
     body: dict[str, Any],
     db: Annotated[Session, Depends(get_db)],
-    user: Annotated[AuthUser, Depends(require_service_user)],
+    user: Annotated[AuthUser, Depends(require_reviewer)],
 ) -> dict[str, Any]:
     return assess_program(db, program_id, body, actor_user_id=user.user_id)
 
@@ -723,7 +728,7 @@ def get_project_role_options_route(
 def post_project_role_option_route(
     body: dict[str, Any],
     db: Annotated[Session, Depends(get_db)],
-    user: Annotated[AuthUser, Depends(get_current_user)],
+    user: Annotated[AuthUser, Depends(require_reviewer)],
 ) -> dict[str, Any]:
     return create_role_option(db, body, user=user)
 
@@ -768,12 +773,32 @@ def delete_project_member_route(
     delete_member(db, project_id, user_id, user)
 
 
+def _require_struct_objective(db: Session, user: AuthUser, objective_id: str) -> None:
+    if not can_struct_objective(db, user, objective_id=objective_id):
+        raise HTTPException(status_code=403, detail={"detail": "not_goal_subtree_governor"})
+
+
+def _require_struct_program(
+    db: Session,
+    user: AuthUser,
+    *,
+    program_id: str | None = None,
+    objective_id: str | None = None,
+) -> None:
+    if not can_struct_program(db, user, program_id=program_id, objective_id=objective_id):
+        raise HTTPException(status_code=403, detail={"detail": "not_goal_subtree_governor"})
+
+
 @router.post("/objectives", status_code=status.HTTP_201_CREATED)
 def post_objective(
     body: dict[str, Any],
     db: Annotated[Session, Depends(get_db)],
-    _user: Annotated[AuthUser, Depends(require_service_user)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
 ) -> dict[str, Any]:
+    parent_id = str(body.get("parent_id") or "").strip()
+    if not parent_id:
+        raise HTTPException(status_code=400, detail={"detail": "parent_id_required"})
+    _require_struct_objective(db, user, parent_id)
     return create_objective(db, body)
 
 
@@ -782,8 +807,9 @@ def patch_objective_route(
     objective_id: str,
     body: dict[str, Any],
     db: Annotated[Session, Depends(get_db)],
-    _user: Annotated[AuthUser, Depends(require_service_user)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
 ) -> dict[str, Any]:
+    _require_struct_objective(db, user, objective_id)
     return patch_objective(db, objective_id, body)
 
 
@@ -791,8 +817,12 @@ def patch_objective_route(
 def post_program(
     body: dict[str, Any],
     db: Annotated[Session, Depends(get_db)],
-    _user: Annotated[AuthUser, Depends(require_service_user)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
 ) -> dict[str, Any]:
+    objective_id = str(body.get("objective_id") or "").strip()
+    if not objective_id:
+        raise HTTPException(status_code=400, detail={"detail": "objective_id_required"})
+    _require_struct_program(db, user, objective_id=objective_id)
     return create_program(db, body)
 
 
@@ -801,8 +831,9 @@ def patch_program_route(
     program_id: str,
     body: dict[str, Any],
     db: Annotated[Session, Depends(get_db)],
-    _user: Annotated[AuthUser, Depends(require_service_user)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
 ) -> dict[str, Any]:
+    _require_struct_program(db, user, program_id=program_id)
     return patch_program(db, program_id, body)
 
 
@@ -811,8 +842,9 @@ def reorder_objective_route(
     objective_id: str,
     body: ReorderRequest,
     db: Annotated[Session, Depends(get_db)],
-    _user: Annotated[AuthUser, Depends(require_service_user)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
 ) -> dict[str, Any]:
+    _require_struct_objective(db, user, objective_id)
     now = now_iso()
     obj = reorder_objective(db, objective_id, body.direction)  # type: ignore[arg-type]
     obj.updated_at = now
@@ -826,8 +858,9 @@ def reorder_program_route(
     program_id: str,
     body: ReorderRequest,
     db: Annotated[Session, Depends(get_db)],
-    _user: Annotated[AuthUser, Depends(require_service_user)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
 ) -> dict[str, Any]:
+    _require_struct_program(db, user, program_id=program_id)
     now = now_iso()
     program = reorder_program(db, program_id, body.direction)  # type: ignore[arg-type]
     program.updated_at = now
@@ -841,8 +874,13 @@ def reorder_project_route(
     project_id: str,
     body: ReorderRequest,
     db: Annotated[Session, Depends(get_db)],
-    _user: Annotated[AuthUser, Depends(require_service_user)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
 ) -> dict[str, Any]:
+    project = db.get(GeProject, project_id)
+    if project is None or project.deleted_at is not None:
+        raise HTTPException(status_code=404, detail={"detail": "project_not_found"})
+    if not can_govern_project(db, project, user):
+        raise HTTPException(status_code=403, detail={"detail": "not_project_governor"})
     now = now_iso()
     project = reorder_project(db, project_id, body.direction)  # type: ignore[arg-type]
     project.updated_at = now
@@ -862,8 +900,9 @@ def reorder_project_route(
 def delete_objective_route(
     objective_id: str,
     db: Annotated[Session, Depends(get_db)],
-    _user: Annotated[AuthUser, Depends(require_service_user)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
 ) -> None:
+    _require_struct_objective(db, user, objective_id)
     delete_objective(db, objective_id)
 
 
@@ -871,6 +910,57 @@ def delete_objective_route(
 def delete_program_route(
     program_id: str,
     db: Annotated[Session, Depends(get_db)],
-    _user: Annotated[AuthUser, Depends(require_service_user)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
 ) -> None:
+    _require_struct_program(db, user, program_id=program_id)
     delete_program(db, program_id)
+
+
+@router.get("/health")
+def ge_health() -> dict[str, bool | str]:
+    """GE-AUTHZ-API M2 · E3."""
+    return {
+        "ok": db_ok(),
+        "db_ok": db_ok(),
+        "service": "goal_execution",
+    }
+
+
+@router.get("/goal-subtree-governor/check")
+def check_goal_subtree_governor(
+    db: Annotated[Session, Depends(get_db)],
+    _user: Annotated[AuthUser, Depends(require_service_user)],
+    user_id: str = Query(...),
+    objective_id: str | None = Query(default=None),
+    program_id: str | None = Query(default=None),
+    project_id: str | None = Query(default=None),
+) -> dict[str, bool]:
+    """Pure goal-tree query — ignores caller is_reviewer (GE-AUTHZ-T07)."""
+    return {
+        "is_governor": is_goal_subtree_governor(
+            db,
+            user_id=user_id,
+            objective_id=objective_id,
+            program_id=program_id,
+            project_id=project_id,
+        )
+    }
+
+
+@router.get("/users/{user_id}/project-access")
+def user_project_access(
+    user_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    _svc: Annotated[AuthUser, Depends(require_service_user)],
+    all_visible: bool = Query(
+        default=False,
+        description="When true, return every non-deleted project with role=member (reviewer BFF).",
+    ),
+) -> dict[str, Any]:
+    """K27.6 · batch access table for BFF (service token) · GE-AUTHZ M2 E1."""
+    subject = AuthUser(user_id=str(user_id).strip(), auth_method="service", is_reviewer=False)
+    return build_project_access_for_user(
+        db,
+        subject,
+        force_member_all=bool(all_visible),
+    )

@@ -23,7 +23,8 @@ from app.services.ge_gate_includes_sync import sync_gate_includes_for_phase
 from app.services.ge_graph import now_iso, record_audit, recompute_gate_and_phases, recompute_task_status
 from app.services.ge_graph_validate import validate_phases_body, validate_project_graph_db
 from app.services.ge_schedule_validate import parse_plan_date, parse_required_plan_date, validate_gate_item_due_in_phase, validate_phase_window
-from app.services.ge_subtree_governor import is_subtree_governor
+from app.auth import AuthUser
+from app.services.ge_access import can_create_project
 from app.services.ge_sort_order import next_project_sort_order
 from app.services.ge_strategic_lifecycle import invalidate_lifecycle_refresh
 
@@ -36,7 +37,14 @@ def _validate_create_body(body: dict[str, Any]) -> None:
         raise HTTPException(status_code=400, detail={"detail": "invalid_assignee"})
 
 
-def create_project(db: Session, *, actor_user_id: str, body: dict[str, Any], commit: bool = True) -> dict[str, Any]:
+def create_project(
+    db: Session,
+    *,
+    user: AuthUser | None = None,
+    actor_user_id: str | None = None,
+    body: dict[str, Any],
+    commit: bool = True,
+) -> dict[str, Any]:
     _validate_create_body(body)
     now = now_iso()
     raw_program_id = body.get("program_id")
@@ -45,8 +53,13 @@ def create_project(db: Session, *, actor_user_id: str, body: dict[str, Any], com
     program_id = str(raw_program_id).strip()
     if db.get(GeProgram, program_id) is None:
         raise HTTPException(status_code=404, detail={"detail": "not_found"})
-    if not is_subtree_governor(db, user_id=actor_user_id, program_id=program_id):
-        raise HTTPException(status_code=403, detail={"detail": "not_subtree_governor"})
+    if user is None:
+        if not actor_user_id:
+            raise HTTPException(status_code=400, detail={"detail": "invalid_request"})
+        user = AuthUser(user_id=str(actor_user_id), auth_method="service", is_reviewer=False)
+    actor_user_id = user.user_id
+    if not can_create_project(db, user, program_id=program_id):
+        raise HTTPException(status_code=403, detail={"detail": "not_goal_subtree_governor"})
     project_id = str(uuid.uuid4())
     project_note_id = body.get("project_note_id")
     if project_note_id is not None:

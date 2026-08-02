@@ -13,19 +13,15 @@ def _patch_today(monkeypatch, d: date) -> None:
 
 
 def _create_dept(client, name: str = "研发部", manager: str = "u-owner") -> str:
-    resp = client.post(
-        "/api/v1/org/departments",
-        headers=service_headers("reviewer-1"),
-        json={"name": name, "manager_user_id": manager},
-    )
-    assert resp.status_code == 201, resp.text
-    return resp.json()["id"]
+    """Opaque dept id — GE org HTTP unmounted; authority lives in skstudio."""
+    _ = (client, manager)
+    return f"test-dept-{name}"
 
 
 def _annual_company(client, year: int = 2026) -> dict:
     resp = client.post(
         "/api/v1/ge/objectives/years",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={"planning_year": year, "name": f"{year} 年度战略目标"},
     )
     assert resp.status_code == 201, resp.text
@@ -48,7 +44,7 @@ def test_create_sub_requires_primary_department(client):
     company = _annual_company(client)
     resp = client.post(
         "/api/v1/ge/objectives",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={
             "name": "子目标无部门",
             "parent_id": company["id"],
@@ -65,7 +61,7 @@ def test_create_sub_defaults_quarter_period(client):
     dept_id = _create_dept(client)
     resp = client.post(
         "/api/v1/ge/objectives",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={
             "name": "当季度子目标",
             "parent_id": company["id"],
@@ -87,7 +83,7 @@ def test_period_out_of_parent_bounds(client):
     dept_id = _create_dept(client)
     resp = client.post(
         "/api/v1/ge/objectives",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={
             "name": "越界子目标",
             "parent_id": company["id"],
@@ -118,7 +114,7 @@ def test_read_refresh_pending_assessment(client, monkeypatch):
     dept_id = _create_dept(client)
     create = client.post(
         "/api/v1/ge/objectives",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={
             "name": "过期子目标",
             "parent_id": company["id"],
@@ -145,7 +141,7 @@ def test_locked_objective_allows_owner_patch_rejects_period(client, monkeypatch)
     dept_id = _create_dept(client)
     sub = client.post(
         "/api/v1/ge/objectives",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={
             "name": "锁定子目标",
             "parent_id": company["id"],
@@ -161,7 +157,7 @@ def test_locked_objective_allows_owner_patch_rejects_period(client, monkeypatch)
 
     ok = client.patch(
         f"/api/v1/ge/objectives/{sub['id']}",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={"name": "锁定子目标", "owner_user_id": "anne"},
     )
     assert ok.status_code == 200, ok.text
@@ -169,7 +165,7 @@ def test_locked_objective_allows_owner_patch_rejects_period(client, monkeypatch)
 
     blocked = client.patch(
         f"/api/v1/ge/objectives/{sub['id']}",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={"period_granularity": "quarter", "period_start": "2021-04-01", "period_end": "2021-06-30"},
     )
     assert blocked.status_code == 409
@@ -182,7 +178,7 @@ def test_assess_objective_and_program(client, monkeypatch):
     dept_id = _create_dept(client)
     sub = client.post(
         "/api/v1/ge/objectives",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={
             "name": "待评子目标",
             "parent_id": company["id"],
@@ -195,7 +191,7 @@ def test_assess_objective_and_program(client, monkeypatch):
     ).json()
     prog = client.post(
         "/api/v1/ge/programs",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={
             "name": "待评专项",
             "objective_id": sub["id"],
@@ -211,7 +207,7 @@ def test_assess_objective_and_program(client, monkeypatch):
 
     obj_assess = client.post(
         f"/api/v1/ge/objectives/{sub['id']}/assess",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={"outcome": "met", "note": "ok"},
     )
     assert obj_assess.status_code == 200
@@ -219,7 +215,7 @@ def test_assess_objective_and_program(client, monkeypatch):
 
     prog_assess = client.post(
         f"/api/v1/ge/programs/{prog['id']}/assess",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={"outcome": "partial_met"},
     )
     assert prog_assess.status_code == 200
@@ -234,7 +230,7 @@ def test_delete_program_ignores_soft_deleted_projects(client):
     dept_id = _create_dept(client)
     sub = client.post(
         "/api/v1/ge/objectives",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={
             "name": "子目标",
             "parent_id": company["id"],
@@ -244,7 +240,7 @@ def test_delete_program_ignores_soft_deleted_projects(client):
     ).json()
     prog = client.post(
         "/api/v1/ge/programs",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={
             "name": "空专项",
             "objective_id": sub["id"],
@@ -266,13 +262,13 @@ def test_delete_program_ignores_soft_deleted_projects(client):
     assert (
         client.delete(
             f"/api/v1/ge/projects/{created['id']}",
-            headers=service_headers("reviewer-1"),
+            headers=service_headers("reviewer-1", is_reviewer=True),
         ).status_code
         == 204
     )
     ok = client.delete(
         f"/api/v1/ge/programs/{prog['id']}",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
     )
     assert ok.status_code == 204, ok.text
 
@@ -284,7 +280,7 @@ def test_delete_program_blocked_by_active_project(client):
     dept_id = _create_dept(client)
     sub = client.post(
         "/api/v1/ge/objectives",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={
             "name": "子目标2",
             "parent_id": company["id"],
@@ -294,7 +290,7 @@ def test_delete_program_blocked_by_active_project(client):
     ).json()
     prog = client.post(
         "/api/v1/ge/programs",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={
             "name": "非空专项",
             "objective_id": sub["id"],
@@ -315,7 +311,7 @@ def test_delete_program_blocked_by_active_project(client):
     )
     blocked = client.delete(
         f"/api/v1/ge/programs/{prog['id']}",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
     )
     assert blocked.status_code == 409
     assert blocked.json()["detail"] == "program_not_empty"
@@ -327,7 +323,7 @@ def test_auto_not_met_after_30_days(client, monkeypatch):
     dept_id = _create_dept(client)
     sub = client.post(
         "/api/v1/ge/objectives",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={
             "name": "超期未评",
             "parent_id": company["id"],
@@ -351,7 +347,7 @@ def test_create_year_does_not_copy_default_chain(client):
     dept_id = _create_dept(client)
     client.post(
         "/api/v1/ge/objectives",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={
             "name": "2030子目标",
             "parent_id": first["id"],
@@ -361,7 +357,7 @@ def test_create_year_does_not_copy_default_chain(client):
     )
     second = client.post(
         "/api/v1/ge/objectives/years",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={
             "planning_year": 2031,
             "name": "2031 年度战略目标",
@@ -392,7 +388,7 @@ def test_create_sub_with_year_granularity(client):
     dept_id = _create_dept(client)
     resp = client.post(
         "/api/v1/ge/objectives",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={
             "name": "年度子目标",
             "parent_id": company["id"],
@@ -416,7 +412,7 @@ def test_create_sub_year_invalid_boundary(client):
     dept_id = _create_dept(client)
     resp = client.post(
         "/api/v1/ge/objectives",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={
             "name": "非法年度子目标",
             "parent_id": company["id"],
@@ -437,7 +433,7 @@ def test_create_sub_year_out_of_parent_bounds(client):
     dept_id = _create_dept(client)
     resp = client.post(
         "/api/v1/ge/objectives",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={
             "name": "越界年度子目标",
             "parent_id": company["id"],
@@ -458,7 +454,7 @@ def test_create_program_under_year_sub_defaults_quarter(client):
     dept_id = _create_dept(client)
     sub = client.post(
         "/api/v1/ge/objectives",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={
             "name": "年度子目标",
             "parent_id": company["id"],
@@ -471,7 +467,7 @@ def test_create_program_under_year_sub_defaults_quarter(client):
     ).json()
     resp = client.post(
         "/api/v1/ge/programs",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={
             "name": "下属专项",
             "objective_id": sub["id"],
@@ -492,7 +488,7 @@ def test_create_program_with_year_rejected(client):
     dept_id = _create_dept(client)
     sub = client.post(
         "/api/v1/ge/objectives",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={
             "name": "季度子目标",
             "parent_id": company["id"],
@@ -505,7 +501,7 @@ def test_create_program_with_year_rejected(client):
     ).json()
     resp = client.post(
         "/api/v1/ge/programs",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={
             "name": "非法专项",
             "objective_id": sub["id"],

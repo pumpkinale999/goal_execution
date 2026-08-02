@@ -87,7 +87,10 @@ def test_reviewer_service_token_can_delete_empty_project(client):
     }
     created = create_project(client, U_PM, empty_body, bootstrap_startup=False)
     project_id = created["id"]
-    ok = client.delete(f"/api/v1/ge/projects/{project_id}", headers=service_headers("reviewer-1"))
+    ok = client.delete(
+        f"/api/v1/ge/projects/{project_id}",
+        headers=service_headers("reviewer-1", is_reviewer=True),
+    )
     assert ok.status_code == 204
 
 
@@ -104,7 +107,7 @@ def test_pm_cannot_delete_non_empty_active_project(client):
 def test_reviewer_can_force_delete_non_empty_project(client):
     created = create_project(client, U_PM)
     project_id = created["id"]
-    resp = client.delete(f"/api/v1/ge/projects/{project_id}", headers=service_headers("reviewer-1"))
+    resp = client.delete(f"/api/v1/ge/projects/{project_id}", headers=service_headers("reviewer-1", is_reviewer=True))
     assert resp.status_code == 204
 
 

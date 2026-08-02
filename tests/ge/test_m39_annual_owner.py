@@ -9,7 +9,7 @@ def test_create_year_explicit_owner_not_actor(client):
     """GE-T200: owner_user_id=U2 (actor≠U2) → owner is U2."""
     resp = client.post(
         "/api/v1/ge/objectives/years",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={
             "planning_year": 2050,
             "name": "显式负责人根",
@@ -27,7 +27,7 @@ def test_create_year_omitted_or_blank_owner_falls_back_to_actor(client):
     """GE-T201: missing or blank owner_user_id → owner=actor."""
     omitted = client.post(
         "/api/v1/ge/objectives/years",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={"planning_year": 2051, "name": "省略负责人"},
     )
     assert omitted.status_code == 201, omitted.text
@@ -35,7 +35,7 @@ def test_create_year_omitted_or_blank_owner_falls_back_to_actor(client):
 
     blank = client.post(
         "/api/v1/ge/objectives/years",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={"planning_year": 2051, "name": "空白负责人", "owner_user_id": ""},
     )
     assert blank.status_code == 201, blank.text
@@ -43,7 +43,7 @@ def test_create_year_omitted_or_blank_owner_falls_back_to_actor(client):
 
     spaces = client.post(
         "/api/v1/ge/objectives/years",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={"planning_year": 2051, "name": "空白格负责人", "owner_user_id": "  "},
     )
     assert spaces.status_code == 201, spaces.text

@@ -15,7 +15,7 @@ from tests.ge.conftest import (
 def _annual_company(client, year: int = 2026) -> dict:
     resp = client.post(
         "/api/v1/ge/objectives/years",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={"planning_year": year, "name": f"{year} 年度战略目标"},
     )
     assert resp.status_code == 201, resp.text
@@ -43,14 +43,10 @@ def _sub_period_fields(company: dict) -> dict[str, str]:
 
 def _create_sub(client, company: dict, name: str = "测试子目标") -> dict:
     company_id = company["id"]
-    dept = client.post(
-        "/api/v1/org/departments",
-        headers=service_headers("reviewer-1"),
-        json={"name": f"{name}部门", "manager_user_id": "u-owner"},
-    ).json()
+    dept = {"id": f"test-dept-{name}"}
     resp = client.post(
         "/api/v1/ge/objectives",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={
             "name": name,
             "parent_id": company_id,
@@ -89,7 +85,7 @@ def test_patch_project_forbidden_non_pm(client):
 def test_create_program_requires_objective_id(client):
     resp = client.post(
         "/api/v1/ge/programs",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={"name": "产品群"},
     )
     assert resp.status_code == 400
@@ -100,7 +96,7 @@ def test_create_program_on_company_objective_forbidden(client):
     company = _annual_company(client)
     resp = client.post(
         "/api/v1/ge/programs",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={"name": "产品群", "objective_id": company["id"], "owner_user_id": "u-owner"},
     )
     assert resp.status_code == 400
@@ -112,7 +108,7 @@ def test_create_and_patch_program(client):
     sub = _create_sub(client, company)
     create = client.post(
         "/api/v1/ge/programs",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={
             "name": "产品群",
             "objective_id": sub["id"],
@@ -124,7 +120,7 @@ def test_create_and_patch_program(client):
     program_id = create.json()["id"]
     patch = client.patch(
         f"/api/v1/ge/programs/{program_id}",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={"name": "产品群（改）"},
     )
     assert patch.status_code == 200
@@ -136,7 +132,7 @@ def test_patch_program_to_company_objective_forbidden(client):
     sub = _create_sub(client, company, name="子目标A")
     create = client.post(
         "/api/v1/ge/programs",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={
             "name": "产品群",
             "objective_id": sub["id"],
@@ -151,7 +147,7 @@ def test_patch_program_to_company_objective_forbidden(client):
     program_id = create.json()["id"]
     resp = client.patch(
         f"/api/v1/ge/programs/{program_id}",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={"objective_id": company["id"]},
     )
     assert resp.status_code == 400
@@ -162,7 +158,7 @@ def test_create_sub_objective(client):
     company = _annual_company(client, year=2028)
     create = client.post(
         "/api/v1/ge/objectives",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={"name": "2026 增长", "parent_id": company["id"], "owner_user_id": "u-owner"},
     )
     assert create.status_code == 400
@@ -174,7 +170,7 @@ def test_delete_sub_objective(client):
     sub = _create_sub(client, company, name="待删子目标")
     deleted = client.delete(
         f"/api/v1/ge/objectives/{sub['id']}",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
     )
     assert deleted.status_code == 204
 

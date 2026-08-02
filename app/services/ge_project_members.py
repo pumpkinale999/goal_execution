@@ -116,8 +116,8 @@ def create_role_option(
     *,
     user: AuthUser,
 ) -> dict[str, Any]:
-    """JWT callers are always rejected; reviewers create via BFF service token."""
-    if user.auth_method == "jwt":
+    """Only group-creation reviewers may create role options (GE-AUTHZ matrix)."""
+    if not user.is_reviewer:
         raise HTTPException(status_code=403, detail={"detail": "reviewer_required"})
     name = str(body.get("name") or "").strip()
     if not name:

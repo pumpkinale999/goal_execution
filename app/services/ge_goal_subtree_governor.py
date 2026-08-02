@@ -1,4 +1,4 @@
-"""Sub-tree governor checks (§4.2.0.2 · P2)."""
+"""Goal-tree subtree governor checks (GE-AUTHZ-API · is_goal_subtree_governor)."""
 
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ def _objective_chain_governor(db: Session, *, user_id: str, objective_id: str) -
     return False
 
 
-def is_subtree_governor(
+def is_goal_subtree_governor(
     db: Session,
     *,
     user_id: str,
@@ -35,7 +35,10 @@ def is_subtree_governor(
     program_id: str | None = None,
     project_id: str | None = None,
 ) -> bool:
-    """True when user owns this scope or an ancestor Objective/Program on the path."""
+    """True when user owns this scope or an ancestor Objective/Program on the path.
+
+    Does **not** consider is_reviewer or PM — callers OR those separately.
+    """
     uid = str(user_id).strip()
     if not uid:
         return False
@@ -44,7 +47,7 @@ def is_subtree_governor(
         project = db.get(GeProject, str(project_id))
         if project is None or project.deleted_at is not None:
             return False
-        return is_subtree_governor(db, user_id=uid, program_id=project.program_id)
+        return is_goal_subtree_governor(db, user_id=uid, program_id=project.program_id)
 
     if program_id is not None:
         program = db.get(GeProgram, str(program_id))
@@ -58,3 +61,6 @@ def is_subtree_governor(
         return _objective_chain_governor(db, user_id=uid, objective_id=str(objective_id))
 
     return False
+
+
+# Compat alias (tests / older imports)

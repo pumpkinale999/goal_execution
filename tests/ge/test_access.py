@@ -35,7 +35,7 @@ def test_jwt_project_list_participant_filter(client):
 
 def test_service_lists_all_projects(client):
     created = create_project(client, U_PM)
-    resp = client.get("/api/v1/ge/projects", headers=service_headers("reviewer"))
+    resp = client.get("/api/v1/ge/projects", headers=service_headers("reviewer", is_reviewer=True))
     assert resp.status_code == 200
     assert created["id"] in {p["id"] for p in resp.json()}
 
@@ -48,5 +48,5 @@ def test_program_projects_participant_filter(client):
     assert created["id"] in {p["id"] for p in participant.json()["projects"]}
     stranger = client.get(f"/api/v1/ge/programs/{program_id}", headers=jwt_headers(U_STRANGER))
     assert created["id"] not in {p["id"] for p in stranger.json()["projects"]}
-    reviewer = client.get(f"/api/v1/ge/programs/{program_id}", headers=service_headers("reviewer"))
+    reviewer = client.get(f"/api/v1/ge/programs/{program_id}", headers=service_headers("reviewer", is_reviewer=True))
     assert created["id"] in {p["id"] for p in reviewer.json()["projects"]}

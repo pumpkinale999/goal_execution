@@ -14,7 +14,20 @@ from app.constants import (
     SAMPLE_PROJECT_NAME,
     SAMPLE_SUB_OBJECTIVE_NAME,
 )
-from app.models.ge import GeObjective, GeProgram, GeProject
+from app.models.ge import (
+    GeDeviation,
+    GeGate,
+    GeGateGateItemInclude,
+    GeGateItem,
+    GeObjective,
+    GePhase,
+    GeProgram,
+    GeProject,
+    GeProjectMember,
+    GeTask,
+    GeTaskGateItemPrerequisite,
+    GeTaskGateItemProduce,
+)
 from app.services.ge_graph import now_iso, record_audit
 from app.services.ge_project_create import create_project
 from app.services.ge_sort_order import (
@@ -617,6 +630,63 @@ def delete_objective(db: Session, objective_id: str) -> None:
     invalidate_lifecycle_refresh()
 
 
+def _hard_purge_project(db: Session, project_id: str) -> None:
+    """Remove a soft-deleted project and graph rows (Postgres FK-safe)."""
+    task_ids = [t.id for t in db.query(GeTask.id).filter(GeTask.project_id == project_id).all()]
+    phase_ids = [p.id for p in db.query(GePhase.id).filter(GePhase.project_id == project_id).all()]
+    gate_item_ids = (
+        [g.id for g in db.query(GeGateItem.id).filter(GeGateItem.phase_id.in_(phase_ids)).all()]
+        if phase_ids
+        else []
+    )
+    gate_ids = (
+        [g.id for g in db.query(GeGate.id).filter(GeGate.phase_id.in_(phase_ids)).all()]
+        if phase_ids
+        else []
+    )
+
+    if task_ids:
+        db.query(GeTaskGateItemProduce).filter(GeTaskGateItemProduce.task_id.in_(task_ids)).delete(
+            synchronize_session=False
+        )
+        db.query(GeTaskGateItemPrerequisite).filter(
+            GeTaskGateItemPrerequisite.task_id.in_(task_ids)
+        ).delete(synchronize_session=False)
+    if gate_item_ids:
+        db.query(GeTaskGateItemProduce).filter(
+            GeTaskGateItemProduce.gate_item_id.in_(gate_item_ids)
+        ).delete(synchronize_session=False)
+        db.query(GeTaskGateItemPrerequisite).filter(
+            GeTaskGateItemPrerequisite.gate_item_id.in_(gate_item_ids)
+        ).delete(synchronize_session=False)
+        db.query(GeGateGateItemInclude).filter(
+            GeGateGateItemInclude.gate_item_id.in_(gate_item_ids)
+        ).delete(synchronize_session=False)
+    if gate_ids:
+        db.query(GeGateGateItemInclude).filter(GeGateGateItemInclude.gate_id.in_(gate_ids)).delete(
+            synchronize_session=False
+        )
+    # Clear task→deviation FK before deleting deviations/tasks.
+    db.query(GeTask).filter(GeTask.project_id == project_id).update(
+        {GeTask.deviation_id: None}, synchronize_session=False
+    )
+    db.query(GeDeviation).filter(GeDeviation.project_id == project_id).delete(
+        synchronize_session=False
+    )
+    db.query(GeTask).filter(GeTask.project_id == project_id).delete(synchronize_session=False)
+    if gate_item_ids:
+        db.query(GeGateItem).filter(GeGateItem.id.in_(gate_item_ids)).delete(
+            synchronize_session=False
+        )
+    if gate_ids:
+        db.query(GeGate).filter(GeGate.id.in_(gate_ids)).delete(synchronize_session=False)
+    db.query(GePhase).filter(GePhase.project_id == project_id).delete(synchronize_session=False)
+    db.query(GeProjectMember).filter(GeProjectMember.project_id == project_id).delete(
+        synchronize_session=False
+    )
+    db.query(GeProject).filter(GeProject.id == project_id).delete(synchronize_session=False)
+
+
 def delete_program(db: Session, program_id: str) -> None:
     program = db.get(GeProgram, program_id)
     if program is None:
@@ -628,6 +698,16 @@ def delete_program(db: Session, program_id: str) -> None:
     )
     if active is not None:
         raise HTTPException(status_code=409, detail={"detail": "program_not_empty"})
+    # Soft-deleted children still hold Postgres FKs; purge them so empty programs
+    # can be removed (SQLite tests historically ignored this FK).
+    soft_ids = [
+        row[0]
+        for row in db.query(GeProject.id)
+        .filter(GeProject.program_id == program_id, GeProject.deleted_at.isnot(None))
+        .all()
+    ]
+    for project_id in soft_ids:
+        _hard_purge_project(db, project_id)
     db.delete(program)
     db.commit()
     invalidate_lifecycle_refresh()

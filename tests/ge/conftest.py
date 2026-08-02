@@ -131,9 +131,10 @@ def ensure_formal_test_program(
             if db.get(GeProgram, _cached_formal_program_id) is not None:
                 return _cached_formal_program_id
         _cached_formal_program_id = None
+    rev_headers = service_headers(reviewer, is_reviewer=True)
     year_resp = client.post(
         "/api/v1/ge/objectives/years",
-        headers=service_headers(reviewer),
+        headers=rev_headers,
         json={"planning_year": 2026, "name": "2026 年度战略目标"},
     )
     assert year_resp.status_code == 201, year_resp.text
@@ -142,7 +143,7 @@ def ensure_formal_test_program(
     dept_id = "test-dept-formal"
     sub_resp = client.post(
         "/api/v1/ge/objectives",
-        headers=service_headers(reviewer),
+        headers=rev_headers,
         json={
             "name": "测试子目标",
             "parent_id": company_id,
@@ -157,7 +158,7 @@ def ensure_formal_test_program(
     sub_id = sub_resp.json()["id"]
     prog_resp = client.post(
         "/api/v1/ge/programs",
-        headers=service_headers(reviewer),
+        headers=rev_headers,
         json={
             "name": "测试专项",
             "objective_id": sub_id,
@@ -366,7 +367,7 @@ def ensure_program_period(
 ) -> dict[str, Any]:
     resp = client.patch(
         f"/api/v1/ge/programs/{program_id}",
-        headers=service_headers(reviewer),
+        headers=service_headers(reviewer, is_reviewer=True),
         json={
             "period_granularity": period_granularity,
             "period_start": period_start,

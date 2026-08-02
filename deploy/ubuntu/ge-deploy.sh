@@ -223,7 +223,7 @@ start_service() {
 }
 
 verify_health() {
-  local url="http://127.0.0.1:${GE_PORT}/api/v1/health"
+  local url="http://127.0.0.1:${GE_PORT}/api/v1/ge/health"
   log "健康检查: $url"
   local i out
   for i in $(seq 1 20); do
@@ -242,7 +242,7 @@ print_checklist() {
   log "skstudio.env 须含:"
   log "  GOAL_EXECUTION_URL=http://127.0.0.1:${GE_PORT}"
   log "  GOAL_EXECUTION_SERVICE_TOKEN=<与 $GE_ENV 同值>"
-  log "Nginx /ge-api/ 须反代至 :${GE_PORT}（skstudio deploy sync-nginx）"
+  log "浏览器经 skstudio /api/v1/ge/ → :${GE_PORT}；探活 GET /api/v1/ge/health（skstudio deploy sync-nginx）"
   log "重启: sudo systemctl restart skstudio goal-execution"
 }
 
@@ -263,7 +263,7 @@ usage() {
   bootstrap    创建 ge 用户、数据目录、systemd unit、env 模板
   configure    从 /etc/skstudio/skstudio.env 同步 JWT + service token
   deploy       pip install + ensure_dev_schema + 启动 goal-execution.service + health
-  health       仅 curl /api/v1/health
+  health       仅 curl /api/v1/ge/health
 
 环境变量: APP_ROOT GE_PORT HERMES_SHARED_ROOT GE_USER SKSTUDIO_ENV
 EOF

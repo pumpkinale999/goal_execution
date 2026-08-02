@@ -171,7 +171,7 @@ ensure_pip_deps() {
 
 run_uvicorn() {
   [[ "${CHECK_ONLY}" == 1 || "${NO_RUN}" == 1 ]] && return 0
-  log "启动 API: http://${HOST:-127.0.0.1}:${PORT}/api/v1/health"
+  log "启动 API: http://${HOST:-127.0.0.1}:${PORT}/api/v1/ge/health"
   cd "$REPO_ROOT"
   set -a
   # shellcheck disable=SC1091

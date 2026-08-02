@@ -172,7 +172,7 @@ def test_ge_t180_jwt_cannot_create_role_option_service_can(client):
 
     created = client.post(
         "/api/v1/ge/project-role-options",
-        headers=service_headers("reviewer"),
+        headers=service_headers("reviewer", is_reviewer=True),
         json={"name": "顾问", "slug": "advisor"},
     )
     assert created.status_code == 201, created.text
@@ -276,7 +276,7 @@ def test_ge_t182_assignee_upserts_member_without_overwriting_role(client):
     if advisor is None:
         created_role = client.post(
             "/api/v1/ge/project-role-options",
-            headers=service_headers("reviewer"),
+            headers=service_headers("reviewer", is_reviewer=True),
             json={"name": "顾问", "slug": "advisor"},
         )
         assert created_role.status_code == 201, created_role.text

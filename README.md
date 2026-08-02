@@ -7,14 +7,19 @@
 ## Architecture
 
 ```text
-skstudio UI (JWT)     ──► /api/v1/org（skstudio）· /ge-api/ge/*（经 BFF → 本服务）
-skstudio BFF          ──► goal_execution REST（service token + X-Actor-User-Id）
+skstudio UI (JWT)  ──► /api/v1/org/*（组织 CRUD · skstudio）
+                   ──► /api/v1/ge/*（单门 · skstudio 透传/编排）
+                              │
+                              │ SERVICE + X-Actor-User-Id + X-Actor-Is-Reviewer
+                              │ +（portfolio）Org Portfolio / Target 头 · 共识 §3.2
+                              ▼
+                    goal_execution :8092 · 仅 /api/v1/ge/* · 域鉴权在本进程
                               │
                               ▼
                     Postgres DB `goal_execution`（DATABASE_URL）
 ```
 
-运行时 **Postgres only**（`REQUIRE_POSTGRES=1`）。鉴权：仅 service token（拒用户 JWT · AUTH-BFF-01）。
+运行时 **Postgres only**（`REQUIRE_POSTGRES=1`）。鉴权：仅 service token（拒用户 JWT · AUTH-BFF-01）。浏览器**不**直连本服务；**无** `/ge-api`。
 
 ## Mac / Linux 开发
 

@@ -25,7 +25,7 @@ def dispatch_deviation_personal_assistant(
     token = (settings.goal_execution_service_token or "").strip()
     if not base or not token:
         return
-    url = f"{base}/internal/ge/deviation-notify"
+    url = f"{base}/api/v1/callbacks/ge/deviation-notify"
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     body = {
         "event": event,

@@ -51,14 +51,14 @@ def test_reviewer_service_token_can_proxy_submit_and_sign(client):
 
     submit = client.post(
         f"/api/v1/ge/gate-items/{gi_x}/submit",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json=material_submit_payload("评审员代提交"),
     )
     assert submit.status_code == 200, submit.text
 
     sign = client.post(
         f"/api/v1/ge/gate-items/{gi_x}/sign",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
     )
     assert sign.status_code == 200, sign.text
 

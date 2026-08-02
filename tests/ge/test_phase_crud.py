@@ -255,7 +255,7 @@ def test_reviewer_service_token_can_delete_empty_phase(client):
 
     resp = client.delete(
         f"/api/v1/ge/phases/{plan['id']}",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
     )
     assert resp.status_code == 200
     after = resp.json()

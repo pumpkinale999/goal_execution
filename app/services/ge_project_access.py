@@ -10,7 +10,7 @@ from app.auth import AuthUser
 from app.models.ge import GeProject, GeProjectMember, GeProjectRoleOption
 from app.services.ge_access import filter_projects_for_user
 from app.services.ge_project_members import SINGLETON_ROLE_SLUGS
-from app.services.ge_subtree_governor import is_subtree_governor
+from app.services.ge_goal_subtree_governor import is_goal_subtree_governor
 
 _EMPTY_SINGLETONS = {slug: "" for slug in sorted(SINGLETON_ROLE_SLUGS)}
 
@@ -18,7 +18,7 @@ _EMPTY_SINGLETONS = {slug: "" for slug in sorted(SINGLETON_ROLE_SLUGS)}
 def _role_for_user(db: Session, project: GeProject, user_id: str) -> str:
     if str(project.pm_user_id or "").strip() == user_id:
         return "pm"
-    if is_subtree_governor(db, user_id=user_id, project_id=project.id):
+    if is_goal_subtree_governor(db, user_id=user_id, project_id=project.id):
         return "governor"
     return "member"
 

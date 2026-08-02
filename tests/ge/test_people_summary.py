@@ -14,19 +14,15 @@ from tests.ge.conftest import (
 
 
 def _create_dept(client, name: str = "研发部", manager: str = "u-owner") -> str:
-    resp = client.post(
-        "/api/v1/org/departments",
-        headers=service_headers("reviewer-1"),
-        json={"name": name, "manager_user_id": manager},
-    )
-    assert resp.status_code == 201, resp.text
-    return resp.json()["id"]
+    """Opaque dept id — GE org HTTP unmounted; authority lives in skstudio."""
+    _ = (client, manager)
+    return f"test-dept-{name}"
 
 
 def _annual_company(client, year: int = 2026) -> dict:
     resp = client.post(
         "/api/v1/ge/objectives/years",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={"planning_year": year, "name": f"{year} 年度战略目标"},
     )
     assert resp.status_code == 201, resp.text
@@ -36,7 +32,7 @@ def _annual_company(client, year: int = 2026) -> dict:
 def _create_sub_and_program(client, company_id: str, dept_id: str) -> tuple[dict, dict]:
     sub = client.post(
         "/api/v1/ge/objectives",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={
             "name": "子目标",
             "parent_id": company_id,
@@ -48,7 +44,7 @@ def _create_sub_and_program(client, company_id: str, dept_id: str) -> tuple[dict
     sub_body = sub.json()
     prog = client.post(
         "/api/v1/ge/programs",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
         json={
             "name": "专项",
             "objective_id": sub_body["id"],
@@ -86,7 +82,7 @@ def test_objective_people_summary_accountable_and_contributing(client):
 
     resp = client.get(
         f"/api/v1/ge/objectives/{sub['id']}/people-summary",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
     )
     assert resp.status_code == 200, resp.text
     body = resp.json()
@@ -114,7 +110,7 @@ def test_program_and_project_people_summary(client):
 
     prog_resp = client.get(
         f"/api/v1/ge/programs/{prog['id']}/people-summary",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
     )
     assert prog_resp.status_code == 200
     prog_body = prog_resp.json()
@@ -141,7 +137,7 @@ def test_assignee_rollup_to_ancestor_objective(client):
 
     resp = client.get(
         f"/api/v1/ge/objectives/{sub['id']}/people-summary",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
     )
     assert resp.status_code == 200
     contributing_users = {row["user_id"] for row in resp.json()["contributing"]}
@@ -166,7 +162,7 @@ def test_include_completed_filter(client):
 
     hidden = client.get(
         f"/api/v1/ge/objectives/{sub['id']}/people-summary",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
     )
     assert hidden.status_code == 200
     pm_accountable = [r for r in hidden.json()["accountable"] if r["user_id"] == U_PM]
@@ -174,7 +170,7 @@ def test_include_completed_filter(client):
 
     shown = client.get(
         f"/api/v1/ge/objectives/{sub['id']}/people-summary?include_completed=1",
-        headers=service_headers("reviewer-1"),
+        headers=service_headers("reviewer-1", is_reviewer=True),
     )
     assert shown.status_code == 200
     pm_accountable = [r for r in shown.json()["accountable"] if r["user_id"] == U_PM]

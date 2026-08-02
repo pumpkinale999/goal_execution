@@ -47,8 +47,8 @@ def test_internal_project_access_matches_jwt_visibility(client):
     jwt_resp = client.get("/api/v1/ge/me/project-access", headers=jwt_headers(U_ZHANGSAN))
     assert jwt_resp.status_code == 200
     internal = client.get(
-        f"/api/v1/internal/ge/users/{U_ZHANGSAN}/project-access",
-        headers=service_headers("reviewer"),
+        f"/api/v1/ge/users/{U_ZHANGSAN}/project-access",
+        headers=service_headers("reviewer", is_reviewer=True),
     )
     assert internal.status_code == 200, internal.text
     assert jwt_resp.json() == internal.json()
@@ -60,8 +60,8 @@ def test_internal_all_visible_forces_member_role(client):
     pid = created["id"]
 
     resp = client.get(
-        f"/api/v1/internal/ge/users/{U_STRANGER}/project-access",
-        headers=service_headers("reviewer"),
+        f"/api/v1/ge/users/{U_STRANGER}/project-access",
+        headers=service_headers("reviewer", is_reviewer=True),
         params={"all_visible": "true"},
     )
     assert resp.status_code == 200, resp.text
@@ -70,9 +70,12 @@ def test_internal_all_visible_forces_member_role(client):
     assert by_id[pid]["role"] == "member"
 
 
-def test_me_project_access_rejects_service_token(client):
+def test_me_project_access_accepts_service_actor(client):
+    """GE-AUTHZ-T08: /me/project-access is service+actor (jwt_required removed)."""
+    created = create_project(client, U_PM)
     resp = client.get(
         "/api/v1/ge/me/project-access",
-        headers=service_headers("reviewer"),
+        headers=service_headers(U_PM),
     )
-    assert resp.status_code == 403
+    assert resp.status_code == 200
+    assert created["id"] in {p["project_id"] for p in resp.json()["projects"]}

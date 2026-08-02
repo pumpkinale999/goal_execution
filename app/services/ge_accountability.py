@@ -9,11 +9,11 @@ from sqlalchemy.orm import Session
 
 from app.auth import AuthUser
 from app.models.ge import GeObjective, GeProgram, GeProject, GeTask
-from app.services.ge_access import can_read_project, is_participant
+from app.services.ge_access import is_participant
 from app.services.ge_strategic import planning_year_from_start
 from app.services.ge_strategic_lifecycle import refresh_lifecycle_on_read
 from app.services.ge_strategic_period import LIFECYCLE_ARCHIVED
-from app.services.ge_subtree_governor import is_subtree_governor
+from app.services.ge_goal_subtree_governor import is_goal_subtree_governor
 
 
 def display_name(user_id: str | None) -> str:
@@ -212,27 +212,17 @@ def portfolio_item_from_accountable(entry: dict[str, Any]) -> dict[str, Any]:
 
 
 def can_read_objective_scope(db: Session, user: AuthUser, objective_id: str) -> bool:
-    if user.auth_method == "service":
+    """people-summary (obj): goal_subtree_governor ∨ reviewer (GE-AUTHZ matrix §5.1)."""
+    if user.is_reviewer:
         return True
-    if is_subtree_governor(db, user_id=user.user_id, objective_id=objective_id):
-        return True
-    obj_ids = objective_descendant_ids(db, objective_id)
-    programs = db.query(GeProgram).filter(GeProgram.objective_id.in_(obj_ids)).all()
-    program_ids = [p.id for p in programs]
-    projects = projects_for_programs(db, program_ids, include_completed=True)
-    for project in projects:
-        if can_read_project(db, project, user):
-            return True
-    return False
+    return is_goal_subtree_governor(db, user_id=user.user_id, objective_id=objective_id)
 
 
 def can_read_program_scope(db: Session, user: AuthUser, program_id: str) -> bool:
-    if user.auth_method == "service":
+    """people-summary (prog): goal_subtree_governor ∨ reviewer (GE-AUTHZ matrix §5.1)."""
+    if user.is_reviewer:
         return True
-    if is_subtree_governor(db, user_id=user.user_id, program_id=program_id):
-        return True
-    projects = projects_for_programs(db, [program_id], include_completed=True)
-    return any(can_read_project(db, p, user) for p in projects)
+    return is_goal_subtree_governor(db, user_id=user.user_id, program_id=program_id)
 
 
 def user_accountable_for_user_id(db: Session, user_id: str) -> tuple[list[GeObjective], list[GeProgram], list[GeProject]]:

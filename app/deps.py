@@ -24,11 +24,18 @@ def get_db() -> Session:
         session.close()
 
 
+def _parse_is_reviewer(raw: str | None) -> bool:
+    if raw is None:
+        return False
+    return str(raw).strip() in {"1", "true", "True", "yes", "YES"}
+
+
 def get_current_user(
     creds: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
     x_actor_user_id: Annotated[str | None, Header(alias="X-Actor-User-Id")] = None,
+    x_actor_is_reviewer: Annotated[str | None, Header(alias="X-Actor-Is-Reviewer")] = None,
 ) -> AuthUser:
-    """M3 · AUTH-BFF-01: only BFF service token + X-Actor-User-Id (reject user JWT)."""
+    """AUTH-BFF-01: only BFF service token + X-Actor-User-Id (+ optional Is-Reviewer)."""
     if creds is None or creds.scheme.lower() != "bearer":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -43,7 +50,11 @@ def get_current_user(
                 detail={"detail": "unauthorized"},
             )
         verify_service_token(token)
-        return AuthUser(user_id=x_actor_user_id, auth_method="service")
+        return AuthUser(
+            user_id=x_actor_user_id,
+            auth_method="service",
+            is_reviewer=_parse_is_reviewer(x_actor_is_reviewer),
+        )
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
         detail={"detail": "service_token_required"},
@@ -55,4 +66,12 @@ def require_service_user(
 ) -> AuthUser:
     if user.auth_method != "service":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={"detail": "service_token_required"})
+    return user
+
+
+def require_reviewer(
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> AuthUser:
+    if not user.is_reviewer:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={"detail": "reviewer_required"})
     return user
