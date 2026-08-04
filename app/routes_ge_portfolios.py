@@ -14,6 +14,7 @@ from app.services.ge_goal_portfolio import (
     get_team_goal_portfolio,
     get_user_goal_portfolio,
 )
+from app.services.ge_pbc_projects import projects_for_users_in_period
 from app.services.ge_portfolio_authz import (
     HDR_PORTFOLIO_DEPTS,
     HDR_PORTFOLIO_TEAMS,
@@ -27,6 +28,38 @@ from app.services.ge_portfolio_authz import (
 from app.services.org_department_migrate import migrate_primary_objectives
 
 router = APIRouter(prefix="/ge/portfolios", tags=["ge-portfolios"])
+
+
+@router.post("/projects-for-users")
+def post_projects_for_users(
+    body: dict[str, Any],
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(require_service_user)],
+) -> dict[str, Any]:
+    """Aggregate projects owned (PM) or managed (goal-subtree) by users in a period window.
+
+    Authz: service actor only; skstudio BFF decides which user_ids are in scope.
+    """
+    _ = user
+    user_ids = body.get("user_ids") or []
+    if not isinstance(user_ids, list):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="user_ids_required")
+    period_start = body.get("period_start")
+    period_end = body.get("period_end")
+    if not period_start or not period_end:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="period_required")
+    include_completed = bool(body.get("include_completed", True))
+    projects = projects_for_users_in_period(
+        db,
+        user_ids=[str(u) for u in user_ids],
+        period_start=str(period_start),
+        period_end=str(period_end),
+        include_completed=include_completed,
+    )
+    return {
+        "period": {"start": str(period_start), "end": str(period_end)},
+        "projects": projects,
+    }
 
 
 @router.get("/departments/{department_id}")
