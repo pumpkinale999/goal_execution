@@ -107,6 +107,21 @@ def bootstrap_golden_phase_schedule(client: TestClient, project_id: str, user_id
             json=body,
         )
         assert resp.status_code == 200, resp.text
+    # System gate items often ship without planned_due; seed so golden is definition-complete.
+    graph = get_graph(client, project_id, user_id)
+    for phase in graph["phases"]:
+        due = phase.get("planned_end")
+        if not due:
+            continue
+        for gi in phase.get("gate_items") or []:
+            if not gi.get("is_system") or gi.get("planned_due"):
+                continue
+            gi_resp = client.patch(
+                f"/api/v1/ge/gate-items/{gi['id']}",
+                headers=jwt_headers(user_id),
+                json={"planned_due": due},
+            )
+            assert gi_resp.status_code == 200, gi_resp.text
 
 
 _cached_formal_program_id: str | None = None

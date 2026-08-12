@@ -277,7 +277,9 @@ def get_project_graph(
     project_id: str,
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[AuthUser, Depends(get_current_user)],
+    view: Annotated[str, Query()] = "canvas",
 ) -> dict[str, Any]:
+    """Project graph. ``view=sense`` skips Canvas ``effective_status`` (PRA / AA)."""
     project = load_project_graph(db, project_id)
     if project is None:
         raise HTTPException(status_code=404, detail={"detail": "project_not_found"})
@@ -298,15 +300,41 @@ def get_project_graph(
         project = load_project_graph(db, project_id)
         if project is None:
             raise HTTPException(status_code=404, detail={"detail": "project_not_found"})
+    sense_view = str(view or "canvas").strip().lower() == "sense"
     graph = build_project_graph(
         db,
         project,
-        actor_user_id=user.user_id,
-        is_governor=can_govern_project(db, project, user),
+        actor_user_id=None if sense_view else user.user_id,
+        is_governor=False if sense_view else can_govern_project(db, project, user),
     )
-    graph["graph_editable"] = graph_editable_flag(db, project, user)
-    graph["graph_deletable"] = graph_deletable_flag(db, project, user)
-    return graph
+    if not sense_view:
+        graph["graph_editable"] = graph_editable_flag(db, project, user)
+        graph["graph_deletable"] = graph_deletable_flag(db, project, user)
+    from app.services.ge_assess_definition import attach_definition_gaps
+
+    return attach_definition_gaps(graph)
+
+
+@router.get("/projects/{project_id}/definition-gaps")
+def get_project_definition_gaps(
+    project_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    """Authoritative definition completeness gaps (PRA SenseEvent-shaped).
+
+    Builds one sense-style graph (no ``effective_status``) then assesses — same list as
+    ``graph.definition_gaps`` on ``GET …/graph?view=sense``.
+    """
+    project = load_project_graph(db, project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail={"detail": "project_not_found"})
+    if not can_read_project(db, project, user):
+        raise HTTPException(status_code=403, detail={"detail": "not_project_participant"})
+    graph = build_project_graph(db, project, actor_user_id=None, is_governor=False)
+    from app.services.ge_assess_definition import definition_gaps_response
+
+    return definition_gaps_response(graph)
 
 
 @router.patch("/projects/{project_id}")
@@ -923,6 +951,98 @@ def ge_health() -> dict[str, bool | str]:
         "ok": db_ok(),
         "db_ok": db_ok(),
         "service": "goal_execution",
+    }
+
+
+@router.post("/observation/subscriptions")
+def register_observation_subscription(
+    body: dict[str, Any],
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[AuthUser, Depends(require_service_user)],
+) -> dict[str, Any]:
+    """PRA M4: register active_agent (or other) as write-mount subscriber."""
+    from app.services.observation_mount import register_subscription
+
+    try:
+        row = register_subscription(
+            db,
+            name=str(body.get("name") or ""),
+            target_url=str(body.get("target_url") or ""),
+            service_token=str(body.get("service_token") or ""),
+            mount_point=str(body.get("mount_point") or "after_project_graph_write"),
+        )
+        db.commit()
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail={"detail": str(e)}) from e
+    return {
+        "id": row.id,
+        "name": row.name,
+        "mount_point": row.mount_point,
+        "target_url": row.target_url,
+        "enabled": row.enabled,
+    }
+
+
+@router.post("/observation/outbox/flush")
+def flush_observation_outbox(
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[AuthUser, Depends(require_service_user)],
+) -> dict[str, Any]:
+    from app.services.observation_mount import deliver_pending
+
+    result = deliver_pending(db)
+    db.commit()
+    return result
+
+
+@router.post("/observation/outbox/requeue")
+def requeue_observation_outbox(
+    body: dict[str, Any],
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[AuthUser, Depends(require_service_user)],
+) -> dict[str, Any]:
+    """CODE-005 M4: requeue dead outbox rows after fixing subscriber auth (default error_substr=401)."""
+    from app.services.observation_mount import requeue_dead_outbox
+
+    try:
+        result = requeue_dead_outbox(
+            db,
+            error_substr=str(body.get("error_substr") if body.get("error_substr") is not None else "401"),
+            limit=int(body.get("limit") or 200),
+        )
+        db.commit()
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail={"detail": str(e)}) from e
+    return result
+
+
+@router.get("/observation/outbox")
+def list_observation_outbox(
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[AuthUser, Depends(require_service_user)],
+    status_filter: str | None = Query(default=None),
+) -> dict[str, Any]:
+    from app.models.observation_mount import GeObservationOutbox
+
+    q = db.query(GeObservationOutbox)
+    if status_filter:
+        q = q.filter(GeObservationOutbox.status == status_filter)
+    rows = q.order_by(GeObservationOutbox.created_at.desc()).limit(100).all()
+    return {
+        "items": [
+            {
+                "id": r.id,
+                "idempotency_key": r.idempotency_key,
+                "mount_point": r.mount_point,
+                "status": r.status,
+                "attempts": r.attempts,
+                "last_error": r.last_error,
+                "created_at": r.created_at,
+            }
+            for r in rows
+        ]
     }
 
 

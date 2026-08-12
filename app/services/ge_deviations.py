@@ -33,6 +33,24 @@ from app.services.ge_ws_callback import dispatch_deviation_personal_assistant
 SHANGHAI = ZoneInfo("Asia/Shanghai")
 
 
+def _notify_deviation_graph_write(
+    db: Session,
+    *,
+    project_id: str,
+    change_kind: str,
+    entity_refs: dict[str, Any] | None = None,
+) -> None:
+    """Enqueue PRA observation after deviation lifecycle (dates / produce rebind)."""
+    from app.services.observation_mount import notify_graph_write
+
+    notify_graph_write(
+        db,
+        project_id=project_id,
+        change_kind=change_kind,
+        entity_refs=entity_refs,
+    )
+
+
 def _sync_remediation_schedule(
     db: Session,
     *,
@@ -194,8 +212,14 @@ def compute_gate_overdue_fields(
     item: GeGateItem,
     *,
     deviation: GeDeviation | None = None,
+    skip_deviation_lookup: bool = False,
 ) -> dict[str, Any]:
-    if deviation is None:
+    """Overdue flags for a gate item.
+
+    When ``skip_deviation_lookup`` is True, a missing ``deviation`` means none
+    (caller already bulk-loaded open/active rows — used by graph build).
+    """
+    if deviation is None and not skip_deviation_lookup:
         deviation = active_deviation_for_gate_item(db, item.id)
     today = today_shanghai()
     planned = _parse_planned_due(item.planned_due)
@@ -257,11 +281,24 @@ def _require_governor(db: Session, project: GeProject, user: AuthUser) -> None:
     require_govern_project(db, project, user)
 
 
-def _assert_not_system(item: GeGateItem | None, task: GeTask | None) -> None:
-    if item is not None and item.is_system:
-        raise HTTPException(status_code=403, detail={"detail": "system_node_not_deviatable"})
-    if task is not None and task.is_system:
-        raise HTTPException(status_code=403, detail={"detail": "system_node_not_deviatable"})
+def _assert_deviatable(
+    item: GeGateItem | None,
+    task: GeTask | None,
+    *,
+    kind: str,
+    is_overdue: bool,
+) -> None:
+    """Block scope (and non-overdue) on system nodes; allow overdue → remediation task.
+
+    Consensus (PRA v0.2.21): overdue system GI/task may open deviation so Canvas can
+    grow a non-system「补救·…」task and the project can proceed. Scope still forbidden.
+    """
+    system = bool((item is not None and item.is_system) or (task is not None and task.is_system))
+    if not system:
+        return
+    if kind == "overdue" and is_overdue:
+        return
+    raise HTTPException(status_code=403, detail={"detail": "system_node_not_deviatable"})
 
 
 def assert_deviation_not_open_for_submit(db: Session, gate_item_id: str) -> GeDeviation | None:
@@ -280,7 +317,6 @@ def open_deviation(
     item = db.get(GeGateItem, gate_item_id)
     if item is None:
         raise HTTPException(status_code=404, detail={"detail": "not_found"})
-    _assert_not_system(item, None)
     phase = db.get(GePhase, item.phase_id)
     if phase is None:
         raise HTTPException(status_code=404, detail={"detail": "not_found"})
@@ -308,31 +344,18 @@ def open_deviation(
     superseded = db.get(GeTask, produce_rows[0].task_id)
     if superseded is None:
         raise HTTPException(status_code=409, detail={"detail": "deviation_open_requires_produce"})
-    _assert_not_system(item, superseded)
+    _assert_deviatable(item, superseded, kind=kind, is_overdue=bool(fields["is_overdue"]))
 
     now = now_iso()
     dev_id = str(uuid.uuid4())
-    remediation_id = str(uuid.uuid4())
-    remediation = GeTask(
-        id=remediation_id,
-        project_id=project.id,
-        phase_id=item.phase_id,
-        assignee_user_id=superseded.assignee_user_id,
-        title=f"补救·{item.name}",
-        status=TASK_STATUS_IDLE,
-        canvas_order=superseded.canvas_order + 1,
-        deviation_id=dev_id,
-        is_system=False,
-        created_at=now,
-        updated_at=now,
-    )
+    # Time-first (v2.38.45): open creates Deviation only — no remediation task / produce rebind.
     dev = GeDeviation(
         id=dev_id,
         gate_item_id=item.id,
         project_id=project.id,
         status="open",
         kind=kind,
-        remediation_task_id=remediation_id,
+        remediation_task_id=None,
         superseded_task_id=superseded.id,
         gate_item_status_at_open=item.status,
         superseded_task_status_at_open=superseded.status,
@@ -343,16 +366,8 @@ def open_deviation(
         updated_at=now,
     )
     db.add(dev)
-    db.add(remediation)
-    db.delete(produce_rows[0])
-    db.flush()
-    db.add(GeTaskGateItemProduce(task_id=remediation_id, gate_item_id=item.id))
-    superseded.status = "deviated"
-    superseded.updated_at = now
     item.status = "deviation"
     item.updated_at = now
-
-    affected = [remediation, superseded]
 
     record_audit(
         db,
@@ -362,24 +377,22 @@ def open_deviation(
         action="deviation_open",
         payload={"gate_item_id": item.id, "kind": kind},
     )
-    record_audit(
-        db,
-        actor_user_id=user.user_id,
-        entity_type="task",
-        entity_id=superseded.id,
-        action="task_deviated",
-        payload={"deviation_id": dev.id},
-    )
     db.commit()
     from app.services.ge_queues import invalidate_project_queue_counts
 
     invalidate_project_queue_counts()
+    _notify_deviation_graph_write(
+        db,
+        project_id=project.id,
+        change_kind="deviation_open",
+        entity_refs={"gate_item_id": item.id, "deviation_id": dev.id},
+    )
 
     return write_operation_response(
         db,
         project=project,
         gate_item=item,
-        affected_tasks=affected,
+        affected_tasks=[superseded],
         phase=phase,
         gate=phase.gate,
         deviation=dev,
@@ -404,50 +417,88 @@ def activate_deviation(
     if dev.status != "open":
         raise HTTPException(status_code=409, detail={"detail": "deviation_not_open"})
 
-    reason = str(body.get("reason") or "").strip()
-    plan = str(body.get("remediation_plan") or "").strip()
+    reason = str(body.get("reason") or "").strip() or None
+    plan = str(body.get("remediation_plan") or "").strip() or None
     due = str(body.get("remediation_due") or "").strip()
-    if not reason or not plan or not due:
+    if not due:
         raise HTTPException(status_code=400, detail={"detail": "deviation_activate_incomplete"})
 
     item = db.get(GeGateItem, dev.gate_item_id)
-    remediation = db.get(GeTask, dev.remediation_task_id)
-    if item is None or remediation is None:
+    if item is None:
         raise HTTPException(status_code=404, detail={"detail": "not_found"})
     phase = db.get(GePhase, item.phase_id)
+    superseded = db.get(GeTask, dev.superseded_task_id)
+    if superseded is None:
+        raise HTTPException(status_code=404, detail={"detail": "not_found"})
 
-    assignee = body.get("assignee_user_id")
-    if assignee is not None:
-        assignee = str(assignee).strip()
-        if assignee:
-            remediation.assignee_user_id = assignee
+    produce_rows = db.query(GeTaskGateItemProduce).filter(GeTaskGateItemProduce.gate_item_id == item.id).all()
+    if not produce_rows:
+        raise HTTPException(status_code=409, detail={"detail": "deviation_open_requires_produce"})
 
     now = now_iso()
+    remediation_id = str(uuid.uuid4())
+    assignee = body.get("assignee_user_id")
+    assignee_id = str(assignee).strip() if assignee is not None and str(assignee).strip() else superseded.assignee_user_id
+    remediation = GeTask(
+        id=remediation_id,
+        project_id=project.id,
+        phase_id=item.phase_id,
+        assignee_user_id=assignee_id,
+        title=f"补救·{item.name}",
+        status=TASK_STATUS_IDLE,
+        canvas_order=superseded.canvas_order + 1,
+        deviation_id=None,
+        is_system=False,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(remediation)
+    db.flush()
+
+    for row in produce_rows:
+        db.delete(row)
+    db.flush()
+    remediation.deviation_id = dev.id
+    db.add(GeTaskGateItemProduce(task_id=remediation_id, gate_item_id=item.id))
+    superseded.status = "deviated"
+    superseded.updated_at = now
+
     dev.reason = reason
     dev.remediation_plan = plan
     dev.remediation_due = due[:10]
+    dev.remediation_task_id = remediation_id
     dev.status = "active"
     dev.activated_at = now
     dev.updated_at = now
-    remediation.updated_at = now
     _sync_remediation_schedule(db, project=project, phase=phase, item=item, remediation_due=dev.remediation_due)
 
-    superseded = db.get(GeTask, dev.superseded_task_id)
-    affected = [remediation]
-    if superseded is not None:
-        affected.append(superseded)
+    affected = [remediation, superseded]
     record_audit(
         db,
         actor_user_id=user.user_id,
         entity_type="deviation",
         entity_id=dev.id,
         action="deviation_activate",
-        payload={"reason": reason, "remediation_due": dev.remediation_due},
+        payload={"remediation_due": dev.remediation_due, "remediation_task_id": remediation_id},
+    )
+    record_audit(
+        db,
+        actor_user_id=user.user_id,
+        entity_type="task",
+        entity_id=superseded.id,
+        action="task_deviated",
+        payload={"deviation_id": dev.id},
     )
     db.commit()
     from app.services.ge_queues import invalidate_project_queue_counts
 
     invalidate_project_queue_counts()
+    _notify_deviation_graph_write(
+        db,
+        project_id=project.id,
+        change_kind="deviation_activate",
+        entity_refs={"gate_item_id": item.id, "deviation_id": dev.id},
+    )
 
     recipients = notification_recipients(
         db,
@@ -503,16 +554,19 @@ def extend_deviation(
 
     due = str(body.get("remediation_due") or "").strip()
     extend_reason = str(body.get("extend_reason") or "").strip()
-    if not due or not extend_reason:
+    # Canvas 钟 / 时间先行：仅 remediation_due 必填；extend_reason 可选
+    if not due:
         raise HTTPException(status_code=400, detail={"detail": "deviation_activate_incomplete"})
 
     new_revision = dev.revision + 1
     plan_update = body.get("remediation_plan")
     if new_revision >= 3:
         plan_text = str(plan_update or "").strip()
-        if not plan_text:
+        # 菜单延期（带 extend_reason）仍可要求更新 plan；钟路径 time_first 不挡
+        if extend_reason and not plan_text:
             raise HTTPException(status_code=400, detail={"detail": "deviation_extend_plan_required"})
-        dev.remediation_plan = plan_text
+        if plan_text:
+            dev.remediation_plan = plan_text
 
     item = db.get(GeGateItem, dev.gate_item_id)
     remediation = db.get(GeTask, dev.remediation_task_id)
@@ -527,18 +581,25 @@ def extend_deviation(
     item.updated_at = now
     _sync_remediation_schedule(db, project=project, phase=phase, item=item, remediation_due=dev.remediation_due)
 
+    audit_reason = extend_reason or "time_first"
     record_audit(
         db,
         actor_user_id=user.user_id,
         entity_type="deviation",
         entity_id=dev.id,
         action="deviation_extend",
-        payload={"revision": new_revision, "extend_reason": extend_reason},
+        payload={"revision": new_revision, "extend_reason": audit_reason},
     )
     db.commit()
     from app.services.ge_queues import invalidate_project_queue_counts
 
     invalidate_project_queue_counts()
+    _notify_deviation_graph_write(
+        db,
+        project_id=project.id,
+        change_kind="deviation_extend",
+        entity_refs={"gate_item_id": item.id, "deviation_id": dev.id},
+    )
 
     include_chain = new_revision >= 2
     recipients = notification_recipients(
@@ -554,7 +615,7 @@ def extend_deviation(
         "gate_item_name": item.name,
         "revision": new_revision,
         "remediation_due": dev.remediation_due,
-        "extend_reason": extend_reason,
+        "extend_reason": audit_reason,
         "notify_report_chain": include_chain,
     }
     dispatch_deviation_personal_assistant(
@@ -598,23 +659,29 @@ def cancel_deviation(
 
     item = db.get(GeGateItem, dev.gate_item_id)
     superseded = db.get(GeTask, dev.superseded_task_id)
-    remediation = db.get(GeTask, dev.remediation_task_id)
-    if item is None or superseded is None or remediation is None:
+    remediation = db.get(GeTask, dev.remediation_task_id) if dev.remediation_task_id else None
+    if item is None or superseded is None:
         raise HTTPException(status_code=404, detail={"detail": "not_found"})
     phase = db.get(GePhase, item.phase_id)
 
-    produce_rows = db.query(GeTaskGateItemProduce).filter(GeTaskGateItemProduce.gate_item_id == item.id).all()
-    for row in produce_rows:
-        db.delete(row)
-    db.flush()
-
     now = now_iso()
-    superseded.status = dev.superseded_task_status_at_open
-    superseded.updated_at = now
-    db.add(GeTaskGateItemProduce(task_id=superseded.id, gate_item_id=item.id))
+    affected = [superseded]
 
-    remediation.deviation_id = None
-    remediation.updated_at = now
+    if remediation is not None:
+        # Activated: remove remediation produce, restore superseded produce + status.
+        produce_rows = db.query(GeTaskGateItemProduce).filter(GeTaskGateItemProduce.gate_item_id == item.id).all()
+        for row in produce_rows:
+            db.delete(row)
+        db.flush()
+        superseded.status = dev.superseded_task_status_at_open
+        superseded.updated_at = now
+        db.add(GeTaskGateItemProduce(task_id=superseded.id, gate_item_id=item.id))
+        remediation.deviation_id = None
+        remediation.updated_at = now
+        affected.append(remediation)
+    else:
+        # Open-only (no task yet): produce still on superseded; just restore GI status.
+        superseded.updated_at = now
 
     item.status = dev.gate_item_status_at_open
     item.updated_at = now
@@ -622,8 +689,6 @@ def cancel_deviation(
     dev.status = "cancelled"
     dev.cancelled_at = now
     dev.updated_at = now
-
-    affected = [superseded, remediation]
 
     record_audit(
         db,
@@ -641,6 +706,12 @@ def cancel_deviation(
     from app.services.ge_queues import invalidate_project_queue_counts
 
     invalidate_project_queue_counts()
+    _notify_deviation_graph_write(
+        db,
+        project_id=project.id,
+        change_kind="deviation_cancel",
+        entity_refs={"gate_item_id": item.id if item else None, "deviation_id": dev.id},
+    )
 
     return write_operation_response(
         db,
@@ -780,13 +851,13 @@ def build_deviation_actions_for_user(db: Session, user_id: str) -> list[dict[str
         if existing is None or priority[action] > priority[existing[0]]:
             by_gi[item.id] = (action, entry)
 
+    # Include overdue system GIs (e.g. 项目启动) so execute/SDA can open remediation.
     governed_gi = (
         db.query(GeGateItem, GePhase)
         .join(GePhase, GePhase.id == GeGateItem.phase_id)
         .filter(
             GePhase.project_id.in_(projects.keys()),
             GeGateItem.status.notin_(("signed", "deviation")),
-            GeGateItem.is_system.is_(False),
         )
         .all()
     )

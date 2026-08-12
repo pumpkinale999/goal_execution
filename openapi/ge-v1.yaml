@@ -42,7 +42,7 @@ info:
     v1.26.0 (GE-AUTHZ-API): X-Actor-Is-Reviewer · is_goal_subtree_governor · /ge/health · /ge/portfolios · /ge/goal-subtree-governor/check · /ge/users/{id}/project-access · no /ge-api
     v1.26.1 (GE-AUTHZ docs): consensus v0.1.9 · Org portfolio headers §3.2 · summaries service+Actor (no JWT participant wording)
     Out of scope: skstudio BFF orchestration /api/v1/org|ge/* · GE-AUTHZ consensus v0.1.9 (see impl §1.4 · §4.0 · §10.42)
-  version: 1.26.1
+  version: 1.27.0
 servers:
   - url: /api/v1
     description: goal_execution service (service + Actor + Is-Reviewer only · GE-AUTHZ)
@@ -1041,11 +1041,33 @@ paths:
         - $ref: '#/components/parameters/ProjectId'
       responses:
         '200':
-          description: Graph
+          description: Graph (includes definition_gaps from the same assessor as definition-gaps)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProjectGraph'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /ge/projects/{project_id}/definition-gaps:
+    get:
+      operationId: getGeProjectDefinitionGaps
+      summary: Definition completeness gaps (PRA SenseEvent-shaped)
+      description: |
+        Authoritative definition assessment for PRA sense/verify and Define-canvas marks.
+        Same rules as `ProjectGraph.definition_gaps`. Project envelope = start/end system
+        phase full windows (not a project.planned_end column).
+      tags: [ge-projects]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: Gaps
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DefinitionGapsResponse'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
@@ -2060,6 +2082,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PhaseGraph'
+        definition_gaps:
+          type: array
+          readOnly: true
+          description: Same list as GET …/definition-gaps (PRA SenseEvent-shaped)
+          items:
+            $ref: '#/components/schemas/DefinitionGap'
         graph_editable:
           type: boolean
           description: M24 · caller may edit graph (PM or is_goal_subtree_governor or reviewer service)
@@ -2069,6 +2097,38 @@ components:
         is_governor:
           type: boolean
           description: M24 · can_govern_project for caller
+    DefinitionGap:
+      type: object
+      required: [type, concern_key, scope_kind, scope_id, evidence, message]
+      properties:
+        type:
+          type: string
+          description: e.g. definition.missing_deadline | definition.stage_incomplete | definition.missing_assignee | definition.stages_lt_3
+        concern_key:
+          type: string
+        scope_kind:
+          type: string
+          enum: [project]
+        scope_id:
+          type: string
+        evidence:
+          type: object
+          additionalProperties: true
+        message:
+          type: string
+          description: Human-readable Chinese for UI tooltips
+    DefinitionGapsResponse:
+      type: object
+      required: [project_id, gaps, gap_count]
+      properties:
+        project_id:
+          type: string
+        gaps:
+          type: array
+          items:
+            $ref: '#/components/schemas/DefinitionGap'
+        gap_count:
+          type: integer
     ProjectSummary:
       type: object
       required: [id, name, status, pm_user_id, program_id, created_by_user_id]
@@ -2502,15 +2562,20 @@ components:
           cancel: '#/components/schemas/CancelDeviationRequest'
     ActivateDeviationRequest:
       type: object
-      required: [action, reason, remediation_plan, remediation_due]
+      required: [action, remediation_due]
+      description: >
+        Confirm remediation due (time-first). Creates remediation task + produce rebind.
+        reason / remediation_plan optional (narrative lives in PRA report note).
       properties:
         action:
           type: string
           enum: [activate]
         reason:
           type: string
+          description: Optional; prefer PRA remediation report note
         remediation_plan:
           type: string
+          description: Optional; prefer PRA remediation report note
         remediation_due:
           type: string
           format: date
@@ -2518,7 +2583,7 @@ components:
           type: string
     ExtendDeviationRequest:
       type: object
-      required: [action, remediation_due, extend_reason]
+      required: [action, remediation_due]
       properties:
         action:
           type: string
@@ -2528,9 +2593,10 @@ components:
           format: date
         extend_reason:
           type: string
+          description: Optional; Canvas clock / time-first path omits (audit records time_first)
         remediation_plan:
           type: string
-          description: Required when revision >= 3 before extend
+          description: Required when revision >= 3 and extend_reason is provided (menu path)
     CancelDeviationRequest:
       type: object
       required: [action, cancel_reason]
@@ -2562,6 +2628,8 @@ components:
         remediation_task_id:
           type: string
           format: uuid
+          nullable: true
+          description: Null while Deviation is open (before activate creates task)
     Deviation:
       allOf:
         - $ref: '#/components/schemas/DeviationSummary'

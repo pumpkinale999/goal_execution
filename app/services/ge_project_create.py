@@ -233,6 +233,9 @@ def create_project(
     recompute_task_status(db, project_id)
     if commit:
         db.commit()
+        from app.services.observation_mount import notify_graph_write
+
+        notify_graph_write(db, project_id=project_id, change_kind="project_create")
     else:
         db.flush()
     invalidate_lifecycle_refresh()

@@ -151,6 +151,7 @@ def graph_editable_flag(db: Session, project: GeProject, user: AuthUser) -> bool
 
 def build_editable_project_graph(db: Session, project: GeProject, user: AuthUser) -> dict[str, Any]:
     from app.services.ge_access import can_govern_project
+    from app.services.ge_assess_definition import attach_definition_gaps
 
     graph = build_project_graph(
         db,
@@ -160,7 +161,7 @@ def build_editable_project_graph(db: Session, project: GeProject, user: AuthUser
     )
     graph["graph_editable"] = graph_editable_flag(db, project, user)
     graph["graph_deletable"] = graph_deletable_flag(db, project, user)
-    return graph
+    return attach_definition_gaps(graph)
 
 
 def add_produce_link(db: Session, task_id: str, gate_item_id: str, user: AuthUser) -> dict[str, Any]:
@@ -198,6 +199,14 @@ def add_produce_link(db: Session, task_id: str, gate_item_id: str, user: AuthUse
         db.add(GeTaskGateItemProduce(task_id=task_id, gate_item_id=gate_item_id))
     project.updated_at = now_iso()
     db.commit()
+    from app.services.observation_mount import notify_graph_write
+
+    notify_graph_write(
+        db,
+        project_id=project.id,
+        change_kind="produce_link_add",
+        entity_refs={"task_id": task_id, "gate_item_id": gate_item_id},
+    )
     project_loaded = load_project_graph(db, project.id)
     assert project_loaded is not None
     return build_editable_project_graph(db, project_loaded, user)
@@ -221,6 +230,14 @@ def remove_produce_link(db: Session, task_id: str, gate_item_id: str, user: Auth
     db.delete(row)
     project.updated_at = now_iso()
     db.commit()
+    from app.services.observation_mount import notify_graph_write
+
+    notify_graph_write(
+        db,
+        project_id=project.id,
+        change_kind="produce_link_remove",
+        entity_refs={"task_id": task_id, "gate_item_id": gate_item_id},
+    )
     project_loaded = load_project_graph(db, project.id)
     assert project_loaded is not None
     return build_editable_project_graph(db, project_loaded, user)
@@ -324,6 +341,14 @@ def add_task(db: Session, project_id: str, phase_id: str, body: dict[str, Any], 
     ensure_member_for_assignee(db, project_id=project_id, assignee_user_id=assignee)
     project.updated_at = now
     db.commit()
+    from app.services.observation_mount import notify_graph_write
+
+    notify_graph_write(
+        db,
+        project_id=project_id,
+        change_kind="task_add",
+        entity_refs={"task_id": task_id, "phase_id": phase_id},
+    )
     project_loaded = load_project_graph(db, project_id)
     assert project_loaded is not None
     graph = build_editable_project_graph(db, project_loaded, user)
@@ -385,10 +410,19 @@ def patch_task(db: Session, task_id: str, body: dict[str, Any], user: AuthUser) 
         raise HTTPException(status_code=400, detail={"detail": "invalid_request"})
     reject_task_schedule_fields(body)
     now = now_iso()
+    is_remediation = task.deviation_id is not None
     if task.is_system:
         if "title" in body or "phase_id" in body:
             _assert_not_system_task(task)
-    if "title" in body:
+    if is_remediation:
+        # 补救任务仅允许改负责人；标题/阶段由偏差激活时锁定
+        if "title" in body and str(body.get("title") or "").strip() != (task.title or ""):
+            raise HTTPException(status_code=403, detail={"detail": "remediation_task_fields_immutable"})
+        if "phase_id" in body:
+            new_phase_id = str(body.get("phase_id") or "").strip()
+            if new_phase_id and new_phase_id != task.phase_id:
+                raise HTTPException(status_code=403, detail={"detail": "remediation_task_fields_immutable"})
+    if "title" in body and not is_remediation:
         title = str(body.get("title") or "").strip()
         if not title:
             raise HTTPException(status_code=400, detail={"detail": "invalid_request"})
@@ -405,7 +439,7 @@ def patch_task(db: Session, task_id: str, body: dict[str, Any], user: AuthUser) 
         from app.services.ge_project_members import ensure_member_for_assignee
 
         ensure_member_for_assignee(db, project_id=project.id, assignee_user_id=assignee)
-    if "phase_id" in body:
+    if "phase_id" in body and not is_remediation:
         new_phase_id = str(body.get("phase_id") or "").strip()
         if not new_phase_id:
             raise HTTPException(status_code=400, detail={"detail": "invalid_request"})
@@ -425,8 +459,15 @@ def patch_task(db: Session, task_id: str, body: dict[str, Any], user: AuthUser) 
     project.updated_at = now
     db.commit()
     from app.services.ge_queues import invalidate_project_queue_counts
+    from app.services.observation_mount import notify_graph_write
 
     invalidate_project_queue_counts()
+    notify_graph_write(
+        db,
+        project_id=project.id,
+        change_kind="task_patch",
+        entity_refs={"task_id": task.id},
+    )
     project_loaded = load_project_graph(db, project.id)
     assert project_loaded is not None
     return build_editable_project_graph(db, project_loaded, user)
@@ -477,6 +518,14 @@ def add_gate_item(db: Session, project_id: str, phase_id: str, body: dict[str, A
     sync_gate_includes_for_phase(db, phase_id)
     project.updated_at = now
     db.commit()
+    from app.services.observation_mount import notify_graph_write
+
+    notify_graph_write(
+        db,
+        project_id=project_id,
+        change_kind="gate_item_add",
+        entity_refs={"gate_item_id": gi_id, "phase_id": phase_id},
+    )
     project_loaded = load_project_graph(db, project_id)
     assert project_loaded is not None
     graph = build_editable_project_graph(db, project_loaded, user)
@@ -505,6 +554,14 @@ def delete_task(db: Session, task_id: str, user: AuthUser) -> dict[str, Any]:
     db.delete(task)
     project.updated_at = now_iso()
     db.commit()
+    from app.services.observation_mount import notify_graph_write
+
+    notify_graph_write(
+        db,
+        project_id=project.id,
+        change_kind="task_delete",
+        entity_refs={"task_id": task_id},
+    )
     project_loaded = load_project_graph(db, project.id)
     assert project_loaded is not None
     return build_editable_project_graph(db, project_loaded, user)
@@ -574,6 +631,14 @@ def patch_gate_item(db: Session, gate_item_id: str, body: dict[str, Any], user: 
         sync_gate_includes_for_phase(db, old_phase_id)
         sync_gate_includes_for_phase(db, item.phase_id)
     db.commit()
+    from app.services.observation_mount import notify_graph_write
+
+    notify_graph_write(
+        db,
+        project_id=project.id,
+        change_kind="gate_item_patch",
+        entity_refs={"gate_item_id": item.id},
+    )
     project_loaded = load_project_graph(db, project.id)
     assert project_loaded is not None
     return build_editable_project_graph(db, project_loaded, user)
@@ -610,6 +675,14 @@ def delete_gate_item(db: Session, gate_item_id: str, user: AuthUser) -> dict[str
     sync_gate_includes_for_phase(db, phase_id)
     project.updated_at = now_iso()
     db.commit()
+    from app.services.observation_mount import notify_graph_write
+
+    notify_graph_write(
+        db,
+        project_id=project.id,
+        change_kind="gate_item_delete",
+        entity_refs={"gate_item_id": gate_item_id, "phase_id": phase_id},
+    )
     project_loaded = load_project_graph(db, project.id)
     assert project_loaded is not None
     return build_editable_project_graph(db, project_loaded, user)
@@ -671,8 +744,15 @@ def patch_phase(db: Session, phase_id: str, body: dict[str, Any], user: AuthUser
     project.updated_at = now
     db.commit()
     from app.services.ge_queues import invalidate_project_queue_counts
+    from app.services.observation_mount import notify_graph_write
 
     invalidate_project_queue_counts()
+    notify_graph_write(
+        db,
+        project_id=project.id,
+        change_kind="phase_patch",
+        entity_refs={"phase_id": phase_id},
+    )
     project_loaded = load_project_graph(db, project.id)
     assert project_loaded is not None
     return build_editable_project_graph(db, project_loaded, user)
@@ -701,6 +781,14 @@ def delete_phase(db: Session, phase_id: str, user: AuthUser) -> dict[str, Any]:
     if was_active:
         _activate_successor_phase(db, project_id)
     db.commit()
+    from app.services.observation_mount import notify_graph_write
+
+    notify_graph_write(
+        db,
+        project_id=project_id,
+        change_kind="phase_delete",
+        entity_refs={"phase_id": phase_id},
+    )
     project_loaded = load_project_graph(db, project_id)
     assert project_loaded is not None
     return build_editable_project_graph(db, project_loaded, user)
@@ -799,6 +887,14 @@ def add_phase(db: Session, project_id: str, body: dict[str, Any], user: AuthUser
     program_period, project_phases = _project_schedule_context(db, project)
     validate_project_schedule(project_phases, program_period=program_period, require_program=True)
     db.commit()
+    from app.services.observation_mount import notify_graph_write
+
+    notify_graph_write(
+        db,
+        project_id=project_id,
+        change_kind="phase_add",
+        entity_refs={"phase_id": phase_id},
+    )
     project_loaded = load_project_graph(db, project_id)
     assert project_loaded is not None
     graph = build_editable_project_graph(db, project_loaded, user)

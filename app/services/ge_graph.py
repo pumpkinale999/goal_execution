@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, selectinload
 
 from app.constants import SYSTEM_END_PHASE_NAME, TASK_STATUS_DEVIATED, TASK_STATUS_IDLE
 from app.models.ge import (
@@ -30,16 +31,72 @@ def now_iso() -> str:
 
 
 def load_project_graph(db: Session, project_id: str) -> GeProject | None:
+    """Load one project closure without multi-collection JOIN cartesian blow-up (GE-PERF-GRAPH)."""
     return (
         db.query(GeProject)
         .options(
-            joinedload(GeProject.program),
-            joinedload(GeProject.phases).joinedload(GePhase.gate),
-            joinedload(GeProject.phases).joinedload(GePhase.gate_items),
-            joinedload(GeProject.tasks),
+            selectinload(GeProject.program).selectinload(GeProgram.objective),
+            selectinload(GeProject.phases).selectinload(GePhase.gate),
+            selectinload(GeProject.phases).selectinload(GePhase.gate_items),
+            selectinload(GeProject.tasks),
         )
         .filter(GeProject.id == project_id, GeProject.deleted_at.is_(None))
         .first()
+    )
+
+
+@dataclass
+class ProjectGraphMaps:
+    """In-memory link tables for one project (prefetch once, analyze in memory)."""
+
+    produce_by_task: dict[str, list[str]] = field(default_factory=dict)
+    prereq_by_task: dict[str, list[str]] = field(default_factory=dict)
+    include_by_gate: dict[str, list[str]] = field(default_factory=dict)
+    signers_by_gi: dict[str, list[str]] = field(default_factory=dict)
+
+
+def prefetch_project_graph_maps(db: Session, project: GeProject) -> ProjectGraphMaps:
+    task_ids = [t.id for t in project.tasks]
+    gate_ids = [p.gate.id for p in project.phases if p.gate is not None]
+    produce_by_task: dict[str, list[str]] = {tid: [] for tid in task_ids}
+    prereq_by_task: dict[str, list[str]] = {tid: [] for tid in task_ids}
+    if task_ids:
+        for row in (
+            db.query(GeTaskGateItemProduce)
+            .filter(GeTaskGateItemProduce.task_id.in_(task_ids))
+            .all()
+        ):
+            produce_by_task.setdefault(row.task_id, []).append(row.gate_item_id)
+        for row in (
+            db.query(GeTaskGateItemPrerequisite)
+            .filter(GeTaskGateItemPrerequisite.task_id.in_(task_ids))
+            .all()
+        ):
+            prereq_by_task.setdefault(row.task_id, []).append(row.gate_item_id)
+    include_by_gate: dict[str, list[str]] = {gid: [] for gid in gate_ids}
+    if gate_ids:
+        for row in (
+            db.query(GeGateGateItemInclude)
+            .filter(GeGateGateItemInclude.gate_id.in_(gate_ids))
+            .all()
+        ):
+            include_by_gate.setdefault(row.gate_id, []).append(row.gate_item_id)
+    tasks_by_id = {t.id: t for t in project.tasks}
+    signers_by_gi: dict[str, list[str]] = {}
+    for tid, gi_ids in prereq_by_task.items():
+        task = tasks_by_id.get(tid)
+        assignee = (task.assignee_user_id if task else None) or ""
+        if not assignee:
+            continue
+        for gi_id in gi_ids:
+            lst = signers_by_gi.setdefault(gi_id, [])
+            if assignee not in lst:
+                lst.append(assignee)
+    return ProjectGraphMaps(
+        produce_by_task=produce_by_task,
+        prereq_by_task=prereq_by_task,
+        include_by_gate=include_by_gate,
+        signers_by_gi=signers_by_gi,
     )
 
 
@@ -59,13 +116,24 @@ def _produce_gate_item_ids(db: Session, task_id: str) -> list[str]:
 
 
 def _task_graph_row(db: Session, task: GeTask) -> dict[str, Any]:
+    """Write-path / ad-hoc helper (may hit DB). Graph build uses ``_task_graph_row_from_maps``."""
+    return _task_graph_row_from_maps(
+        task,
+        ProjectGraphMaps(
+            produce_by_task={task.id: _produce_gate_item_ids(db, task.id)},
+            prereq_by_task={task.id: _prerequisite_gate_item_ids(db, task.id)},
+        ),
+    )
+
+
+def _task_graph_row_from_maps(task: GeTask, maps: ProjectGraphMaps) -> dict[str, Any]:
     row: dict[str, Any] = {
         "id": task.id,
         "title": task.title,
         "assignee_user_id": task.assignee_user_id,
         "phase_id": task.phase_id,
-        "produces": _produce_gate_item_ids(db, task.id),
-        "prerequisites": _prerequisite_gate_item_ids(db, task.id),
+        "produces": list(maps.produce_by_task.get(task.id) or []),
+        "prerequisites": list(maps.prereq_by_task.get(task.id) or []),
         "is_system": bool(task.is_system),
         "deviation_id": task.deviation_id,
         "is_remediation": task.deviation_id is not None,
@@ -91,11 +159,25 @@ def eligible_signers(db: Session, gate_item_id: str) -> list[str]:
     return signers
 
 
+def _gate_is_open_from_phase(phase: GePhase) -> bool:
+    """In-memory gate open check using already-loaded ``phase.gate_items``."""
+    items = list(phase.gate_items or [])
+    if not items:
+        if is_start_phase(phase):
+            return True
+        if phase.is_system and phase.name == SYSTEM_END_PHASE_NAME:
+            return True
+        return False
+    return all(item.status == "signed" for item in items)
+
+
 def gate_is_open(db: Session, gate: GeGate, phase: GePhase | None = None) -> bool:
     if phase is None:
         phase = db.get(GePhase, gate.phase_id)
     if phase is None:
         return False
+    if "gate_items" in phase.__dict__:
+        return _gate_is_open_from_phase(phase)
     items = db.query(GeGateItem).filter(GeGateItem.phase_id == phase.id).all()
     if not items:
         if is_start_phase(phase):
@@ -316,9 +398,14 @@ def project_is_empty(db: Session, project: GeProject) -> bool:
 
 
 def build_graph_edges(db: Session, project: GeProject) -> list[dict[str, Any]]:
+    """Ad-hoc edges (may hit DB). Prefer ``build_graph_edges_from_maps`` inside graph build."""
+    return build_graph_edges_from_maps(project, prefetch_project_graph_maps(db, project))
+
+
+def build_graph_edges_from_maps(project: GeProject, maps: ProjectGraphMaps) -> list[dict[str, Any]]:
     edges: list[dict[str, Any]] = []
     for task in project.tasks:
-        for gi_id in _produce_gate_item_ids(db, task.id):
+        for gi_id in maps.produce_by_task.get(task.id) or []:
             edges.append(
                 {
                     "id": f"produce:{task.id}:{gi_id}",
@@ -327,7 +414,7 @@ def build_graph_edges(db: Session, project: GeProject) -> list[dict[str, Any]]:
                     "to": {"type": "gate_item", "id": gi_id},
                 }
             )
-        for gi_id in _prerequisite_gate_item_ids(db, task.id):
+        for gi_id in maps.prereq_by_task.get(task.id) or []:
             edges.append(
                 {
                     "id": f"prerequisite:{gi_id}:{task.id}",
@@ -355,6 +442,7 @@ def build_project_graph(
         objective = program.objective or db.get(GeObjective, program.objective_id)
     program_period = build_program_period(program, objective=objective)
     sorted_phase_models = sorted(project.phases, key=lambda p: p.sequence)
+    maps = prefetch_project_graph_maps(db, project)
 
     deviations_by_gi = {
         d.gate_item_id: d
@@ -368,7 +456,7 @@ def build_project_graph(
             sorted_phase_models, program_period, target_sequence=phase.sequence
         )
         gate = phase.gate
-        gate_item_ids = _gate_item_ids_for_gate(db, gate.id) if gate else []
+        gate_item_ids = list(maps.include_by_gate.get(gate.id) or []) if gate else []
         phase_tasks = sorted(
             [t for t in project.tasks if t.phase_id == phase.id],
             key=lambda t: (t.canvas_order, t.created_at),
@@ -387,7 +475,7 @@ def build_project_graph(
                 "planned_window_is_derived": is_derived,
                 "gate": {
                     "id": gate.id if gate else None,
-                    "is_open": gate_is_open(db, gate, phase) if gate else False,
+                    "is_open": _gate_is_open_from_phase(phase) if gate else False,
                     "includes": gate_item_ids,
                 },
                 "gate_items": [
@@ -407,17 +495,18 @@ def build_project_graph(
                             "reject_reason": gi.reject_reason,
                             "planned_due": gi.planned_due,
                             "is_system": bool(gi.is_system),
-                            "eligible_signers": eligible_signers(db, gi.id),
+                            "eligible_signers": list(maps.signers_by_gi.get(gi.id) or []),
                         },
                         **compute_gate_overdue_fields(
                             db,
                             gi,
                             deviation=deviations_by_gi.get(gi.id),
+                            skip_deviation_lookup=True,
                         ),
                     }
                     for gi in sorted(phase.gate_items, key=lambda g: g.created_at)
                 ],
-                "tasks": [_task_graph_row(db, task) for task in phase_tasks],
+                "tasks": [_task_graph_row_from_maps(task, maps) for task in phase_tasks],
             }
         )
     graph: dict[str, Any] = {
@@ -431,7 +520,7 @@ def build_project_graph(
             "project_note_id": project.project_note_id,
         },
         "phases": phases_out,
-        "edges": build_graph_edges(db, project),
+        "edges": build_graph_edges_from_maps(project, maps),
     }
     if program_period is not None:
         graph["program_period"] = program_period

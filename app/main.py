@@ -17,7 +17,16 @@ API_PREFIX = "/api/v1"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
-    yield
+    from app.services.observation_mount import (
+        start_observation_flush_loop,
+        stop_observation_flush_loop,
+    )
+
+    start_observation_flush_loop()
+    try:
+        yield
+    finally:
+        stop_observation_flush_loop()
 
 
 app = FastAPI(title="goal_execution", version="0.2.0-authz", lifespan=lifespan)

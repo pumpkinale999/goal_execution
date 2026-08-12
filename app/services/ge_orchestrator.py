@@ -138,6 +138,14 @@ def patch_project(db: Session, project_id: str, user: AuthUser, body: dict[str, 
     )
     db.commit()
     invalidate_project_queue_counts()
+    from app.services.observation_mount import notify_graph_write
+
+    notify_graph_write(
+        db,
+        project_id=project.id,
+        change_kind="project_patch",
+        entity_refs={"pm_changed": pm_changed},
+    )
     db.refresh(project)
     return {
         "id": project.id,
@@ -326,6 +334,18 @@ def submit_gate_item(
     recompute_gate_and_phases(db, project.id)
     db.commit()
     invalidate_project_queue_counts()
+    from app.services.observation_mount import notify_graph_write
+
+    notify_graph_write(
+        db,
+        project_id=project.id,
+        change_kind="gate_item_submit",
+        entity_refs={
+            "gate_item_id": item.id,
+            "phase_id": item.phase_id,
+            "submitted_by": user.user_id,
+        },
+    )
     return write_operation_response(
         db,
         project=project,
@@ -377,11 +397,31 @@ def sign_gate_item(db: Session, gate_item_id: str, user: AuthUser) -> dict[str, 
     recompute_gate_and_phases(db, project.id)
     db.commit()
     invalidate_project_queue_counts()
+    from app.services.observation_mount import notify_graph_write
+
+    notify_graph_write(
+        db,
+        project_id=project.id,
+        change_kind="gate_item_sign",
+        entity_refs={
+            "gate_item_id": item.id,
+            "phase_id": item.phase_id,
+            "signed_by": user.user_id,
+        },
+    )
     if closed_notify:
         dispatch_deviation_personal_assistant(
             event=closed_notify["event"],
             recipient_user_ids=closed_notify["recipient_user_ids"],
             payload=closed_notify["payload"],
+        )
+        from app.services.observation_mount import notify_graph_write
+
+        notify_graph_write(
+            db,
+            project_id=project.id,
+            change_kind="deviation_close",
+            entity_refs={"gate_item_id": item.id, "deviation_id": active_dev.id if active_dev else None},
         )
     project_model = db.get(GeProject, project.id) or project
     phase = db.get(GePhase, gate.phase_id) if gate else phase
@@ -439,6 +479,18 @@ def reject_gate_item(
     affected = tasks_linked_to_gate_item(db, item.id)
     db.commit()
     invalidate_project_queue_counts()
+    from app.services.observation_mount import notify_graph_write
+
+    notify_graph_write(
+        db,
+        project_id=project.id,
+        change_kind="gate_item_reject",
+        entity_refs={
+            "gate_item_id": item.id,
+            "phase_id": item.phase_id,
+            "rejected_by": user.user_id,
+        },
+    )
     return write_operation_response(
         db,
         project=project,

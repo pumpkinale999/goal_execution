@@ -11,6 +11,7 @@ from app.models.ge import (
     GeTaskGateItemPrerequisite,
     GeTaskGateItemProduce,
 )
+from app.models.observation_mount import GeObservationOutbox, GeObservationSubscription
 from app.models.org import OrgDepartment, OrgTeam, UserOrgMembership, UserOrgProfile
 
 __all__ = [
@@ -29,4 +30,6 @@ __all__ = [
     "GeTaskGateItemProduce",
     "GeTaskGateItemPrerequisite",
     "GeAuditEvent",
+    "GeObservationSubscription",
+    "GeObservationOutbox",
 ]

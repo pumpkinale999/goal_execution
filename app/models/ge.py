@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from sqlalchemy import Boolean, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -130,6 +130,7 @@ class GeGateGateItemInclude(Base):
 
 class GeGateItem(Base):
     __tablename__ = "ge_gate_items"
+    __table_args__ = (Index("ix_ge_gate_items_phase_id", "phase_id"),)
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
     phase_id: Mapped[str] = mapped_column(String, ForeignKey("ge_phases.id"), nullable=False)
@@ -166,6 +167,7 @@ class GeGateItem(Base):
 
 class GeTask(Base):
     __tablename__ = "ge_tasks"
+    __table_args__ = (Index("ix_ge_tasks_project_id", "project_id"),)
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
     project_id: Mapped[str] = mapped_column(String, ForeignKey("ge_projects.id"), nullable=False)
@@ -188,6 +190,7 @@ class GeTask(Base):
 
 class GeDeviation(Base):
     __tablename__ = "ge_deviations"
+    __table_args__ = (Index("ix_ge_deviations_project_status", "project_id", "status"),)
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
     gate_item_id: Mapped[str] = mapped_column(String, ForeignKey("ge_gate_items.id"), nullable=False)
@@ -197,7 +200,9 @@ class GeDeviation(Base):
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     remediation_plan: Mapped[str | None] = mapped_column(Text, nullable=True)
     remediation_due: Mapped[str | None] = mapped_column(Text, nullable=True)
-    remediation_task_id: Mapped[str] = mapped_column(String, ForeignKey("ge_tasks.id"), nullable=False)
+    remediation_task_id: Mapped[str | None] = mapped_column(
+        String, ForeignKey("ge_tasks.id"), nullable=True
+    )
     superseded_task_id: Mapped[str] = mapped_column(String, ForeignKey("ge_tasks.id"), nullable=False)
     gate_item_status_at_open: Mapped[str] = mapped_column(Text, nullable=False)
     superseded_task_status_at_open: Mapped[str] = mapped_column(Text, nullable=False)
