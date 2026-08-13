@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     goal_execution_jwt_algorithm: str = "HS256"
     goal_execution_service_token: str = ""
     skstudio_internal_url: str = "http://127.0.0.1:8000"
+    kbase_base_url: str = ""
+    kbase_service_token: str = ""
+    kbase_assert_timeout_seconds: float = 2.5
     host: str = "127.0.0.1"
     port: int = 8092
 

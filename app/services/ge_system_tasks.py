@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -23,6 +24,18 @@ from app.models.ge import (
     GeTaskGateItemProduce,
 )
 from app.services.ge_gate_includes_sync import sync_gate_includes_for_phase
+
+
+def _system_gi_payload(
+    *,
+    target_state: str,
+    target_value: bool,
+    project_note_id: str | None,
+) -> str:
+    data: dict = {"target_state": target_state, "target_value": target_value}
+    if project_note_id:
+        data["content_ref"] = f"kb:{project_note_id}"
+    return json.dumps(data, ensure_ascii=False)
 
 
 def default_system_planned_due(now: str, phase_planned_end: str | None) -> str:
@@ -289,6 +302,7 @@ def _ensure_start_side(
     start_gate_id: str,
     now: str,
     legacy_complete: bool,
+    project_note_id: str | None = None,
 ) -> tuple[int, int]:
     del start_gate_id
     task_count = 0
@@ -331,7 +345,11 @@ def _ensure_start_side(
             name=SYSTEM_START_GATE_ITEM_NAME,
             form="status",
             status=gi_status,
-            payload='{"target_state":"已确认","target_value":true}',
+            payload=_system_gi_payload(
+                target_state="已确认",
+                target_value=True,
+                project_note_id=project_note_id,
+            ),
             planned_due=None,
             is_system=True,
             created_at=now,
@@ -359,6 +377,7 @@ def _ensure_end_side(
     end_phase_id: str,
     end_gate_id: str,
     now: str,
+    project_note_id: str | None = None,
 ) -> tuple[int, int]:
     del end_gate_id
     task_count = 0
@@ -394,7 +413,11 @@ def _ensure_end_side(
             name=SYSTEM_END_GATE_ITEM_NAME,
             form="status",
             status="draft",
-            payload='{"target_state":"已完成","target_value":true}',
+            payload=_system_gi_payload(
+                target_state="已完成",
+                target_value=True,
+                project_note_id=project_note_id,
+            ),
             planned_due=None,
             is_system=True,
             created_at=now,
@@ -456,6 +479,7 @@ def seed_system_lifecycle_graph(
     seed_end: bool = True,
     seed_end_sign_route: bool = True,
     legacy_start_complete: bool = False,
+    project_note_id: str | None = None,
 ) -> dict[str, int]:
     """Ensure built-in Start/End tasks, gate items, produce links, and gate includes."""
     del start_phase_planned_end, end_phase_planned_end
@@ -471,6 +495,7 @@ def seed_system_lifecycle_graph(
             start_gate_id=start_gate_id,
             now=now,
             legacy_complete=legacy_start_complete,
+            project_note_id=project_note_id,
         )
         task_count += added_tasks
         gate_item_count += added_gis
@@ -483,6 +508,7 @@ def seed_system_lifecycle_graph(
             end_phase_id=end_phase_id,
             end_gate_id=end_gate_id,
             now=now,
+            project_note_id=project_note_id,
         )
         task_count += added_tasks
         gate_item_count += added_gis

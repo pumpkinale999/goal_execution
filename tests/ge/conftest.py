@@ -78,13 +78,29 @@ def material_submit_payload(summary: str, *, project_note_id: str = TEST_PROJECT
     }
 
 
-def structured_submit_payload(actual_value: Any, summary: str) -> dict[str, Any]:
+def structured_submit_payload(
+    actual_value: Any,
+    summary: str,
+    *,
+    project_note_id: str = TEST_PROJECT_NOTE_ID,
+) -> dict[str, Any]:
     return {
         "payload": {
             "actual_value": actual_value,
             "summary": summary,
+            "content_ref": f"kb:{project_note_id}",
         }
     }
+
+
+@pytest.fixture(autouse=True)
+def _accept_all_note_project_guard():
+    """M2: GE unit tests inject AcceptAll; production unconfigured → 503 until M3."""
+    from app.services.ge_note_project_guard import AcceptAllNoteProjectGuard, set_note_project_guard
+
+    set_note_project_guard(AcceptAllNoteProjectGuard())
+    yield
+    set_note_project_guard(None)
 
 
 def bootstrap_golden_phase_schedule(client: TestClient, project_id: str, user_id: str) -> None:
@@ -254,7 +270,8 @@ def bootstrap_startup_gate(client: TestClient, project_id: str, user_id: str) ->
         note_id = graph["project"].get("project_note_id") or TEST_PROJECT_NOTE_ID
         submit_payload = material_submit_payload("项目启动确认", project_note_id=note_id)
     else:
-        submit_payload = structured_submit_payload(True, "项目启动确认")
+        note_id = graph["project"].get("project_note_id") or TEST_PROJECT_NOTE_ID
+        submit_payload = structured_submit_payload(True, "项目启动确认", project_note_id=note_id)
     submit = client.post(
         f"/api/v1/ge/gate-items/{start_gi['id']}/submit",
         headers=jwt_headers(pm_user),
@@ -280,7 +297,8 @@ def bootstrap_closure_gate(client: TestClient, project_id: str, user_id: str) ->
         note_id = graph["project"].get("project_note_id") or TEST_PROJECT_NOTE_ID
         submit_payload = material_submit_payload("结项复盘完成", project_note_id=note_id)
     else:
-        submit_payload = structured_submit_payload(True, "结项复盘完成")
+        note_id = graph["project"].get("project_note_id") or TEST_PROJECT_NOTE_ID
+        submit_payload = structured_submit_payload(True, "结项复盘完成", project_note_id=note_id)
     submit = client.post(
         f"/api/v1/ge/gate-items/{end_gi['id']}/submit",
         headers=jwt_headers(pm_user),

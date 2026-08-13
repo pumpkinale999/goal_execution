@@ -138,19 +138,26 @@ def create_project(
                 phase_planned_end=planned_end,
                 gate_item_name=str(gi_body["name"]).strip(),
             )
-            db.add(
-                GeGateItem(
-                    id=gi_id,
-                    phase_id=phase_id,
-                    name=str(gi_body["name"]).strip(),
-                    form=gi_body["form"],
-                    status="draft",
-                    payload="{}",
-                    planned_due=planned_due,
-                    created_at=now,
-                    updated_at=now,
-                )
+            from app.services.ge_gate_item_payload import definition_from_body, parse_form
+
+            form = parse_form(gi_body.get("form"))
+            def_body = dict(gi_body)
+            nested = gi_body.get("payload")
+            if isinstance(nested, dict):
+                def_body = {**nested, **def_body}
+            definition = definition_from_body(form, def_body)
+            item = GeGateItem(
+                id=gi_id,
+                phase_id=phase_id,
+                name=str(gi_body["name"]).strip(),
+                form=form,
+                status="draft",
+                planned_due=planned_due,
+                created_at=now,
+                updated_at=now,
             )
+            item.payload_dict = definition
+            db.add(item)
             gate_item_count += 1
         sync_gate_includes_for_phase(db, phase_id)
         for task_index, task_body in enumerate(phase_body.get("tasks") or []):
@@ -207,6 +214,7 @@ def create_project(
         end_phase_id=end_phase_id,
         end_gate_id=end_gate_id,
         now=now,
+        project_note_id=project_note_id,
     )
     task_count += system_counts["task_count"]
     gate_item_count += system_counts["gate_item_count"]

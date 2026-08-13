@@ -99,10 +99,12 @@ def test_metric_definition_and_submit(client):
     )
     assert missing_summary.status_code == 400
 
+    from tests.ge.conftest import TEST_PROJECT_NOTE_ID, structured_submit_payload
+
     submit = client.post(
         f"/api/v1/ge/gate-items/{gi_id}/submit",
         headers=jwt_headers(U_LISI),
-        json={"payload": {"actual_value": 120, "summary": "压测通过，详见项目文档"}},
+        json=structured_submit_payload(120, "压测通过，详见项目文档"),
     )
     assert submit.status_code == 200
     payload = submit.json()["gate_item"]["payload"]
@@ -110,6 +112,7 @@ def test_metric_definition_and_submit(client):
     assert payload["operator"] == ">="
     assert payload["actual_value"] == 120
     assert payload["summary"] == "压测通过，详见项目文档"
+    assert payload["content_ref"] == f"kb:{TEST_PROJECT_NOTE_ID}"
 
     sign = client.post(f"/api/v1/ge/gate-items/{gi_id}/sign", headers=jwt_headers(U_WANGWU))
     assert sign.status_code == 200
@@ -157,10 +160,12 @@ def test_status_definition_and_submit(client):
     )
     assert missing_summary.status_code == 400
 
+    from tests.ge.conftest import TEST_PROJECT_NOTE_ID, structured_submit_payload
+
     submit = client.post(
         f"/api/v1/ge/gate-items/{gi_id}/submit",
         headers=jwt_headers(U_LISI),
-        json={"payload": {"actual_value": True, "summary": "release tag v1.0，详见项目文档"}},
+        json=structured_submit_payload(True, "release tag v1.0，详见项目文档"),
     )
     assert submit.status_code == 200
     payload = submit.json()["gate_item"]["payload"]
@@ -168,6 +173,7 @@ def test_status_definition_and_submit(client):
     assert payload["target_value"] is True
     assert payload["actual_value"] is True
     assert payload["summary"] == "release tag v1.0，详见项目文档"
+    assert payload["content_ref"] == f"kb:{TEST_PROJECT_NOTE_ID}"
     assert "evidence" not in payload
 
 

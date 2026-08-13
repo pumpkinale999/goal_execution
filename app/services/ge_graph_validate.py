@@ -28,7 +28,8 @@ def validate_phases_body(phases: list[dict[str, Any]]) -> None:
             gate_key_to_phase[key] = seq
             produce_count[key] = 0
             prereq_count[key] = 0
-            if gi.get("form") != "material":
+            form = str(gi.get("form") or "material").strip().lower()
+            if form not in ("material", "metric", "status"):
                 raise HTTPException(status_code=400, detail={"detail": "unsupported_gate_item_form"})
         for task in phase.get("tasks") or []:
             if not task.get("assignee_user_id"):

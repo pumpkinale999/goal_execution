@@ -89,6 +89,7 @@ def backfill_project(db, project: GeProject, *, dry_run: bool) -> str:
         seed_end=seed_end,
         seed_end_sign_route=seed_end_sign_route,
         legacy_start_complete=legacy_start_complete,
+        project_note_id=project.project_note_id,
     )
     try:
         validate_project_graph_db(db, project.id)

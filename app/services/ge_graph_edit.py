@@ -611,6 +611,25 @@ def patch_gate_item(db: Session, gate_item_id: str, body: dict[str, Any], user: 
         gate_item_id=item.id,
         gate_item_name=item.name,
     )
+    if "content_ref" in body:
+        if item.status in ("pending_sign", "signed"):
+            raise HTTPException(status_code=400, detail={"detail": "content_ref_immutable"})
+        if item.status not in ("draft", "rejected"):
+            raise HTTPException(status_code=409, detail={"detail": "gate_item_not_editable"})
+        from app.services.ge_gate_item_payload import optional_content_ref_from_body, parse_kb_note_id
+        from app.services.ge_note_project_guard import get_note_project_guard
+
+        content_ref = optional_content_ref_from_body(body)
+        if content_ref is None:
+            raise HTTPException(status_code=400, detail={"detail": "invalid_content_ref"})
+        if not project.project_note_id:
+            raise HTTPException(status_code=409, detail={"detail": "project_note_required"})
+        note_id = parse_kb_note_id(content_ref)
+        assert note_id is not None
+        get_note_project_guard().assert_in_project(project_id=project.id, note_id=note_id)
+        merged_payload = dict(item.payload_dict)
+        merged_payload["content_ref"] = f"kb:{note_id.lower()}"
+        item.payload_dict = merged_payload
     if item.status == "draft" and not item.submitted_by and not item.signed_by and not item.rejected_by:
         from app.services.ge_gate_item_payload import definition_from_body, merge_definition_patch, parse_form
 

@@ -41,8 +41,9 @@ info:
     v1.25.0 (M39 MS1): CreateObjectiveYearRequest.owner_user_id optional · omit/blank → actor · see platform-docs M39 · impl §10.39
     v1.26.0 (GE-AUTHZ-API): X-Actor-Is-Reviewer · is_goal_subtree_governor · /ge/health · /ge/portfolios · /ge/goal-subtree-governor/check · /ge/users/{id}/project-access · no /ge-api
     v1.26.1 (GE-AUTHZ docs): consensus v0.1.9 · Org portfolio headers §3.2 · summaries service+Actor (no JWT participant wording)
+    v1.28.0 (证据层 M2): GateItemInput form metric|status · content_ref · submit 400/503 evidence codes · GE-T200～T207
     Out of scope: skstudio BFF orchestration /api/v1/org|ge/* · GE-AUTHZ consensus v0.1.9 (see impl §1.4 · §4.0 · §10.42)
-  version: 1.27.0
+  version: 1.28.0
 servers:
   - url: /api/v1
     description: goal_execution service (service + Actor + Is-Reviewer only · GE-AUTHZ)
@@ -1369,9 +1370,22 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/WriteOperationResponse'
+        '400':
+          description: >
+            invalid_request | invalid_content_ref | note_not_in_project |
+            content_ref_note_unavailable | project_binding_missing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '409':
           $ref: '#/components/responses/Conflict'
-  /ge/gate-items/{gate_item_id}/sign:
+        '503':
+          description: note_validation_unavailable (KB guard down · no degrade)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     post:
       operationId: signGeGateItem
       summary: Sign gate item (eligible signer)
@@ -1978,10 +1992,26 @@ components:
           type: string
         form:
           type: string
-          enum: [material]
+          enum: [material, metric, status]
+        content_ref:
+          type: string
+          description: Optional definition-time kb:{note_uuid}; submit still requires explicit ref
+        target_value:
+          oneOf:
+            - type: number
+            - type: string
+            - type: boolean
+        operator:
+          type: string
+          enum: ['>=', '<=', '==', '>', '<']
+        target_state:
+          type: string
         payload:
           type: object
           additionalProperties: true
+        planned_due:
+          type: string
+          format: date
     TaskInput:
       type: object
       required: [key, title, assignee_user_id]
@@ -2025,6 +2055,9 @@ components:
           type: string
           enum: [material, metric, status]
           default: material
+        content_ref:
+          type: string
+          description: Optional definition-time evidence kb:{note_uuid}
         target_value:
           oneOf:
             - type: number

@@ -310,6 +310,7 @@ def submit_gate_item(
         item.form,
         raw_payload,
         item.payload_dict,
+        project_id=project.id,
         project_note_id=project.project_note_id,
     )
     signers = eligible_signers(db, item.id)
@@ -374,6 +375,13 @@ def sign_gate_item(db: Session, gate_item_id: str, user: AuthUser) -> dict[str, 
     _require_active_project(project)
     if not _can_act_as_signer(db, project, item.id, user):
         raise HTTPException(status_code=403, detail={"detail": "not_eligible_signer"})
+    from app.services.ge_gate_item_payload import assert_content_ref_still_available
+
+    assert_content_ref_still_available(
+        project_id=project.id,
+        content_ref=(item.payload_dict or {}).get("content_ref"),
+        project_note_id=project.project_note_id,
+    )
     now = now_iso()
     item.status = "signed"
     item.signed_by = user.user_id
