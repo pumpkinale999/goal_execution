@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import threading
 import uuid
@@ -24,6 +25,27 @@ MIN_SERVICE_TOKEN_LEN = 16
 _flush_lock = threading.Lock()
 _flush_stop = threading.Event()
 _flush_thread: threading.Thread | None = None
+
+
+def _payload_as_dict(payload: Any) -> dict[str, Any]:
+    """Coerce outbox payload to a dict for HTTP JSON body.
+
+    Postgres/psycopg may surface SQLAlchemy ``JSON`` columns as ``str``; posting that
+    via ``httpx.post(..., json=payload)`` double-encodes a JSON string and AA returns
+    422 (``Input should be a valid dictionary``).
+    """
+    if payload is None:
+        return {}
+    if isinstance(payload, dict):
+        return payload
+    if isinstance(payload, (bytes, bytearray)):
+        payload = payload.decode("utf-8")
+    if isinstance(payload, str):
+        data = json.loads(payload)
+        if not isinstance(data, dict):
+            raise TypeError(f"outbox_payload_not_object:{type(data).__name__}")
+        return data
+    raise TypeError(f"outbox_payload_unsupported:{type(payload).__name__}")
 
 
 def register_subscription(
@@ -199,7 +221,8 @@ def deliver_pending(db: Session, *, limit: int = 50) -> dict[str, int]:
                 headers = {"Content-Type": "application/json", "Accept": "application/json"}
                 if sub.service_token:
                     headers["Authorization"] = f"Bearer {sub.service_token}"
-                r = httpx.post(sub.target_url, json=row.payload, headers=headers, timeout=15.0)
+                body = _payload_as_dict(row.payload)
+                r = httpx.post(sub.target_url, json=body, headers=headers, timeout=15.0)
                 if r.status_code >= 300:
                     ok_all = False
                     last_err = f"{sub.name}:{r.status_code}"

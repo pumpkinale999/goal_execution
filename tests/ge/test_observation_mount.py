@@ -391,3 +391,52 @@ def test_deliver_pending_marks_failure_when_subscriber_returns_401():
     finally:
         db.rollback()
         db.close()
+
+
+def test_deliver_pending_coerces_text_json_payload_string():
+    """Prod outbox.payload is TEXT → ORM may return str; must POST a dict (avoid AA 422)."""
+    import json
+
+    from app.db import get_session_factory
+    from app.models.observation_mount import GeObservationOutbox
+    from app.services.observation_mount import deliver_pending, register_subscription
+
+    db = get_session_factory()()
+    try:
+        register_subscription(
+            db,
+            name="pra-text-payload",
+            target_url="http://aa.test/api/v1/active-agent/observations",
+            service_token="good-token-16chars",
+            mount_point="after_project_graph_write",
+        )
+        payload_obj = {
+            "idempotency_key": "ge:after_project_graph_write:p1:textjson",
+            "project_id": "p1",
+            "change_kind": "probe",
+        }
+        row = GeObservationOutbox(
+            id="obs-text-payload",
+            idempotency_key=payload_obj["idempotency_key"],
+            mount_point="after_project_graph_write",
+            # Simulate TEXT column / double-encoded storage surface.
+            payload=json.dumps(payload_obj),  # type: ignore[arg-type]
+            status="pending",
+            attempts=0,
+            created_at="2026-08-14T00:00:00Z",
+        )
+        db.add(row)
+        db.commit()
+
+        mock_ok = MagicMock()
+        mock_ok.status_code = 200
+        with patch("httpx.post", return_value=mock_ok) as post:
+            result = deliver_pending(db)
+            db.commit()
+            assert result["delivered"] == 1
+            assert post.call_args.kwargs["json"] == payload_obj
+            refreshed = db.query(GeObservationOutbox).filter(GeObservationOutbox.id == "obs-text-payload").one()
+            assert refreshed.status == "delivered"
+    finally:
+        db.rollback()
+        db.close()
