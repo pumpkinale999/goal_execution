@@ -35,6 +35,7 @@ usage() {
 
 环境变量:
   SKSTUDIO_BACKEND  同步 JWT_SECRET / GOAL_EXECUTION_SERVICE_TOKEN（默认 ../skstudio/backend）
+  KNOWLEDGE_BASE_ROOT  同步 KBASE_SERVICE_TOKEN（默认 ../knowledge_base）
 EOF
 }
 
@@ -112,6 +113,38 @@ sync_from_skstudio() {
   sync_ge_service_token
 }
 
+# GateItem evidence (v2.38.67+): GE must call KB assert-note-in-project or submit → 503.
+sync_kbase_from_knowledge_base() {
+  local kb_root="${KNOWLEDGE_BASE_ROOT:-$REPO_ROOT/../knowledge_base}"
+  local kb_env="$kb_root/.env"
+  local ge_env="$REPO_ROOT/.env"
+  local default_base="http://127.0.0.1:8091"
+  local default_token="dev-kbase-service-token"
+  local kb_token="" ge_token="" final_token="" base=""
+
+  base="$(read_env_value "$ge_env" KBASE_BASE_URL)"
+  if [[ -z "$base" ]]; then
+    patch_env_key "$ge_env" KBASE_BASE_URL "$default_base"
+    log "已设置 KBASE_BASE_URL=${default_base}"
+  fi
+
+  [[ -f "$kb_env" ]] && kb_token="$(read_env_value "$kb_env" KNOWLEDGE_BASE_SERVICE_TOKEN)"
+  ge_token="$(read_env_value "$ge_env" KBASE_SERVICE_TOKEN)"
+  if [[ -n "$kb_token" ]]; then
+    final_token="$kb_token"
+  elif [[ -n "$ge_token" ]]; then
+    final_token="$ge_token"
+  else
+    final_token="$default_token"
+  fi
+  patch_env_key "$ge_env" KBASE_SERVICE_TOKEN "$final_token"
+  if [[ -f "$kb_env" && -n "$kb_token" ]]; then
+    log "已同步 KBASE_SERVICE_TOKEN（goal_execution ← knowledge_base）"
+  else
+    log "已设置 KBASE_SERVICE_TOKEN（knowledge_base .env 无 token 时用默认/已有值）"
+  fi
+}
+
 is_postgres_url() {
   local url=$1
   [[ "$url" == postgresql* || "$url" == postgres:* ]]
@@ -138,6 +171,7 @@ ensure_dotenv() {
   require_postgres_env "$envf"
   patch_env_key "$envf" SKSTUDIO_INTERNAL_URL "http://127.0.0.1:8000"
   sync_from_skstudio
+  sync_kbase_from_knowledge_base
 }
 
 ensure_schema() {
