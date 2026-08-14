@@ -23,6 +23,8 @@ def test_orphan_signer_400(client):
         "name": "bad",
         "pm_user_id": U_PM,
         "program_id": program_id,
+        "lifecycle_start": "2026-01-01",
+        "lifecycle_end": "2026-12-31",
         "phases": [
             {
                 "sequence": 1,

@@ -11,7 +11,7 @@ from typing import Any
 from app.constants import (
     SYSTEM_END_PHASE_NAME,
     SYSTEM_END_TASK_TITLE,
-    SYSTEM_START_GATE_ITEM_NAME,
+    SYSTEM_START_GATE_ITEM_NAMES,
     SYSTEM_START_PHASE_NAME,
     SYSTEM_START_TASK_TITLE,
 )
@@ -48,8 +48,8 @@ def _effective_assignee(task: dict[str, Any], pm_user_id: str | None) -> str:
 
 
 def _is_start_gate_orphan_allowed(gi: dict[str, Any]) -> bool:
-    """§3.4.3/§3.4.4：仅「项目启动」允许暂无签收路由。"""
-    return bool(gi.get("is_system")) and str(gi.get("name") or "") == SYSTEM_START_GATE_ITEM_NAME
+    """§3.4.3/§3.4.4：仅开始系统关卡（团队共识）允许暂无签收路由。"""
+    return bool(gi.get("is_system")) and str(gi.get("name") or "") in SYSTEM_START_GATE_ITEM_NAMES
 
 
 def _gate_has_signer_route(

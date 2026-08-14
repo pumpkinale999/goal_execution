@@ -69,7 +69,10 @@ def test_system_gate_orphan_allowed_business_orphan_rejected(client):
     bad = {
         "name": "orphan",
         "pm_user_id": U_PM,
+        "program_id": created["program_id"],
         "project_note_id": TEST_PROJECT_NOTE_ID,
+        "lifecycle_start": "2026-01-01",
+        "lifecycle_end": "2026-12-31",
         "phases": [
             {
                 "sequence": 1,

@@ -32,7 +32,7 @@ def _minimal_ok_graph() -> dict:
                 "planned_start": "2026-01-01",
                 "planned_end": "2026-01-07",
                 "gate_items": [
-                    {"id": "gi-start", "name": "项目启动", "planned_due": "2026-01-07", "is_system": True}
+                    {"id": "gi-start", "name": "团队共识", "planned_due": "2026-01-07", "is_system": True}
                 ],
                 "tasks": [
                     {
@@ -79,7 +79,7 @@ def _minimal_ok_graph() -> dict:
                 "planned_start": "2026-12-01",
                 "planned_end": "2026-12-07",
                 "gate_items": [
-                    {"id": "gi-end", "name": "结项复盘", "planned_due": "2026-12-07", "is_system": True}
+                    {"id": "gi-end", "name": "团队复盘", "planned_due": "2026-12-07", "is_system": True}
                 ],
                 "tasks": [
                     {

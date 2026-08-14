@@ -13,9 +13,14 @@ from app.constants import SYSTEM_END_PHASE_NAME
 from app.services.ge_system_phases import is_start_phase
 
 
-def validate_phases_body(phases: list[dict[str, Any]]) -> None:
+def validate_phases_body(
+    phases: list[dict[str, Any]],
+    *,
+    deferred_signer_keys: frozenset[str] | None = None,
+) -> None:
     if not phases:
         raise HTTPException(status_code=400, detail={"detail": "invalid_request"})
+    deferred = deferred_signer_keys or frozenset()
     gate_key_to_phase: dict[str, int] = {}
     produce_count: dict[str, int] = {}
     prereq_count: dict[str, int] = {}
@@ -52,7 +57,7 @@ def validate_phases_body(phases: list[dict[str, Any]]) -> None:
         if count != 1:
             raise HTTPException(status_code=400, detail={"detail": "gate_item_unproduced"})
     for key, count in prereq_count.items():
-        if count < 1:
+        if count < 1 and key not in deferred:
             raise HTTPException(status_code=400, detail={"detail": "gate_item_orphan_signer"})
 
 

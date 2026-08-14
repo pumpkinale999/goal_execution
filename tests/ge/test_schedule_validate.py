@@ -6,6 +6,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.services.ge_schedule_validate import (
+    midpoint_plan_date,
     parse_plan_date,
     parse_required_plan_date,
     reject_task_schedule_fields,
@@ -18,6 +19,12 @@ from app.services.ge_schedule_validate import (
 
 def test_parse_plan_date_accepts_iso_date():
     assert parse_plan_date("2026-03-01", field="planned_start") == "2026-03-01"
+
+
+def test_midpoint_plan_date():
+    assert midpoint_plan_date("2026-08-14", "2026-08-16") == "2026-08-15"
+    assert midpoint_plan_date("2026-08-14", "2026-08-14") == "2026-08-14"
+    assert midpoint_plan_date("2026-03-01", "2026-09-30") == "2026-06-15"
 
 
 def test_parse_plan_date_rejects_invalid():

@@ -31,6 +31,8 @@ DEV_PHASE_PLANNED_DUE = "2026-06-20"
 GOLDEN_PROJECT_BODY: dict[str, Any] = {
     "name": "上线 MVP",
     "pm_user_id": U_PM,
+    "lifecycle_start": "2026-01-01",
+    "lifecycle_end": "2026-12-31",
     "phases": [
         {
             "sequence": 1,
@@ -105,6 +107,8 @@ def _accept_all_note_project_guard():
 
 def bootstrap_golden_phase_schedule(client: TestClient, project_id: str, user_id: str) -> None:
     """Non-overlapping persisted windows for golden sample (v2.28 adjacency)."""
+    from app.services.ge_schedule_validate import midpoint_plan_date
+
     graph = get_graph(client, project_id, user_id)
     start = graph["phases"][0]
     end = graph["phases"][-1]
@@ -117,13 +121,45 @@ def bootstrap_golden_phase_schedule(client: TestClient, project_id: str, user_id
         (end["id"], {"planned_start": "2026-12-01", "planned_end": "2026-12-07"}),
     ]
     for phase_id, body in patches:
+        new_start = body["planned_start"]
+        new_end = body["planned_end"]
+        mid = midpoint_plan_date(new_start, new_end)
+        graph = get_graph(client, project_id, user_id)
+        phase = next(p for p in graph["phases"] if p["id"] == phase_id)
+        old_start = phase.get("planned_start")
+        old_end = phase.get("planned_end")
+        outside = [
+            gi
+            for gi in (phase.get("gate_items") or [])
+            if gi.get("planned_due")
+            and (gi["planned_due"] < new_start or gi["planned_due"] > new_end)
+        ]
+        # Shrinking a same-day bookend (e.g. 12-31→12-01..07) needs expand → retarget dues → shrink.
+        if outside and old_start and old_end:
+            union_start = min(old_start, new_start)
+            union_end = max(old_end, new_end)
+            if (union_start, union_end) != (old_start, old_end):
+                widen = client.patch(
+                    f"/api/v1/ge/phases/{phase_id}",
+                    headers=jwt_headers(user_id),
+                    json={"planned_start": union_start, "planned_end": union_end},
+                )
+                assert widen.status_code == 200, widen.text
+            for gi in outside:
+                gi_resp = client.patch(
+                    f"/api/v1/ge/gate-items/{gi['id']}",
+                    headers=jwt_headers(user_id),
+                    json={"planned_due": mid},
+                )
+                assert gi_resp.status_code == 200, gi_resp.text
         resp = client.patch(
             f"/api/v1/ge/phases/{phase_id}",
             headers=jwt_headers(user_id),
             json=body,
         )
         assert resp.status_code == 200, resp.text
-    # System gate items often ship without planned_due; seed so golden is definition-complete.
+    # System gate items should already have planned_due (phase midpoint at create);
+    # fill any still-missing dues so golden is definition-complete.
     graph = get_graph(client, project_id, user_id)
     for phase in graph["phases"]:
         due = phase.get("planned_end")
@@ -227,6 +263,8 @@ def create_project(
         payload["program_id"] = ensure_formal_test_program(client)
     if "project_note_id" not in payload:
         payload["project_note_id"] = TEST_PROJECT_NOTE_ID
+    payload.setdefault("lifecycle_start", "2026-01-01")
+    payload.setdefault("lifecycle_end", "2026-12-31")
     resp = client.post(
         "/api/v1/ge/projects",
         headers=jwt_headers(user_id),

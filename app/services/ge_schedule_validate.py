@@ -41,6 +41,15 @@ def plan_date_to_ord(value: str) -> int:
     return date.fromisoformat(value).toordinal()
 
 
+def midpoint_plan_date(planned_start: str, planned_end: str) -> str:
+    """Inclusive phase window midpoint (floor). Same-day window → that day."""
+    start_ord = plan_date_to_ord(planned_start)
+    end_ord = plan_date_to_ord(planned_end)
+    if end_ord < start_ord:
+        raise HTTPException(status_code=400, detail={"detail": "invalid_phase_window"})
+    return date.fromordinal(start_ord + (end_ord - start_ord) // 2).isoformat()
+
+
 def validate_phase_window(planned_start: str | None, planned_end: str | None) -> None:
     if planned_start is None and planned_end is None:
         return

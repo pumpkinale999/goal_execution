@@ -43,7 +43,7 @@ info:
     v1.26.1 (GE-AUTHZ docs): consensus v0.1.9 · Org portfolio headers §3.2 · summaries service+Actor (no JWT participant wording)
     v1.28.0 (证据层 M2): GateItemInput form metric|status · content_ref · submit 400/503 evidence codes · GE-T200～T207
     Out of scope: skstudio BFF orchestration /api/v1/org|ge/* · GE-AUTHZ consensus v0.1.9 (see impl §1.4 · §4.0 · §10.42)
-  version: 1.28.0
+  version: 1.29.0
 servers:
   - url: /api/v1
     description: goal_execution service (service + Actor + Is-Reviewer only · GE-AUTHZ)
@@ -1953,13 +1953,38 @@ components:
           type: string
           format: uuid
           description: Required · active Program · caller must be subtree governor
+        lifecycle_start:
+          type: string
+          format: date
+          description: Legacy shorthand · expands to start phase [S,S] and end phase [E,E]
+        lifecycle_end:
+          type: string
+          format: date
+          description: Legacy shorthand · see lifecycle_start
+        start_planned_start:
+          type: string
+          format: date
+          description: Start-phase planned_start (with start_planned_end)
+        start_planned_end:
+          type: string
+          format: date
+          description: Start-phase planned_end
+        end_planned_start:
+          type: string
+          format: date
+          description: End-phase planned_start (with end_planned_end)
+        end_planned_end:
+          type: string
+          format: date
+          description: End-phase planned_end; require start_planned_end <= end_planned_start
         project_note_id:
           type: string
           format: uuid
           description: M19 · KB note uuid · set by BFF after note creation
         phases:
           type: array
-          minItems: 1
+          minItems: 0
+          description: Empty or single empty 方案/示例阶段 → server fills default proposal graph
           items:
             $ref: '#/components/schemas/CreatePhaseInput'
     CreatePhaseInput:

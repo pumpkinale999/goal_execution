@@ -476,6 +476,8 @@ def _append_sample_structure(
             "name": SAMPLE_PROJECT_NAME,
             "pm_user_id": owner,
             "program_id": program.id,
+            "lifecycle_start": prog_start,
+            "lifecycle_end": prog_end,
             "phases": [
                 {
                     "sequence": 1,

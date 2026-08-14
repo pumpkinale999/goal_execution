@@ -29,7 +29,7 @@ def test_create_project_with_project_note_id(client):
 def test_create_project_without_project_note_id_nullable(client):
     body = {**GOLDEN_PROJECT_BODY}
     body["project_note_id"] = None
-    created = create_project(client, U_PM, body)
+    created = create_project(client, U_PM, body, bootstrap_startup=False)
     assert created.get("project_note_id") is None
 
     list_resp = client.get("/api/v1/ge/projects", headers=jwt_headers(U_PM))
