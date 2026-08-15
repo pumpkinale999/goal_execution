@@ -18,7 +18,10 @@ from app.services.ge_access import (
     can_struct_program,
     filter_projects_for_user,
 )
-from app.services.ge_related_project_counts import my_related_project_counts_by_program
+from app.services.ge_related_project_counts import (
+    my_related_project_counts_by_program,
+    my_visible_project_counts_by_program,
+)
 from app.services.ge_goal_subtree_governor import is_goal_subtree_governor
 from app.services.ge_graph import build_project_graph, load_project_graph, now_iso, reconcile_project_completion
 from app.services.ge_system_tasks import sync_system_lifecycle_task_assignees
@@ -108,6 +111,7 @@ def list_objectives(
     all_programs = db.query(GeProgram).all()
     refresh_lifecycle_entities(db, all_objectives, all_programs)
     related_counts = my_related_project_counts_by_program(db, user.user_id)
+    visible_counts = my_visible_project_counts_by_program(db, user)
 
     obj_by_id = {obj.id: obj for obj in all_objectives}
     # Attach without lazy-load (accessing .objective would SELECT)
@@ -132,6 +136,7 @@ def list_objectives(
         refresh_lifecycle_on_read(db, program)
         return {
             **program_out(program, db),
+            "my_visible_project_count": int(visible_counts.get(program.id, 0)),
             "my_related_project_count": int(related_counts.get(program.id, 0)),
         }
 
@@ -176,11 +181,15 @@ def get_program(
     if program is None:
         raise HTTPException(status_code=404, detail={"detail": "not_found"})
     refresh_lifecycle_on_read(db, program)
-    db.commit()
     projects = sibling_projects(db, program_id)
     visible = filter_projects_for_user(db, projects, user)
+    related_counts = my_related_project_counts_by_program(db, user.user_id)
+    visible_counts = my_visible_project_counts_by_program(db, user)
+    db.commit()
     return {
         **program_out(program, db),
+        "my_visible_project_count": int(visible_counts.get(program_id, 0)),
+        "my_related_project_count": int(related_counts.get(program_id, 0)),
         "projects": [
             {
                 "id": p.id,

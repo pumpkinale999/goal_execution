@@ -1,4 +1,4 @@
-"""my_related_project_count on GET /ge/objectives program nodes."""
+"""my_visible / my_related project counts on GET /ge/objectives (+ program detail)."""
 
 from __future__ import annotations
 
@@ -14,42 +14,51 @@ def _walk_programs(nodes: list[dict]) -> list[dict]:
     return out
 
 
-def _program_count(tree: list[dict], program_id: str) -> int:
+def _program_counts(tree: list[dict], program_id: str) -> tuple[int, int]:
     for prog in _walk_programs(tree):
         if prog["id"] == program_id:
             assert "my_related_project_count" in prog
-            return int(prog["my_related_project_count"])
+            assert "my_visible_project_count" in prog
+            return int(prog["my_visible_project_count"]), int(prog["my_related_project_count"])
     raise AssertionError(f"program {program_id} not in tree")
+
+
+def _related_only(tree: list[dict], program_id: str) -> int:
+    return _program_counts(tree, program_id)[1]
 
 
 def test_related_count_pm_sees_one(client):
     created = create_project(client, U_PM)
     tree = client.get("/api/v1/ge/objectives", headers=jwt_headers(U_PM)).json()
-    assert _program_count(tree, created["program_id"]) >= 1
+    visible, related = _program_counts(tree, created["program_id"])
+    assert related >= 1
+    assert visible == related
 
 
 def test_related_count_stranger_zero_same_program(client):
     created = create_project(client, U_PM)
     tree = client.get("/api/v1/ge/objectives", headers=jwt_headers(U_STRANGER)).json()
-    assert _program_count(tree, created["program_id"]) == 0
+    visible, related = _program_counts(tree, created["program_id"])
+    assert visible == 0
+    assert related == 0
 
 
 def test_related_count_assignee_only_not_counted(client):
-    """Assignees without roster membership are not 'related' for the badge."""
+    """Assignees without roster membership are not 'related'; may still be visible."""
     created = create_project(client, U_PM)
     tree = client.get("/api/v1/ge/objectives", headers=jwt_headers(U_ZHANGSAN)).json()
-    # Zhangsan is task assignee on golden project; may or may not be roster member.
-    # Assert via members API: if not on roster as non-PM, count must be 0 unless PM.
     members = client.get(
         f"/api/v1/ge/projects/{created['id']}/members",
         headers=jwt_headers(U_PM),
     ).json()["members"]
     on_roster = any(m["user_id"] == U_ZHANGSAN for m in members)
-    count = _program_count(tree, created["program_id"])
+    visible, related = _program_counts(tree, created["program_id"])
     if on_roster:
-        assert count >= 1
+        assert related >= 1
+        assert visible >= related
     else:
-        assert count == 0
+        assert related == 0
+        assert visible >= 1  # task assignee ⇒ can_read
 
 
 def test_related_count_member_only(client):
@@ -66,7 +75,9 @@ def test_related_count_member_only(client):
     )
     assert add.status_code == 201, add.text
     tree = client.get("/api/v1/ge/objectives", headers=jwt_headers(member_uid)).json()
-    assert _program_count(tree, created["program_id"]) >= 1
+    visible, related = _program_counts(tree, created["program_id"])
+    assert related >= 1
+    assert visible == related
 
 
 def test_related_count_cancelled_excluded(client):
@@ -81,7 +92,9 @@ def test_related_count_cancelled_excluded(client):
         project.status = "cancelled"
         db.commit()
     tree = client.get("/api/v1/ge/objectives", headers=jwt_headers(U_PM)).json()
-    assert _program_count(tree, created["program_id"]) == 0
+    visible, related = _program_counts(tree, created["program_id"])
+    assert visible == 0
+    assert related == 0
 
 
 def test_related_count_archived_excluded(client):
@@ -96,14 +109,39 @@ def test_related_count_archived_excluded(client):
         project.status = "archived"
         db.commit()
     tree = client.get("/api/v1/ge/objectives", headers=jwt_headers(U_PM)).json()
-    assert _program_count(tree, created["program_id"]) == 0
+    visible, related = _program_counts(tree, created["program_id"])
+    assert visible == 0
+    assert related == 0
 
 
-def test_related_count_reviewer_uses_participation_not_visibility(client):
+def test_visible_gt_related_for_reviewer(client):
+    """Reviewer sees all effective projects; related stays participation-only."""
     created = create_project(client, U_PM)
-    # Reviewer who is not PM/member still gets 0 on this program.
     tree = client.get(
         "/api/v1/ge/objectives",
         headers=service_headers("reviewer-only", is_reviewer=True),
     ).json()
-    assert _program_count(tree, created["program_id"]) == 0
+    visible, related = _program_counts(tree, created["program_id"])
+    assert related == 0
+    assert visible >= 1
+
+
+def test_related_le_visible_invariant_on_tree(client):
+    created = create_project(client, U_PM)
+    tree = client.get("/api/v1/ge/objectives", headers=jwt_headers(U_PM)).json()
+    for prog in _walk_programs(tree):
+        visible = int(prog.get("my_visible_project_count") or 0)
+        related = int(prog.get("my_related_project_count") or 0)
+        assert related <= visible, prog.get("id")
+
+
+def test_program_detail_exposes_both_counts(client):
+    created = create_project(client, U_PM)
+    resp = client.get(
+        f"/api/v1/ge/programs/{created['program_id']}",
+        headers=jwt_headers(U_PM),
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["my_related_project_count"] >= 1
+    assert body["my_visible_project_count"] == body["my_related_project_count"]

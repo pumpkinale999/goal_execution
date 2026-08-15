@@ -2221,6 +2221,20 @@ components:
             owner_user_id:
               type: string
               nullable: true
+            my_visible_project_count:
+              type: integer
+              minimum: 0
+              description: >
+                Actor ACL-visible effective projects under this program
+                (exclude cancelled/archived/deleted). Tree badge first number.
+                Present on GET /objectives program nodes and GET /programs/{id}.
+            my_related_project_count:
+              type: integer
+              minimum: 0
+              description: >
+                Actor related (PM ∪ roster member) effective projects under this program
+                (exclude cancelled/archived/deleted). Tree badge second number.
+                Present on GET /objectives program nodes and GET /programs/{id}.
     ObjectiveNode:
       allOf:
         - $ref: '#/components/schemas/StrategicFields'
