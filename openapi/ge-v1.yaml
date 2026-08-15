@@ -2227,14 +2227,18 @@ components:
               description: >
                 Actor ACL-visible effective projects under this program
                 (exclude cancelled/archived/deleted). Tree badge first number.
-                Present on GET /objectives program nodes and GET /programs/{id}.
+                Guaranteed on GET /objectives program nodes and GET /programs/{id};
+                omitted on list_programs / create / patch / assess (clients treat missing as 0).
+                Not in ProgramMetadata.required because those write/list responses share this schema.
             my_related_project_count:
               type: integer
               minimum: 0
               description: >
                 Actor related (PM ∪ roster member) effective projects under this program
                 (exclude cancelled/archived/deleted). Tree badge second number.
-                Present on GET /objectives program nodes and GET /programs/{id}.
+                Guaranteed on GET /objectives program nodes and GET /programs/{id};
+                omitted on list_programs / create / patch / assess (clients treat missing as 0).
+                Not in ProgramMetadata.required because those write/list responses share this schema.
     ObjectiveNode:
       allOf:
         - $ref: '#/components/schemas/StrategicFields'
@@ -2272,7 +2276,11 @@ components:
           properties:
             projects:
               type: array
-              description: filtered to participant ∪ draft creator ∪ is_goal_subtree_governor ∨ reviewer (P2)
+              description: >
+                ACL slice (participant ∪ draft creator ∪ is_goal_subtree_governor ∨ reviewer).
+                May include cancelled/archived. Badge counts my_*_project_count use a stricter
+                effective set (exclude cancelled/archived/deleted) — do not equate len(projects)
+                with either badge number.
               items:
                 $ref: '#/components/schemas/ProjectSummary'
     UserOrgProfile:
