@@ -80,7 +80,6 @@ from app.services.ge_project_create import create_project
 from app.services.ge_queues import build_project_queue_counts, build_queues
 from app.services.ge_m12_read import get_gate_item_context, get_task_context, list_audit_events
 from app.services.ge_people_summary import (
-    get_objective_people_summary,
     get_program_people_summary,
     get_project_people_summary,
 )
@@ -711,23 +710,6 @@ def post_assess_program(
     user: Annotated[AuthUser, Depends(require_reviewer)],
 ) -> dict[str, Any]:
     return assess_program(db, program_id, body, actor_user_id=user.user_id)
-
-
-@router.get("/objectives/{objective_id}/people-summary")
-def get_objective_people_summary_route(
-    objective_id: str,
-    db: Annotated[Session, Depends(get_db)],
-    user: Annotated[AuthUser, Depends(get_current_user)],
-    include_completed: int = Query(default=0, ge=0, le=1),
-    include_archived: int = Query(default=0, ge=0, le=1),
-) -> dict[str, Any]:
-    return get_objective_people_summary(
-        db,
-        objective_id,
-        user,
-        include_completed=bool(include_completed),
-        include_archived=bool(include_archived),
-    )
 
 
 @router.get("/objectives/{objective_id}/board-projects")

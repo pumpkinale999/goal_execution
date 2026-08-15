@@ -211,13 +211,6 @@ def portfolio_item_from_accountable(entry: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def can_read_objective_scope(db: Session, user: AuthUser, objective_id: str) -> bool:
-    """people-summary (obj): goal_subtree_governor ∨ reviewer (GE-AUTHZ matrix §5.1)."""
-    if user.is_reviewer:
-        return True
-    return is_goal_subtree_governor(db, user_id=user.user_id, objective_id=objective_id)
-
-
 def can_read_program_scope(db: Session, user: AuthUser, program_id: str) -> bool:
     """people-summary (prog): goal_subtree_governor ∨ reviewer (GE-AUTHZ matrix §5.1)."""
     if user.is_reviewer:

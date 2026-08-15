@@ -91,6 +91,7 @@ def _board_for_company(db: Session, objective_id: str, user: AuthUser) -> dict[s
                 "id": s.id,
                 "name": s.name,
                 "sort_order": int(s.sort_order or 0),
+                "owner_user_id": s.owner_user_id,
             }
             for s in subs
         ],

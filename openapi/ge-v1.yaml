@@ -492,30 +492,6 @@ paths:
                 $ref: '#/components/schemas/ErrorDetail'
         '403':
           $ref: '#/components/responses/Forbidden'
-  /ge/objectives/{objective_id}/people-summary:
-    get:
-      operationId: getObjectivePeopleSummary
-      summary: People accountable/contributing rollup for objective subtree (M30)
-      tags: [ge-objectives]
-      parameters:
-        - $ref: '#/components/parameters/ObjectiveId'
-        - name: include_completed
-          in: query
-          schema: { type: integer, enum: [0, 1], default: 0 }
-        - name: include_archived
-          in: query
-          schema: { type: integer, enum: [0, 1], default: 0 }
-      responses:
-        '200':
-          description: PeopleSummary
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PeopleSummary'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
   /ge/programs:
     get:
       operationId: listGePrograms

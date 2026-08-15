@@ -1,4 +1,4 @@
-"""GE-T146～T149 · M30 people-summary."""
+"""GE-T147～T149 · M30 people-summary (program / project)."""
 
 from __future__ import annotations
 
@@ -73,34 +73,6 @@ def _create_project_on_program(client, program_id: str, *, pm_user_id: str = U_P
     return created
 
 
-def test_objective_people_summary_accountable_and_contributing(client):
-    """GE-T146: objective people-summary splits accountable vs contributing."""
-    company = _annual_company(client)
-    dept_id = _create_dept(client)
-    sub, prog = _create_sub_and_program(client, company["id"], dept_id)
-    project = _create_project_on_program(client, prog["id"])
-
-    resp = client.get(
-        f"/api/v1/ge/objectives/{sub['id']}/people-summary",
-        headers=service_headers("reviewer-1", is_reviewer=True),
-    )
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
-    assert body["include_completed"] is False
-
-    accountable_users = {row["user_id"] for row in body["accountable"]}
-    assert "u-owner" in accountable_users
-    assert "u-prog-owner" in accountable_users
-    assert U_PM in accountable_users
-
-    contributing = {row["user_id"]: row for row in body["contributing"]}
-    assert U_ZHANGSAN in contributing
-    assert U_LISI in contributing
-    assert U_PM not in contributing
-    assert contributing[U_ZHANGSAN]["projects"][0]["project_id"] == project["id"]
-    assert contributing[U_ZHANGSAN]["projects"][0]["task_count"] >= 1
-
-
 def test_program_and_project_people_summary(client):
     """GE-T147: program and project people-summary."""
     company = _annual_company(client)
@@ -116,6 +88,7 @@ def test_program_and_project_people_summary(client):
     prog_body = prog_resp.json()
     assert any(r["user_id"] == U_PM and r["role"] == "pm" for r in prog_body["accountable"])
     assert any(r["user_id"] == U_ZHANGSAN for r in prog_body["contributing"])
+    assert any(r["user_id"] == U_LISI for r in prog_body["contributing"])
 
     proj_resp = client.get(
         f"/api/v1/ge/projects/{project['id']}/people-summary",
@@ -128,30 +101,14 @@ def test_program_and_project_people_summary(client):
     assert proj_body["accountable"][0]["user_id"] == U_PM
 
 
-def test_assignee_rollup_to_ancestor_objective(client):
-    """GE-T148: assignee appears in ancestor objective contributing rollup."""
-    company = _annual_company(client)
-    dept_id = _create_dept(client)
-    sub, prog = _create_sub_and_program(client, company["id"], dept_id)
-    _create_project_on_program(client, prog["id"])
-
-    resp = client.get(
-        f"/api/v1/ge/objectives/{sub['id']}/people-summary",
-        headers=service_headers("reviewer-1", is_reviewer=True),
-    )
-    assert resp.status_code == 200
-    contributing_users = {row["user_id"] for row in resp.json()["contributing"]}
-    assert U_ZHANGSAN in contributing_users
-
-
 def test_include_completed_filter(client):
-    """GE-T149: include_completed hides completed projects by default."""
+    """GE-T149: include_completed hides completed projects by default (program)."""
     from app.db import session_scope
     from app.models.ge import GeProject
 
     company = _annual_company(client)
     dept_id = _create_dept(client)
-    sub, prog = _create_sub_and_program(client, company["id"], dept_id)
+    _, prog = _create_sub_and_program(client, company["id"], dept_id)
     project = _create_project_on_program(client, prog["id"])
 
     with session_scope() as db:
@@ -161,7 +118,7 @@ def test_include_completed_filter(client):
         db.commit()
 
     hidden = client.get(
-        f"/api/v1/ge/objectives/{sub['id']}/people-summary",
+        f"/api/v1/ge/programs/{prog['id']}/people-summary",
         headers=service_headers("reviewer-1", is_reviewer=True),
     )
     assert hidden.status_code == 200
@@ -169,7 +126,7 @@ def test_include_completed_filter(client):
     assert pm_accountable == []
 
     shown = client.get(
-        f"/api/v1/ge/objectives/{sub['id']}/people-summary?include_completed=1",
+        f"/api/v1/ge/programs/{prog['id']}/people-summary?include_completed=1",
         headers=service_headers("reviewer-1", is_reviewer=True),
     )
     assert shown.status_code == 200

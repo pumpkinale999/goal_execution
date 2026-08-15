@@ -116,6 +116,8 @@ def test_board_projects_company_returns_200_with_subs(client):
     assert body.get("level") == "company"
     sub_ids = {s["id"] for s in body["subs"]}
     assert sub["id"] in sub_ids
+    sub_row = next(s for s in body["subs"] if s["id"] == sub["id"])
+    assert sub_row.get("owner_user_id") == "u-owner"
     by_prog = {p["id"]: p for p in body["programs"]}
     assert prog_a["id"] in by_prog
     assert prog_b["id"] in by_prog
