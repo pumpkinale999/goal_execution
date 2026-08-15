@@ -18,6 +18,7 @@ from app.services.ge_access import (
     can_struct_program,
     filter_projects_for_user,
 )
+from app.services.ge_related_project_counts import my_related_project_counts_by_program
 from app.services.ge_goal_subtree_governor import is_goal_subtree_governor
 from app.services.ge_graph import build_project_graph, load_project_graph, now_iso, reconcile_project_completion
 from app.services.ge_system_tasks import sync_system_lifecycle_task_assignees
@@ -99,12 +100,13 @@ router = APIRouter(prefix="/ge", tags=["ge"])
 @router.get("/objectives")
 def list_objectives(
     db: Annotated[Session, Depends(get_db)],
-    _user: Annotated[AuthUser, Depends(get_current_user)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
 ) -> list[dict[str, Any]]:
     # GE-PERF.1: one-shot load + in-memory tree (no per-node sibling_* queries)
     all_objectives = db.query(GeObjective).all()
     all_programs = db.query(GeProgram).all()
     refresh_lifecycle_entities(db, all_objectives, all_programs)
+    related_counts = my_related_project_counts_by_program(db, user.user_id)
 
     obj_by_id = {obj.id: obj for obj in all_objectives}
     # Attach without lazy-load (accessing .objective would SELECT)
@@ -127,7 +129,10 @@ def list_objectives(
 
     def program_meta(program: GeProgram) -> dict[str, Any]:
         refresh_lifecycle_on_read(db, program)
-        return program_out(program, db)
+        return {
+            **program_out(program, db),
+            "my_related_project_count": int(related_counts.get(program.id, 0)),
+        }
 
     def build_node(obj: GeObjective) -> dict[str, Any]:
         refresh_lifecycle_on_read(db, obj)
