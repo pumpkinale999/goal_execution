@@ -93,6 +93,7 @@ from app.services.ge_project_members import (
     patch_member,
 )
 from app.services.ge_project_access import build_project_access_for_user
+from app.services.ge_pa_project_roles import build_pa_project_roles_for_user
 
 router = APIRouter(prefix="/ge", tags=["ge"])
 
@@ -240,6 +241,17 @@ def my_project_access(
     """K27.6 · batch access for BFF service+actor (GE-AUTHZ-T08)."""
     force = bool(all_visible) and user.is_reviewer
     return build_project_access_for_user(db, user, force_member_all=force)
+
+
+@router.get("/me/pa-project-roles")
+def my_pa_project_roles(
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+    match_user_id: Annotated[list[str] | None, Query()] = None,
+) -> dict[str, Any]:
+    """G-PERF-M1 · batch my_roles[] + roster_role for PA list enrich (set precompute)."""
+    aliases = {str(x).strip() for x in (match_user_id or []) if str(x).strip()}
+    return build_pa_project_roles_for_user(db, user, match_user_ids=aliases or None)
 
 
 @router.post("/projects", status_code=status.HTTP_201_CREATED)

@@ -1540,6 +1540,24 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+  /ge/me/pa-project-roles:
+    get:
+      operationId: getGeMePaProjectRoles
+      summary: Batch PA my_roles + roster_role (G-PERF-M1 · set precompute)
+      tags: [ge]
+      parameters:
+        - name: match_user_id
+          in: query
+          required: false
+          schema:
+            type: array
+            items: { type: string }
+          style: form
+          explode: true
+          description: Extra GE user id aliases (e.g. username) merged with actor for role match
+      responses:
+        '200':
+          description: '{ projects: [{ project_id, my_roles, roster_role }] }'
   /ge/me/queues:
     get:
       operationId: getGeMeQueues
