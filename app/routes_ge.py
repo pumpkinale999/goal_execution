@@ -84,6 +84,7 @@ from app.services.ge_people_summary import (
     get_program_people_summary,
     get_project_people_summary,
 )
+from app.services.ge_board_projects import get_objective_board_projects
 from app.services.ge_project_members import (
     add_member,
     create_role_option,
@@ -727,6 +728,18 @@ def get_objective_people_summary_route(
         include_completed=bool(include_completed),
         include_archived=bool(include_archived),
     )
+
+
+@router.get("/objectives/{objective_id}/board-projects")
+def get_objective_board_projects_route(
+    objective_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    """PRA §4.11 · sub-objective board payload (programs + Actor-visible projects)."""
+    payload = get_objective_board_projects(db, objective_id, user)
+    db.commit()
+    return payload
 
 
 @router.get("/programs/{program_id}/people-summary")
