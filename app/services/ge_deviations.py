@@ -414,6 +414,8 @@ def activate_deviation(
     if project is None:
         raise HTTPException(status_code=404, detail={"detail": "project_not_found"})
     _require_governor(db, project, user)
+    if not user.is_reviewer and user.user_id != project.pm_user_id:
+        raise HTTPException(status_code=403, detail={"detail": "not_project_pm"})
     if dev.status != "open":
         raise HTTPException(status_code=409, detail={"detail": "deviation_not_open"})
 

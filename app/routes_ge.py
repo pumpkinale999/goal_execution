@@ -22,8 +22,18 @@ from app.services.ge_related_project_counts import (
     my_related_project_counts_by_program,
     my_visible_project_counts_by_program,
 )
-from app.services.ge_goal_subtree_governor import is_goal_subtree_governor
-from app.services.ge_graph import build_project_graph, load_project_graph, now_iso, reconcile_project_completion
+from app.services.ge_goal_subtree_governor import (
+    can_appoint_pmbp,
+    is_goal_direct_owner,
+    is_goal_subtree_governor,
+)
+from app.services.ge_graph import (
+    build_project_graph,
+    load_project_graph,
+    now_iso,
+    reconcile_project_completion,
+    record_audit,
+)
 from app.services.ge_system_tasks import sync_system_lifecycle_task_assignees
 from app.services.ge_graph_edit import (
     add_gate_item,
@@ -148,7 +158,7 @@ def list_objectives(
             else [program_meta(p) for p in programs_by_objective.get(obj.id, [])]
         )
         return {
-            **objective_out(obj),
+            **objective_out(obj, db),
             "programs": programs,
             "children": [build_node(child) for child in children_by_parent.get(obj.id, [])],
         }
@@ -838,6 +848,30 @@ def _require_struct_program(
         raise HTTPException(status_code=403, detail={"detail": "not_goal_subtree_governor"})
 
 
+def _require_objective_patch_fields(db: Session, user: AuthUser, objective_id: str, body: dict[str, Any]) -> None:
+    _require_struct_objective(db, user, objective_id)
+    if "owner_user_id" in body and not (
+        user.is_reviewer or is_goal_direct_owner(db, user_id=user.user_id, objective_id=objective_id)
+    ):
+        raise HTTPException(status_code=403, detail={"detail": "not_goal_direct_owner"})
+    if "pmbp_user_id" in body and not can_appoint_pmbp(
+        db, user_id=user.user_id, is_reviewer=user.is_reviewer, objective_id=objective_id
+    ):
+        raise HTTPException(status_code=403, detail={"detail": "not_pmbp_appointer"})
+
+
+def _require_program_patch_fields(db: Session, user: AuthUser, program_id: str, body: dict[str, Any]) -> None:
+    _require_struct_program(db, user, program_id=program_id)
+    if "owner_user_id" in body and not (
+        user.is_reviewer or is_goal_direct_owner(db, user_id=user.user_id, program_id=program_id)
+    ):
+        raise HTTPException(status_code=403, detail={"detail": "not_goal_direct_owner"})
+    if "pmbp_user_id" in body and not can_appoint_pmbp(
+        db, user_id=user.user_id, is_reviewer=user.is_reviewer, program_id=program_id
+    ):
+        raise HTTPException(status_code=403, detail={"detail": "not_pmbp_appointer"})
+
+
 @router.post("/objectives", status_code=status.HTTP_201_CREATED)
 def post_objective(
     body: dict[str, Any],
@@ -858,8 +892,21 @@ def patch_objective_route(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[AuthUser, Depends(get_current_user)],
 ) -> dict[str, Any]:
-    _require_struct_objective(db, user, objective_id)
-    return patch_objective(db, objective_id, body)
+    _require_objective_patch_fields(db, user, objective_id, body)
+    before = db.get(GeObjective, objective_id)
+    before_pmbp = before.pmbp_user_id if before is not None else None
+    result = patch_objective(db, objective_id, body)
+    if "pmbp_user_id" in body:
+        record_audit(
+            db,
+            actor_user_id=user.user_id,
+            entity_type="objective",
+            entity_id=objective_id,
+            action="patch_pmbp",
+            payload={"before": before_pmbp, "after": result.get("pmbp_user_id")},
+        )
+        db.commit()
+    return result
 
 
 @router.post("/programs", status_code=status.HTTP_201_CREATED)
@@ -882,8 +929,21 @@ def patch_program_route(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[AuthUser, Depends(get_current_user)],
 ) -> dict[str, Any]:
-    _require_struct_program(db, user, program_id=program_id)
-    return patch_program(db, program_id, body)
+    _require_program_patch_fields(db, user, program_id, body)
+    before = db.get(GeProgram, program_id)
+    before_pmbp = before.pmbp_user_id if before is not None else None
+    result = patch_program(db, program_id, body)
+    if "pmbp_user_id" in body:
+        record_audit(
+            db,
+            actor_user_id=user.user_id,
+            entity_type="program",
+            entity_id=program_id,
+            action="patch_pmbp",
+            payload={"before": before_pmbp, "after": result.get("pmbp_user_id")},
+        )
+        db.commit()
+    return result
 
 
 @router.post("/objectives/{objective_id}/reorder")

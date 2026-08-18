@@ -29,6 +29,11 @@ from app.models.ge import (
     GeTaskGateItemProduce,
 )
 from app.services.ge_graph import now_iso, record_audit
+from app.services.ge_goal_subtree_governor import (
+    attach_effective_pmbp,
+    effective_pmbp_for_objective,
+    effective_pmbp_for_program,
+)
 from app.services.ge_project_create import create_project
 from app.services.ge_sort_order import (
     next_objective_sort_order,
@@ -66,6 +71,15 @@ def _require_owner(body: dict[str, Any]) -> str:
     return str(owner).strip()
 
 
+def _optional_pmbp_user_id(body: dict[str, Any]) -> str | None:
+    if "pmbp_user_id" not in body:
+        return None
+    raw = body.get("pmbp_user_id")
+    if raw is None or not str(raw).strip():
+        return None
+    return str(raw).strip()
+
+
 def _is_lifecycle_locked(entity: GeObjective | GeProgram) -> bool:
     status = entity.lifecycle_status or LIFECYCLE_ACTIVE
     return status in LOCKED_LIFECYCLES
@@ -73,7 +87,7 @@ def _is_lifecycle_locked(entity: GeObjective | GeProgram) -> bool:
 
 # When lifecycle is locked (pending_assessment / terminal), still allow accountability edits.
 # Strategic fields (period / department / reparent) remain forbidden.
-_ACCOUNTABILITY_PATCH_KEYS = frozenset({"name", "owner_user_id"})
+_ACCOUNTABILITY_PATCH_KEYS = frozenset({"name", "owner_user_id", "pmbp_user_id"})
 
 
 def _assert_patch_allowed(entity: GeObjective | GeProgram, body: dict[str, Any]) -> None:
@@ -183,6 +197,7 @@ def create_objective(db: Session, body: dict[str, Any]) -> dict[str, Any]:
         level=level,
         parent_id=str(parent_id),
         owner_user_id=owner_user_id,
+        pmbp_user_id=_optional_pmbp_user_id(body),
         is_default=False,
         lifecycle_status=LIFECYCLE_ACTIVE,
         primary_department_needs_confirmation=False,
@@ -198,7 +213,7 @@ def create_objective(db: Session, body: dict[str, Any]) -> dict[str, Any]:
     db.commit()
     db.refresh(obj)
     invalidate_lifecycle_refresh()
-    return objective_out(obj)
+    return objective_out(obj, db)
 
 
 def patch_objective(db: Session, objective_id: str, body: dict[str, Any]) -> dict[str, Any]:
@@ -229,6 +244,8 @@ def patch_objective(db: Session, objective_id: str, body: dict[str, Any]) -> dic
         obj.name = name
     if "owner_user_id" in body:
         obj.owner_user_id = body.get("owner_user_id")
+    if "pmbp_user_id" in body:
+        obj.pmbp_user_id = _optional_pmbp_user_id(body)
     if "primary_department_id" in body and obj.level == "sub":
         dept = body.get("primary_department_id")
         if dept:
@@ -242,7 +259,7 @@ def patch_objective(db: Session, objective_id: str, body: dict[str, Any]) -> dic
     db.commit()
     db.refresh(obj)
     invalidate_lifecycle_refresh()
-    return objective_out(obj)
+    return objective_out(obj, db)
 
 
 def create_program(db: Session, body: dict[str, Any]) -> dict[str, Any]:
@@ -263,6 +280,7 @@ def create_program(db: Session, body: dict[str, Any]) -> dict[str, Any]:
         name=name,
         objective_id=str(objective_id),
         owner_user_id=owner_user_id,
+        pmbp_user_id=_optional_pmbp_user_id(body),
         is_default=False,
         lifecycle_status=LIFECYCLE_ACTIVE,
         primary_department_needs_confirmation=False,
@@ -304,6 +322,8 @@ def patch_program(db: Session, program_id: str, body: dict[str, Any]) -> dict[st
         program.objective_id = objective_id
     if "owner_user_id" in body:
         program.owner_user_id = body.get("owner_user_id")
+    if "pmbp_user_id" in body:
+        program.pmbp_user_id = _optional_pmbp_user_id(body)
     if "primary_department_id" in body:
         dept = body.get("primary_department_id")
         if dept:
@@ -382,6 +402,7 @@ def create_objective_year(db: Session, body: dict[str, Any], *, actor_user_id: s
         level="company",
         parent_id=None,
         owner_user_id=owner_user_id,
+        pmbp_user_id=_optional_pmbp_user_id(body),
         is_default=False,
         period_granularity="year",
         period_start=start,
@@ -420,7 +441,7 @@ def create_objective_year(db: Session, body: dict[str, Any], *, actor_user_id: s
     db.commit()
     db.refresh(company)
     invalidate_lifecycle_refresh()
-    return objective_out(company)
+    return objective_out(company, db)
 
 
 def _append_sample_structure(
@@ -581,7 +602,7 @@ def assess_objective(
     db.commit()
     db.refresh(obj)
     invalidate_lifecycle_refresh()
-    return objective_out(obj)
+    return objective_out(obj, db)
 
 
 def assess_program(
@@ -733,17 +754,22 @@ def strategic_fields_out(entity: GeObjective | GeProgram) -> dict[str, Any]:
     return data
 
 
-def objective_out(obj: GeObjective) -> dict[str, Any]:
-    return {
+def objective_out(obj: GeObjective, db: Session | None = None) -> dict[str, Any]:
+    data: dict[str, Any] = {
         "id": obj.id,
         "name": obj.name,
         "level": obj.level,
         "parent_id": obj.parent_id,
         "owner_user_id": obj.owner_user_id,
+        "pmbp_user_id": obj.pmbp_user_id,
         "is_default": bool(obj.is_default),
         "sort_order": obj.sort_order,
         **strategic_fields_out(obj),
     }
+    if db is not None:
+        eid, inherited = effective_pmbp_for_objective(db, obj)
+        attach_effective_pmbp(data, eid, inherited)
+    return data
 
 
 def program_out(program: GeProgram, db: Session | None = None) -> dict[str, Any]:
@@ -758,10 +784,14 @@ def program_out(program: GeProgram, db: Session | None = None) -> dict[str, Any]
         "name": program.name,
         "objective_id": program.objective_id,
         "owner_user_id": program.owner_user_id,
+        "pmbp_user_id": program.pmbp_user_id,
         "is_default": bool(program.is_default),
         "sort_order": program.sort_order,
         **strategic_fields_out(program),
     }
+    if db is not None:
+        eid, inherited = effective_pmbp_for_program(db, program)
+        attach_effective_pmbp(data, eid, inherited)
     if resolved:
         data["resolved_period_start"] = resolved["period_start"]
         data["resolved_period_end"] = resolved["period_end"]

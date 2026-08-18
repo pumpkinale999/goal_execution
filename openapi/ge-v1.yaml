@@ -42,8 +42,9 @@ info:
     v1.26.0 (GE-AUTHZ-API): X-Actor-Is-Reviewer · is_goal_subtree_governor · /ge/health · /ge/portfolios · /ge/goal-subtree-governor/check · /ge/users/{id}/project-access · no /ge-api
     v1.26.1 (GE-AUTHZ docs): consensus v0.1.9 · Org portfolio headers §3.2 · summaries service+Actor (no JWT participant wording)
     v1.28.0 (证据层 M2): GateItemInput form metric|status · content_ref · submit 400/503 evidence codes · GE-T200～T207
+    v1.30.0 (M41): Objective/Program pmbp_user_id · effective_pmbp_* read-only · PATCH owner vs PMBP field gates · GE-T220～T227
     Out of scope: skstudio BFF orchestration /api/v1/org|ge/* · GE-AUTHZ consensus v0.1.9 (see impl §1.4 · §4.0 · §10.42)
-  version: 1.29.0
+  version: 1.30.0
 servers:
   - url: /api/v1
     description: goal_execution service (service + Actor + Is-Reviewer only · GE-AUTHZ)
@@ -1640,6 +1641,10 @@ components:
           format: uuid
         owner_user_id:
           type: string
+        pmbp_user_id:
+          type: string
+          nullable: true
+          description: M41 optional 项目管理 BP; omit to inherit effective PMBP from ancestors
         period_granularity:
           $ref: '#/components/schemas/PeriodGranularity'
           description: Sub-objective only · may be year, month, or quarter
@@ -1662,6 +1667,10 @@ components:
           type: string
         owner_user_id:
           type: string
+        pmbp_user_id:
+          type: string
+          nullable: true
+          description: M41 optional 项目管理 BP; omit to inherit effective PMBP from ancestors
         period_granularity:
           $ref: '#/components/schemas/PeriodGranularity'
           description: Sub-objective patch · may be year, month, or quarter
@@ -1879,6 +1888,10 @@ components:
           format: uuid
         owner_user_id:
           type: string
+        pmbp_user_id:
+          type: string
+          nullable: true
+          description: M41 optional 项目管理 BP; omit to inherit effective PMBP from ancestors
         period_granularity:
           $ref: '#/components/schemas/PeriodGranularity'
           description: Program only · month or quarter (not year)
@@ -1900,6 +1913,10 @@ components:
           type: string
         owner_user_id:
           type: string
+        pmbp_user_id:
+          type: string
+          nullable: true
+          description: M41 optional 项目管理 BP; omit to inherit effective PMBP from ancestors
         objective_id:
           type: string
           format: uuid
@@ -2221,6 +2238,26 @@ components:
             owner_user_id:
               type: string
               nullable: true
+            pmbp_user_id:
+              type: string
+              nullable: true
+              description: M41 stored 项目管理 BP
+            effective_pmbp_user_id:
+              type: string
+              nullable: true
+              readOnly: true
+            effective_pmbp_inherited_from:
+              type: object
+              nullable: true
+              readOnly: true
+              properties:
+                kind:
+                  type: string
+                  enum: [objective, program]
+                id:
+                  type: string
+                name:
+                  type: string
             my_visible_project_count:
               type: integer
               minimum: 0
@@ -2255,6 +2292,27 @@ components:
             owner_user_id:
               type: string
               nullable: true
+            pmbp_user_id:
+              type: string
+              nullable: true
+              description: M41 stored 项目管理 BP (may be null; inherit via effective_pmbp_*)
+            effective_pmbp_user_id:
+              type: string
+              nullable: true
+              readOnly: true
+            effective_pmbp_inherited_from:
+              type: object
+              nullable: true
+              readOnly: true
+              description: Present when effective PMBP is inherited from an ancestor
+              properties:
+                kind:
+                  type: string
+                  enum: [objective, program]
+                id:
+                  type: string
+                name:
+                  type: string
             parent_id:
               type: string
               format: uuid

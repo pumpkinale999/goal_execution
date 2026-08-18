@@ -46,12 +46,14 @@ def _governed_program_ids_for_user(db: Session, user_id: str) -> set[str]:
     if not uid:
         return set()
 
-    objectives = db.query(GeObjective.id, GeObjective.parent_id, GeObjective.owner_user_id).all()
+    objectives = db.query(
+        GeObjective.id, GeObjective.parent_id, GeObjective.owner_user_id, GeObjective.pmbp_user_id
+    ).all()
     children_by_parent: dict[str | None, list[str]] = {}
     owned: set[str] = set()
-    for obj_id, parent_id, owner in objectives:
+    for obj_id, parent_id, owner, pmbp in objectives:
         children_by_parent.setdefault(parent_id, []).append(obj_id)
-        if owner and str(owner).strip() == uid:
+        if (owner and str(owner).strip() == uid) or (pmbp and str(pmbp).strip() == uid):
             owned.add(obj_id)
 
     governed_obj_ids = set(owned)
@@ -63,10 +65,12 @@ def _governed_program_ids_for_user(db: Session, user_id: str) -> set[str]:
                 governed_obj_ids.add(child_id)
                 queue.append(child_id)
 
-    programs = db.query(GeProgram.id, GeProgram.objective_id, GeProgram.owner_user_id).all()
+    programs = db.query(
+        GeProgram.id, GeProgram.objective_id, GeProgram.owner_user_id, GeProgram.pmbp_user_id
+    ).all()
     governed_programs: set[str] = set()
-    for prog_id, objective_id, owner in programs:
-        if owner and str(owner).strip() == uid:
+    for prog_id, objective_id, owner, pmbp in programs:
+        if (owner and str(owner).strip() == uid) or (pmbp and str(pmbp).strip() == uid):
             governed_programs.add(prog_id)
         elif objective_id in governed_obj_ids:
             governed_programs.add(prog_id)
