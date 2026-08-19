@@ -72,6 +72,7 @@ def get_engine():
                 max_overflow=20,
                 pool_pre_ping=True,
                 pool_recycle=3600,
+                pool_timeout=30,
             )
         _SessionLocal = sessionmaker(bind=_engine, autoflush=False, autocommit=False)
     return _engine

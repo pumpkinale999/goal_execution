@@ -1028,9 +1028,10 @@ def delete_program_route(
 @router.get("/health")
 def ge_health() -> dict[str, bool | str]:
     """GE-AUTHZ-API M2 · E3."""
+    db_healthy = db_ok()
     return {
-        "ok": db_ok(),
-        "db_ok": db_ok(),
+        "ok": db_healthy,
+        "db_ok": db_healthy,
         "service": "goal_execution",
     }
 

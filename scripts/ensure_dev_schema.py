@@ -14,6 +14,22 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+_GE_PERF_INDEXES = (
+    "CREATE INDEX IF NOT EXISTS ix_ge_tasks_project_id ON ge_tasks(project_id)",
+    "CREATE INDEX IF NOT EXISTS ix_ge_gate_items_phase_id ON ge_gate_items(phase_id)",
+    (
+        "CREATE INDEX IF NOT EXISTS ix_ge_deviations_project_status "
+        "ON ge_deviations(project_id, status)"
+    ),
+)
+
+
+def ensure_perf_indexes(engine) -> None:
+    """029 · idempotent graph-load indexes (create_all skips existing tables)."""
+    with engine.begin() as conn:
+        for stmt in _GE_PERF_INDEXES:
+            conn.execute(text(stmt))
+
 
 def main() -> int:
     from alembic import command
@@ -48,6 +64,7 @@ def main() -> int:
             current = row[0] if row else None
 
     Base.metadata.create_all(bind=engine)
+    ensure_perf_indexes(engine)
     if current == head_rev:
         print(f"[ensure_dev_schema] Postgres OK (head={head_rev}, tables={len(tables)})")
         return 0
