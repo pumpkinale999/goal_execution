@@ -150,9 +150,25 @@ def _validate_program_bounds(
         if not win_start or not win_end:
             continue
         if plan_date_to_ord(win_start) < plan_date_to_ord(period_start):
-            raise HTTPException(status_code=400, detail={"detail": "phase_schedule_outside_program"})
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "detail": "phase_schedule_outside_program",
+                    "phase_name": phase.name,
+                    "phase_window": {"planned_start": win_start, "planned_end": win_end},
+                    "program_window": {"period_start": period_start, "period_end": period_end},
+                },
+            )
         if plan_date_to_ord(win_end) > plan_date_to_ord(period_end):
-            raise HTTPException(status_code=400, detail={"detail": "phase_schedule_outside_program"})
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "detail": "phase_schedule_outside_program",
+                    "phase_name": phase.name,
+                    "phase_window": {"planned_start": win_start, "planned_end": win_end},
+                    "program_window": {"period_start": period_start, "period_end": period_end},
+                },
+            )
 
 
 def _validate_adjacent_no_overlap(
@@ -167,8 +183,18 @@ def _validate_adjacent_no_overlap(
         right_start, right_end = effective_window_for_phase(right, sorted_phases, program_period)
         if not left_start or not left_end or not right_start or not right_end:
             continue
-        if plan_date_to_ord(right_start) <= plan_date_to_ord(left_end):
-            raise HTTPException(status_code=400, detail={"detail": "phase_schedule_overlap"})
+        # Touching on left_end == right_start is allowed; only strict overlap fails.
+        if plan_date_to_ord(right_start) < plan_date_to_ord(left_end):
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "detail": "phase_schedule_overlap",
+                    "left_phase": left.name,
+                    "right_phase": right.name,
+                    "left_planned_end": left_end,
+                    "right_planned_start": right_start,
+                },
+            )
 
 
 def validate_project_schedule(
@@ -203,11 +229,35 @@ def validate_project_schedule(
         start_ord = plan_date_to_ord(start.planned_start)
         end_ord = plan_date_to_ord(end.planned_end)
         if start_ord > end_ord:
-            raise HTTPException(status_code=400, detail={"detail": "invalid_project_schedule"})
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "detail": "invalid_project_schedule",
+                    "reason": "start_after_end",
+                    "start_window": {"planned_start": start.planned_start, "planned_end": start.planned_end},
+                    "end_window": {"planned_start": end.planned_start, "planned_end": end.planned_end},
+                },
+            )
         if plan_date_to_ord(start.planned_end) > end_ord:
-            raise HTTPException(status_code=400, detail={"detail": "invalid_project_schedule"})
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "detail": "invalid_project_schedule",
+                    "reason": "start_end_after_project_end",
+                    "start_window": {"planned_start": start.planned_start, "planned_end": start.planned_end},
+                    "end_window": {"planned_start": end.planned_start, "planned_end": end.planned_end},
+                },
+            )
         if plan_date_to_ord(end.planned_start) < start_ord:
-            raise HTTPException(status_code=400, detail={"detail": "invalid_project_schedule"})
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "detail": "invalid_project_schedule",
+                    "reason": "end_start_before_project_start",
+                    "start_window": {"planned_start": start.planned_start, "planned_end": start.planned_end},
+                    "end_window": {"planned_start": end.planned_start, "planned_end": end.planned_end},
+                },
+            )
 
         project_start = start.planned_start
         project_end = end.planned_end
@@ -219,9 +269,31 @@ def validate_project_schedule(
             if not win_start or not win_end:
                 continue
             if plan_date_to_ord(win_start) < plan_date_to_ord(project_start):
-                raise HTTPException(status_code=400, detail={"detail": "phase_schedule_outside_project"})
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "detail": "phase_schedule_outside_project",
+                        "phase_name": phase.name,
+                        "phase_window": {"planned_start": win_start, "planned_end": win_end},
+                        "project_window": {
+                            "planned_start": project_start,
+                            "planned_end": project_end,
+                        },
+                    },
+                )
             if plan_date_to_ord(win_end) > plan_date_to_ord(project_end):
-                raise HTTPException(status_code=400, detail={"detail": "phase_schedule_outside_project"})
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "detail": "phase_schedule_outside_project",
+                        "phase_name": phase.name,
+                        "phase_window": {"planned_start": win_start, "planned_end": win_end},
+                        "project_window": {
+                            "planned_start": project_start,
+                            "planned_end": project_end,
+                        },
+                    },
+                )
 
 
 def reject_task_schedule_fields(body: dict[str, Any]) -> None:

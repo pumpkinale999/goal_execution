@@ -195,13 +195,30 @@ def test_adjacent_overlap_same_day(client):
     graph = get_graph(client, created["id"], U_PM)
     plan = phase_by_name(graph, "方案")
     dev = phase_by_name(graph, "开发")
+    # 方案 ends 2026-06-15; touching on same day is allowed
+    assert plan["planned_end"] == "2026-06-15"
     resp = client.patch(
         f"/api/v1/ge/phases/{dev['id']}",
         headers=jwt_headers(U_PM),
         json={"planned_start": "2026-06-15", "planned_end": "2026-06-30"},
     )
+    assert resp.status_code == 200, resp.text
+
+
+def test_adjacent_overlap_cross_day_rejected(client):
+    created = create_project(client, U_PM)
+    graph = get_graph(client, created["id"], U_PM)
+    dev = phase_by_name(graph, "开发")
+    resp = client.patch(
+        f"/api/v1/ge/phases/{dev['id']}",
+        headers=jwt_headers(U_PM),
+        json={"planned_start": "2026-06-14", "planned_end": "2026-06-30"},
+    )
     assert resp.status_code == 400
     assert _detail_code(resp) == "phase_schedule_overlap"
+    body = resp.json()
+    assert body.get("left_phase")
+    assert body.get("right_phase")
 
 
 def test_adjacent_valid_strict_after(client):

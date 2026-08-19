@@ -100,10 +100,10 @@ def test_validate_project_schedule_business_outside_bounds():
     program = {"period_start": "2026-01-01", "period_end": "2026-12-31", "period_granularity": "year"}
     with pytest.raises(HTTPException) as exc:
         validate_project_schedule(phases, program_period=program, require_program=True)
-    assert exc.value.detail == {"detail": "phase_schedule_outside_program"}
+    assert exc.value.detail["detail"] == "phase_schedule_outside_program"
 
 
-def test_validate_adjacent_overlap():
+def test_validate_adjacent_overlap_same_day_touch_allowed():
     from types import SimpleNamespace
 
     phases = [
@@ -122,9 +122,33 @@ def test_validate_adjacent_overlap():
             planned_end="2026-06-30",
         ),
     ]
+    validate_project_schedule(phases)
+
+
+def test_validate_adjacent_overlap_strict_cross_fails():
+    from types import SimpleNamespace
+
+    phases = [
+        SimpleNamespace(
+            is_system=False,
+            sequence=1,
+            name="A",
+            planned_start="2026-06-01",
+            planned_end="2026-06-15",
+        ),
+        SimpleNamespace(
+            is_system=False,
+            sequence=2,
+            name="B",
+            planned_start="2026-06-14",
+            planned_end="2026-06-30",
+        ),
+    ]
     with pytest.raises(HTTPException) as exc:
         validate_project_schedule(phases)
-    assert exc.value.detail == {"detail": "phase_schedule_overlap"}
+    assert exc.value.detail["detail"] == "phase_schedule_overlap"
+    assert exc.value.detail["left_phase"] == "A"
+    assert exc.value.detail["right_phase"] == "B"
 
 
 def test_parse_required_plan_date():
