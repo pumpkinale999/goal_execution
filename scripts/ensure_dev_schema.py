@@ -26,6 +26,8 @@ _GE_PERF_INDEXES = (
 
 def ensure_perf_indexes(engine) -> None:
     """029 · idempotent graph-load indexes (create_all skips existing tables)."""
+    from sqlalchemy import text
+
     with engine.begin() as conn:
         for stmt in _GE_PERF_INDEXES:
             conn.execute(text(stmt))
