@@ -141,6 +141,43 @@ def test_deliver_retry_and_success(client):
     assert any(i["status"] == "delivered" for i in listed.json()["items"])
 
 
+
+def test_soft_delete_enqueues_project_soft_delete(client):
+    """M2: soft_delete_project → outbox change_kind=project_soft_delete, no graph."""
+    with patch("app.services.observation_mount.schedule_flush_soon"):
+        created = create_project(client, U_PM)
+        project_id = created["id"]
+        r = client.delete(
+            f"/api/v1/ge/projects/{project_id}",
+            headers=jwt_headers(U_PM),
+        )
+        assert r.status_code == 204
+    kinds = _outbox_kinds(project_id)
+    assert "project_soft_delete" in kinds
+    from app.db import get_session_factory
+    from app.models.observation_mount import GeObservationOutbox
+
+    db = get_session_factory()()
+    try:
+        row = None
+        for candidate in (
+            db.query(GeObservationOutbox)
+            .order_by(GeObservationOutbox.created_at.desc())
+            .all()
+        ):
+            payload = candidate.payload or {}
+            if payload.get("project_id") == project_id and payload.get("change_kind") == "project_soft_delete":
+                row = candidate
+                break
+        assert row is not None
+        payload = row.payload or {}
+        assert payload.get("change_kind") == "project_soft_delete"
+        assert payload.get("project_id") == project_id
+        assert not (payload.get("project_graph") or payload.get("graph"))
+    finally:
+        db.close()
+
+
 def test_patch_phase_and_add_task_enqueue(client):
     with patch("app.services.observation_mount.schedule_flush_soon"):
         created = create_project(client, U_PM)

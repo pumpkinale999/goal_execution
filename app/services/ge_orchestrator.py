@@ -66,6 +66,15 @@ def soft_delete_project(db: Session, project_id: str, user: AuthUser) -> None:
     db.commit()
     invalidate_lifecycle_refresh()
     invalidate_project_queue_counts()
+    from app.services.observation_mount import notify_graph_write
+
+    # Soft-deleted graphs are not loadable — notify without graph so AA INV-1 can cancel tickets.
+    notify_graph_write(
+        db,
+        project_id=project_id,
+        change_kind="project_soft_delete",
+        include_graph=False,
+    )
 
 
 def _can_act_as_task_assignee(db: Session, project: GeProject, task: GeTask, user: AuthUser) -> bool:
