@@ -105,6 +105,7 @@ from app.services.ge_project_members import (
     list_role_options,
     patch_member,
 )
+from app.services.ge_note_write_grants import list_write_grants, replace_write_grants
 from app.services.ge_project_access import build_project_access_for_user
 from app.services.ge_pa_project_roles import build_pa_project_roles_for_user
 
@@ -830,6 +831,27 @@ def delete_project_member_route(
     user: Annotated[AuthUser, Depends(get_current_user)],
 ) -> None:
     delete_member(db, project_id, user_id, user)
+
+
+@router.get("/projects/{project_id}/notes/{note_id}/write-grants")
+def get_note_write_grants_route(
+    project_id: str,
+    note_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    return list_write_grants(db, project_id, note_id, user)
+
+
+@router.put("/projects/{project_id}/notes/{note_id}/write-grants")
+def put_note_write_grants_route(
+    project_id: str,
+    note_id: str,
+    body: dict[str, Any],
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    return replace_write_grants(db, project_id, note_id, body, user)
 
 
 def _require_struct_objective(db: Session, user: AuthUser, objective_id: str) -> None:

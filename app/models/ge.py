@@ -262,6 +262,20 @@ class GeProjectMember(Base):
     updated_at: Mapped[str] = mapped_column(Text, nullable=False)
 
 
+class GeProjectNoteWriteGrant(Base):
+    """K29: per-note write grant for project members (not ACL table)."""
+
+    __tablename__ = "ge_project_note_write_grants"
+    __table_args__ = (UniqueConstraint("project_id", "note_id", "user_id"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    project_id: Mapped[str] = mapped_column(String, ForeignKey("ge_projects.id"), nullable=False)
+    note_id: Mapped[str] = mapped_column(String, nullable=False)
+    user_id: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[str] = mapped_column(Text, nullable=False)
+    updated_at: Mapped[str] = mapped_column(Text, nullable=False)
+
+
 class GeAuditEvent(Base):
     __tablename__ = "ge_audit_events"
 

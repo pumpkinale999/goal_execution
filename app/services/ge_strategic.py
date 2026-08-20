@@ -24,6 +24,7 @@ from app.models.ge import (
     GeProgram,
     GeProject,
     GeProjectMember,
+    GeProjectNoteWriteGrant,
     GeTask,
     GeTaskGateItemPrerequisite,
     GeTaskGateItemProduce,
@@ -704,6 +705,9 @@ def _hard_purge_project(db: Session, project_id: str) -> None:
     if gate_ids:
         db.query(GeGate).filter(GeGate.id.in_(gate_ids)).delete(synchronize_session=False)
     db.query(GePhase).filter(GePhase.project_id == project_id).delete(synchronize_session=False)
+    db.query(GeProjectNoteWriteGrant).filter(GeProjectNoteWriteGrant.project_id == project_id).delete(
+        synchronize_session=False
+    )
     db.query(GeProjectMember).filter(GeProjectMember.project_id == project_id).delete(
         synchronize_session=False
     )

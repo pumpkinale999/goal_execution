@@ -14,6 +14,7 @@ from app.models.ge import GeProject, GeProjectMember, GeProjectRoleOption, GeTas
 from app.services.ge_access import can_read_project, require_govern_project
 from app.services.ge_accountability import display_name
 from app.services.ge_graph import now_iso
+from app.services.ge_note_write_grants import delete_grants_for_user
 
 SLUG_PROJECT_MANAGER = "project_manager"
 SLUG_MEMBER = "member"
@@ -254,6 +255,7 @@ def delete_member(db: Session, project_id: str, user_id: str, user: AuthUser) ->
     )
     if member is None:
         raise HTTPException(status_code=404, detail={"detail": "member_not_found"})
+    delete_grants_for_user(db, project_id=project_id, user_id=user_id)
     db.delete(member)
     db.commit()
 
@@ -302,6 +304,7 @@ def replace_pm_on_change(
         .first()
     )
     if old is not None:
+        delete_grants_for_user(db, project_id=project_id, user_id=old_pm_user_id)
         db.delete(old)
         db.flush()
     upsert_pm(db, project_id=project_id, pm_user_id=new_pm_user_id)

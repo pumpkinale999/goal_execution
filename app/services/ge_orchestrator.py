@@ -58,6 +58,9 @@ def soft_delete_project(db: Session, project_id: str, user: AuthUser) -> None:
     require_govern_structure(db, project, user)
     if not project_is_empty(db, project) and not can_force_delete_project(db, project, user):
         raise HTTPException(status_code=409, detail={"detail": "project_not_empty"})
+    from app.services.ge_note_write_grants import delete_grants_for_project
+
+    delete_grants_for_project(db, project_id=project_id)
     project.deleted_at = now_iso()
     project.updated_at = now_iso()
     db.commit()
