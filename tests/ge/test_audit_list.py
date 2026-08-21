@@ -36,7 +36,7 @@ def test_audit_list_forbidden_for_stranger(client):
 
     resp = client.get(
         "/api/v1/ge/audit-events",
-        headers=jwt_headers("u-stranger"),
+        headers=jwt_headers("999"),
         params={"entity_type": "gate_item", "entity_id": gi_x},
     )
     assert resp.status_code == 403

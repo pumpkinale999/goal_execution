@@ -15,8 +15,8 @@ from tests.ge.conftest import (
     task_id_by_title,
 )
 
-U_OWNER = "u-owner"
-U_GOVERNOR = "u-governor"
+U_OWNER = "910"
+U_GOVERNOR = "910"
 
 
 def _formal_sub_and_program(client):
@@ -29,7 +29,7 @@ def _formal_sub_and_program(client):
 def _patch_objective_owner(client, objective_id: str, owner_user_id: str) -> None:
     resp = client.patch(
         f"/api/v1/ge/objectives/{objective_id}",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={"owner_user_id": owner_user_id},
     )
     assert resp.status_code == 200, resp.text
@@ -155,7 +155,7 @@ def test_non_default_program_create_requires_governor(client):
     sub_id, _program_id = _formal_sub_and_program(client)
     create_prog = client.post(
         "/api/v1/ge/programs",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={
             "name": "战略项目群",
             "objective_id": sub_id,
@@ -181,11 +181,11 @@ def test_ancestor_owner_governs_nested_program(client):
     _patch_objective_owner(client, sub_id, U_OWNER)
     create_prog = client.post(
         "/api/v1/ge/programs",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={
             "name": "子树项目群",
             "objective_id": sub_id,
-            "owner_user_id": "u-other",
+            "owner_user_id": "951",
             "primary_department_id": "test-dept-nested",
         },
     )

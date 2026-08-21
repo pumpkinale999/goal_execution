@@ -9,7 +9,7 @@ from tests.ge.conftest import GOLDEN_PROJECT_BODY, U_PM, bootstrap_startup_gate
 def _annual_company(client, year: int = 2026) -> dict:
     resp = client.post(
         "/api/v1/ge/objectives/years",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={"planning_year": year, "name": f"{year} 年度战略目标"},
     )
     assert resp.status_code == 201, resp.text
@@ -28,7 +28,7 @@ def _create_sub_program_project(
 ) -> dict:
     sub = client.post(
         "/api/v1/ge/objectives",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={
             "name": "子目标",
             "parent_id": company_id,
@@ -42,7 +42,7 @@ def _create_sub_program_project(
     assert sub.status_code == 201, sub.text
     prog = client.post(
         "/api/v1/ge/programs",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={
             "name": name,
             "objective_id": sub.json()["id"],
@@ -76,7 +76,7 @@ def test_projects_for_users_own_and_manage_in_quarter(client):
     own_proj = _create_sub_program_project(
         client,
         company["id"],
-        owner="u-other-owner",
+        owner="952",
         pm=U_PM,
         period_start="2026-07-01",
         period_end="2026-09-30",
@@ -87,7 +87,7 @@ def test_projects_for_users_own_and_manage_in_quarter(client):
         client,
         company["id"],
         owner=U_PM,
-        pm="u-other-pm",
+        pm="953",
         period_start="2026-07-01",
         period_end="2026-09-30",
         name="manage-prog",

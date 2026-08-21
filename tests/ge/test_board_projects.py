@@ -13,7 +13,7 @@ def _create_dept() -> str:
 def _annual_company(client) -> dict:
     resp = client.post(
         "/api/v1/ge/objectives/years",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={"planning_year": 2026, "name": "2026 年度战略目标"},
     )
     assert resp.status_code == 201, resp.text
@@ -23,11 +23,11 @@ def _annual_company(client) -> dict:
 def _create_sub_and_programs(client, company_id: str, dept_id: str) -> tuple[dict, dict, dict]:
     sub = client.post(
         "/api/v1/ge/objectives",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={
             "name": "看板子目标",
             "parent_id": company_id,
-            "owner_user_id": "u-owner",
+            "owner_user_id": "910",
             "primary_department_id": dept_id,
         },
     )
@@ -35,22 +35,22 @@ def _create_sub_and_programs(client, company_id: str, dept_id: str) -> tuple[dic
     sub_body = sub.json()
     prog_a = client.post(
         "/api/v1/ge/programs",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={
             "name": "专项A",
             "objective_id": sub_body["id"],
-            "owner_user_id": "u-prog-owner",
+            "owner_user_id": "911",
             "primary_department_id": dept_id,
         },
     )
     assert prog_a.status_code == 201, prog_a.text
     prog_b = client.post(
         "/api/v1/ge/programs",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={
             "name": "专项B空",
             "objective_id": sub_body["id"],
-            "owner_user_id": "u-prog-owner",
+            "owner_user_id": "911",
             "primary_department_id": dept_id,
         },
     )
@@ -61,7 +61,7 @@ def _create_sub_and_programs(client, company_id: str, dept_id: str) -> tuple[dic
 def _create_project(client, program_id: str, *, name: str = "项目", pm: str = U_PM) -> dict:
     resp = client.post(
         "/api/v1/ge/projects",
-        headers=jwt_headers("u-owner"),
+        headers=jwt_headers("910"),
         json={
             **GOLDEN_PROJECT_BODY,
             "name": name,
@@ -72,7 +72,7 @@ def _create_project(client, program_id: str, *, name: str = "项目", pm: str = 
     )
     assert resp.status_code == 201, resp.text
     created = resp.json()
-    bootstrap_startup_gate(client, created["id"], "u-owner")
+    bootstrap_startup_gate(client, created["id"], "910")
     return created
 
 
@@ -84,7 +84,7 @@ def test_board_projects_happy_path_includes_empty_program(client):
 
     resp = client.get(
         f"/api/v1/ge/objectives/{sub['id']}/board-projects",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
     )
     assert resp.status_code == 200, resp.text
     body = resp.json()
@@ -108,7 +108,7 @@ def test_board_projects_company_returns_200_with_subs(client):
 
     resp = client.get(
         f"/api/v1/ge/objectives/{company['id']}/board-projects",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
     )
     assert resp.status_code == 200, resp.text
     body = resp.json()
@@ -117,7 +117,7 @@ def test_board_projects_company_returns_200_with_subs(client):
     sub_ids = {s["id"] for s in body["subs"]}
     assert sub["id"] in sub_ids
     sub_row = next(s for s in body["subs"] if s["id"] == sub["id"])
-    assert sub_row.get("owner_user_id") == "u-owner"
+    assert sub_row.get("owner_user_id") == "910"
     by_prog = {p["id"]: p for p in body["programs"]}
     assert prog_a["id"] in by_prog
     assert prog_b["id"] in by_prog
@@ -174,11 +174,11 @@ def test_board_projects_sibling_non_owner_returns_200(client):
     # Sibling actor owns another sub under the same company but not this one.
     sibling_sub = client.post(
         "/api/v1/ge/objectives",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={
             "name": "兄弟子目标",
             "parent_id": company["id"],
-            "owner_user_id": "u-sibling-owner",
+            "owner_user_id": "966",
             "primary_department_id": dept,
         },
     )
@@ -186,7 +186,7 @@ def test_board_projects_sibling_non_owner_returns_200(client):
 
     resp = client.get(
         f"/api/v1/ge/objectives/{sub['id']}/board-projects",
-        headers=service_headers("u-sibling-owner", is_reviewer=False),
+        headers=service_headers("966", is_reviewer=False),
     )
     assert resp.status_code == 200, resp.text
     body = resp.json()
@@ -221,7 +221,7 @@ def test_board_projects_cancelled_still_returned_for_reviewer(client):
 
     resp = client.get(
         f"/api/v1/ge/objectives/{sub['id']}/board-projects",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
     )
     assert resp.status_code == 200, resp.text
     rows = {p["id"]: p for p in resp.json()["projects"]}

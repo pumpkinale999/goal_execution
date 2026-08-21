@@ -5,7 +5,7 @@ from __future__ import annotations
 from tests.conftest import jwt_headers, service_headers
 
 
-def _create_dept(client, name: str = "研发部", manager: str = "u-owner") -> str:
+def _create_dept(client, name: str = "研发部", manager: str = "910") -> str:
     """Opaque dept id — GE org HTTP unmounted; authority lives in skstudio."""
     _ = (client, manager)
     return f"test-dept-{name}"
@@ -14,7 +14,7 @@ def _create_dept(client, name: str = "研发部", manager: str = "u-owner") -> s
 def _create_year(client, year: int, name: str, **extra) -> dict:
     resp = client.post(
         "/api/v1/ge/objectives/years",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={"planning_year": year, "name": name, **extra},
     )
     assert resp.status_code == 201, resp.text
@@ -27,13 +27,13 @@ def test_second_active_root_same_year_owner_is_actor(client):
     assert first["name"] == "A"
     second = client.post(
         "/api/v1/ge/objectives/years",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={"planning_year": 2040, "name": "B"},
     )
     assert second.status_code == 201, second.text
     body = second.json()
     assert body["name"] == "B"
-    assert body["owner_user_id"] == "reviewer-1"
+    assert body["owner_user_id"] == "800"
     assert body["planning_year"] == 2040
 
 
@@ -51,7 +51,7 @@ def test_annual_root_limit_exceeded(client):
 
     resp = client.post(
         "/api/v1/ge/objectives/years",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={"planning_year": 2041, "name": "第11根"},
     )
     assert resp.status_code == 400
@@ -62,7 +62,7 @@ def test_create_year_name_required(client):
     """GE-T193: missing or blank name → name_required."""
     missing = client.post(
         "/api/v1/ge/objectives/years",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={"planning_year": 2042},
     )
     assert missing.status_code == 400
@@ -70,7 +70,7 @@ def test_create_year_name_required(client):
 
     blank = client.post(
         "/api/v1/ge/objectives/years",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={"planning_year": 2042, "name": "  "},
     )
     assert blank.status_code == 400
@@ -92,7 +92,7 @@ def test_duplicate_annual_name_including_archived_and_patch(client):
     other = _create_year(client, 2043, "B")
     dup_create = client.post(
         "/api/v1/ge/objectives/years",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={"planning_year": 2043, "name": "A"},
     )
     assert dup_create.status_code == 400
@@ -100,7 +100,7 @@ def test_duplicate_annual_name_including_archived_and_patch(client):
 
     dup_patch = client.patch(
         f"/api/v1/ge/objectives/{other['id']}",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={"name": "A"},
     )
     assert dup_patch.status_code == 400
@@ -114,22 +114,22 @@ def test_copy_from_objective_id_across_years(client):
     sibling = _create_year(client, 2026, "同年另一根")
     sub_s = client.post(
         "/api/v1/ge/objectives",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={
             "name": "S子目标",
             "parent_id": source["id"],
-            "owner_user_id": "u-owner",
+            "owner_user_id": "910",
             "primary_department_id": dept_id,
         },
     )
     assert sub_s.status_code == 201, sub_s.text
     sub_other = client.post(
         "/api/v1/ge/objectives",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={
             "name": "不应被复制",
             "parent_id": sibling["id"],
-            "owner_user_id": "u-owner",
+            "owner_user_id": "910",
             "primary_department_id": dept_id,
         },
     )
@@ -137,7 +137,7 @@ def test_copy_from_objective_id_across_years(client):
 
     target = client.post(
         "/api/v1/ge/objectives/years",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={
             "planning_year": 2027,
             "name": "2027 新根",
@@ -145,7 +145,7 @@ def test_copy_from_objective_id_across_years(client):
         },
     )
     assert target.status_code == 201, target.text
-    tree = client.get("/api/v1/ge/objectives", headers=jwt_headers("u-1")).json()
+    tree = client.get("/api/v1/ge/objectives", headers=jwt_headers("801")).json()
     new_root = next(item for item in tree if item["id"] == target.json()["id"])
     child_names = [child["name"] for child in new_root.get("children", [])]
     assert child_names == ["S子目标"]
@@ -156,7 +156,7 @@ def test_copy_from_year_deprecated(client):
     """GE-T196: copy_from_year → 400 copy_from_year_deprecated."""
     resp = client.post(
         "/api/v1/ge/objectives/years",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={"planning_year": 2046, "name": "仍带旧字段", "copy_from_year": 2045},
     )
     assert resp.status_code == 400
@@ -169,11 +169,11 @@ def test_copy_source_invalid(client):
     company = _create_year(client, 2026, "主根")
     sub_resp = client.post(
         "/api/v1/ge/objectives",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={
             "name": "子目标",
             "parent_id": company["id"],
-            "owner_user_id": "u-owner",
+            "owner_user_id": "910",
             "primary_department_id": dept_id,
         },
     )
@@ -182,7 +182,7 @@ def test_copy_source_invalid(client):
 
     from_sub = client.post(
         "/api/v1/ge/objectives/years",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={
             "planning_year": 2027,
             "name": "非法复制子",
@@ -194,7 +194,7 @@ def test_copy_source_invalid(client):
 
     missing = client.post(
         "/api/v1/ge/objectives/years",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={
             "planning_year": 2027,
             "name": "非法复制不存在",

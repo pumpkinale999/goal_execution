@@ -83,7 +83,7 @@ def test_pn_nw_04_delete_project_clears_grants(client):
 
     deleted = client.delete(
         f"/api/v1/ge/projects/{project_id}",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
     )
     assert deleted.status_code == 204, deleted.text
 

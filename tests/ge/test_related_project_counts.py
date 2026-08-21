@@ -63,7 +63,7 @@ def test_related_count_assignee_only_not_counted(client):
 
 def test_related_count_member_only(client):
     created = create_project(client, U_PM)
-    member_uid = "u-badge-member-only"
+    member_uid = "941"
     roles = client.get("/api/v1/ge/project-role-options", headers=jwt_headers(U_PM)).json()[
         "role_options"
     ]

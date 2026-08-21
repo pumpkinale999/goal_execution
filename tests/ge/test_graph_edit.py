@@ -19,6 +19,8 @@ def _create_empty_draft(client):
         "name": "连线测试",
         "pm_user_id": U_PM,
         "program_id": program_id,
+        "lifecycle_start": "2026-01-01",
+        "lifecycle_end": "2026-12-31",
         "phases": [{"sequence": 1, "name": "方案", "gate_items": [], "tasks": []}],
     }
     resp = client.post("/api/v1/ge/projects", headers=jwt_headers(U_PM), json=body)

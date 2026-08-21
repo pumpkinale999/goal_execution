@@ -26,24 +26,24 @@ def test_get_graph_repairs_stale_active_after_end_signed(client):
     graph = get_graph(client, project_id, U_PM)
     gi_x = gate_item_id_by_name(graph, "诊断报告")
     task_a = task_id_by_title(graph, "编写诊断报告")
-    client.post(f"/api/v1/ge/tasks/{task_a}/start", headers=jwt_headers("u-zhangsan"))
+    client.post(f"/api/v1/ge/tasks/{task_a}/start", headers=jwt_headers("902"))
     client.post(
         f"/api/v1/ge/gate-items/{gi_x}/submit",
-        headers=jwt_headers("u-zhangsan"),
+        headers=jwt_headers("902"),
         json=material_submit_payload("report"),
     )
-    client.post(f"/api/v1/ge/gate-items/{gi_x}/sign", headers=jwt_headers("u-lisi"))
+    client.post(f"/api/v1/ge/gate-items/{gi_x}/sign", headers=jwt_headers("903"))
 
     graph2 = get_graph(client, project_id, U_PM)
     gi_y = gate_item_id_by_name(graph2, "接口规格")
     task_b = task_id_by_title(graph2, "编写接口规格")
-    client.post(f"/api/v1/ge/tasks/{task_b}/start", headers=jwt_headers("u-lisi"))
+    client.post(f"/api/v1/ge/tasks/{task_b}/start", headers=jwt_headers("903"))
     client.post(
         f"/api/v1/ge/gate-items/{gi_y}/submit",
-        headers=jwt_headers("u-lisi"),
+        headers=jwt_headers("903"),
         json=material_submit_payload("spec"),
     )
-    client.post(f"/api/v1/ge/gate-items/{gi_y}/sign", headers=jwt_headers("u-wangwu"))
+    client.post(f"/api/v1/ge/gate-items/{gi_y}/sign", headers=jwt_headers("904"))
 
     bootstrap_closure_gate(client, project_id, U_PM)
 

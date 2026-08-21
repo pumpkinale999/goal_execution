@@ -8,7 +8,7 @@ from tests.conftest import jwt_headers, service_headers
 def _annual_company(client, year: int = 2026) -> dict:
     resp = client.post(
         "/api/v1/ge/objectives/years",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={"planning_year": year, "name": f"{year} 年度战略目标"},
     )
     assert resp.status_code == 201, resp.text
@@ -33,11 +33,11 @@ def _create_sub(client, company: dict) -> dict:
     dept = {"id": "test-dept-p2"}
     resp = client.post(
         "/api/v1/ge/objectives",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={
             "name": "子目标",
             "parent_id": company_id,
-            "owner_user_id": "u-owner",
+            "owner_user_id": "910",
             "primary_department_id": dept["id"],
             **period_fields,
         },
@@ -51,7 +51,7 @@ def test_create_program_requires_owner_user_id(client):
     sub = _create_sub(client, company)
     resp = client.post(
         "/api/v1/ge/programs",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={"name": "缺 owner", "objective_id": sub["id"]},
     )
     assert resp.status_code == 400
@@ -61,8 +61,8 @@ def test_create_program_requires_owner_user_id(client):
 def test_create_program_requires_objective_id(client):
     resp = client.post(
         "/api/v1/ge/programs",
-        headers=service_headers("reviewer-1", is_reviewer=True),
-        json={"name": "产品群", "owner_user_id": "u-owner"},
+        headers=service_headers("800", is_reviewer=True),
+        json={"name": "产品群", "owner_user_id": "910"},
     )
     assert resp.status_code == 400
     assert resp.json()["detail"] == "objective_id_required"
@@ -72,7 +72,7 @@ def test_create_objective_requires_owner_user_id(client):
     company = _annual_company(client, year=2027)
     resp = client.post(
         "/api/v1/ge/objectives",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={"name": "子目标", "parent_id": company["id"]},
     )
     assert resp.status_code == 400
@@ -86,11 +86,11 @@ def test_jwt_cannot_create_program_directly(client):
     sub = _create_sub(client, company)
     resp = client.post(
         "/api/v1/ge/programs",
-        headers=raw_user_jwt_headers("u-owner"),
+        headers=raw_user_jwt_headers("910"),
         json={
             "name": "JWT 禁止",
             "objective_id": sub["id"],
-            "owner_user_id": "u-owner",
+            "owner_user_id": "910",
             "primary_department_id": sub["primary_department_id"],
         },
     )

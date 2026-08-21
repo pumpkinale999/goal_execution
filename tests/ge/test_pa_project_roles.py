@@ -36,7 +36,7 @@ def test_pa_project_roles_pm_and_roster(client):
 def test_pa_project_roles_product_manager_roster(client):
     created = create_project(client, U_PM)
     pid = created["id"]
-    uid = "u-roster-pm-only"
+    uid = "954"
     assert _add(client, pid, uid, "product_manager").status_code == 201
 
     resp = client.get("/api/v1/ge/me/pa-project-roles", headers=jwt_headers(uid))
@@ -48,7 +48,7 @@ def test_pa_project_roles_product_manager_roster(client):
 
 
 def test_pa_project_roles_steward_no_roster(client):
-    program_id = _seed_program(client, owner="u-gov")
+    program_id = _seed_program(client, owner="955")
     with get_session_factory()() as db:
         program = db.get(GeProgram, program_id)
         assert program is not None
@@ -59,7 +59,7 @@ def test_pa_project_roles_steward_no_roster(client):
 
     created = create_project(
         client,
-        "u-gov",
+        "955",
         body={
             **GOLDEN_PROJECT_BODY,
             "program_id": program_id,
@@ -69,7 +69,7 @@ def test_pa_project_roles_steward_no_roster(client):
     )
     pid = created["id"]
 
-    resp = client.get("/api/v1/ge/me/pa-project-roles", headers=jwt_headers("u-gov"))
+    resp = client.get("/api/v1/ge/me/pa-project-roles", headers=jwt_headers("955"))
     assert resp.status_code == 200, resp.text
     row = next(p for p in resp.json()["projects"] if p["project_id"] == pid)
     assert "steward" in row["my_roles"]

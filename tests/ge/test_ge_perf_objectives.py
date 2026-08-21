@@ -11,7 +11,7 @@ from app.services import ge_sort_order, ge_strategic_lifecycle
 from tests.conftest import jwt_headers, service_headers
 
 
-def _create_dept(client, name: str = "研发部", manager: str = "u-owner") -> str:
+def _create_dept(client, name: str = "研发部", manager: str = "910") -> str:
     """Opaque dept id — GE org HTTP unmounted; authority lives in skstudio."""
     _ = (client, manager)
     return f"test-dept-{name}"
@@ -20,7 +20,7 @@ def _create_dept(client, name: str = "研发部", manager: str = "u-owner") -> s
 def _annual_company(client, year: int = 2026) -> dict:
     resp = client.post(
         "/api/v1/ge/objectives/years",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={"planning_year": year, "name": f"{year} 年度战略目标"},
     )
     assert resp.status_code == 201, resp.text
@@ -30,11 +30,11 @@ def _annual_company(client, year: int = 2026) -> dict:
 def _create_sub(client, company_id: str, name: str, dept_id: str) -> str:
     resp = client.post(
         "/api/v1/ge/objectives",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={
             "name": name,
             "parent_id": company_id,
-            "owner_user_id": "u-owner",
+            "owner_user_id": "910",
             "primary_department_id": dept_id,
         },
     )
@@ -45,11 +45,11 @@ def _create_sub(client, company_id: str, name: str, dept_id: str) -> str:
 def _create_program(client, sub_id: str, name: str, dept_id: str) -> str:
     resp = client.post(
         "/api/v1/ge/programs",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={
             "name": name,
             "objective_id": sub_id,
-            "owner_user_id": "u-owner",
+            "owner_user_id": "910",
             "primary_department_id": dept_id,
         },
     )
@@ -100,7 +100,7 @@ def test_ge_perf_01_no_sibling_queries_and_sql_cap(client, monkeypatch):
     event.listen(engine, "before_cursor_execute", _before)
     try:
         ge_strategic_lifecycle.invalidate_lifecycle_refresh()
-        resp = client.get("/api/v1/ge/objectives", headers=jwt_headers("u-1"))
+        resp = client.get("/api/v1/ge/objectives", headers=jwt_headers("801"))
     finally:
         event.remove(engine, "before_cursor_execute", _before)
 
@@ -129,11 +129,11 @@ def test_ge_perf_03_lifecycle_ttl_skips_second_batch(client, monkeypatch):
         _counting_entities,
     )
 
-    r1 = client.get("/api/v1/ge/objectives", headers=jwt_headers("u-1"))
+    r1 = client.get("/api/v1/ge/objectives", headers=jwt_headers("801"))
     assert r1.status_code == 200
     assert batch_runs["n"] == 1
 
-    r2 = client.get("/api/v1/ge/objectives", headers=jwt_headers("u-1"))
+    r2 = client.get("/api/v1/ge/objectives", headers=jwt_headers("801"))
     assert r2.status_code == 200
     assert batch_runs["n"] == 1
     assert ge_strategic_lifecycle._lifecycle_batch_due() is False
@@ -145,11 +145,11 @@ def test_e_perf_ge_01_invalidate_forces_refresh(client, monkeypatch):
     dept_id = _create_dept(client)
     create = client.post(
         "/api/v1/ge/objectives",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={
             "name": "过期子目标",
             "parent_id": company["id"],
-            "owner_user_id": "u-owner",
+            "owner_user_id": "910",
             "primary_department_id": dept_id,
             "period_granularity": "quarter",
             "period_start": "2020-01-01",
@@ -161,7 +161,7 @@ def test_e_perf_ge_01_invalidate_forces_refresh(client, monkeypatch):
 
     monkeypatch.setattr(ge_strategic_lifecycle, "today", lambda: date(2020, 4, 1))
     ge_strategic_lifecycle.invalidate_lifecycle_refresh()
-    listed = client.get("/api/v1/ge/objectives", headers=jwt_headers("u-1"))
+    listed = client.get("/api/v1/ge/objectives", headers=jwt_headers("801"))
     assert listed.status_code == 200
 
     def _find(nodes, oid):
@@ -180,7 +180,7 @@ def test_e_perf_ge_01_invalidate_forces_refresh(client, monkeypatch):
     # Patch name (§3.1.1) must invalidate TTL
     client.patch(
         f"/api/v1/ge/objectives/{sub_id}",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={"name": "过期子目标-改"},
     )
     assert ge_strategic_lifecycle._lifecycle_batch_due() is True
@@ -189,7 +189,7 @@ def test_e_perf_ge_01_invalidate_forces_refresh(client, monkeypatch):
 def test_ge_perf_07_tree_shape_and_sort(client):
     """GE-PERF-07: tree shape — company → children with programs."""
     ids = _seed_tree(client)
-    resp = client.get("/api/v1/ge/objectives", headers=jwt_headers("u-1"))
+    resp = client.get("/api/v1/ge/objectives", headers=jwt_headers("801"))
     assert resp.status_code == 200
     roots = resp.json()
     company = next(r for r in roots if r["id"] == ids["company_id"])

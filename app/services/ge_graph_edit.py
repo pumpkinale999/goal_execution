@@ -25,6 +25,7 @@ from app.constants import SYSTEM_END_PHASE_NAME, TASK_STATUS_IDLE
 from app.services.ge_access import can_govern_project
 from app.services.ge_gate_includes_sync import sync_gate_includes_for_phase
 from app.services.ge_graph import build_project_graph, load_project_graph, now_iso
+from app.services.ge_person_id import require_person_user_id
 from app.services.ge_schedule_derive import build_program_period, effective_window_for_phase
 from app.services.ge_schedule_validate import (
     parse_plan_date,
@@ -311,7 +312,7 @@ def add_task(db: Session, project_id: str, phase_id: str, body: dict[str, Any], 
     title = str(body.get("title") or "").strip()
     if not title:
         raise HTTPException(status_code=400, detail={"detail": "invalid_request"})
-    assignee = str(body.get("assignee_user_id") or "").strip()
+    assignee = require_person_user_id(str(body.get("assignee_user_id") or ""))
     if not assignee:
         raise HTTPException(status_code=400, detail={"detail": "invalid_assignee"})
     max_order_row = (
@@ -430,7 +431,7 @@ def patch_task(db: Session, task_id: str, body: dict[str, Any], user: AuthUser) 
     if "assignee_user_id" in body:
         if is_system_end_sign_task(task):
             raise HTTPException(status_code=403, detail={"detail": "system_sign_route_immutable"})
-        assignee = str(body.get("assignee_user_id") or "").strip()
+        assignee = require_person_user_id(str(body.get("assignee_user_id") or ""))
         if not assignee:
             raise HTTPException(status_code=400, detail={"detail": "invalid_assignee"})
         if is_system_start_or_end_produce_task(task) and assignee != project.pm_user_id:

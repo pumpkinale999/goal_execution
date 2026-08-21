@@ -17,11 +17,11 @@ from tests.ge.conftest import (
     get_graph,
 )
 
-U_OWNER_A = "u-m41-owner-a"
-U_PMBP_B = "u-m41-pmbp-b"
-U_OWNER_C = "u-m41-owner-c"
-U_OWNER_D = "u-m41-owner-d"
-REV = service_headers("reviewer-1", is_reviewer=True)
+U_OWNER_A = "931"
+U_PMBP_B = "932"
+U_OWNER_C = "933"
+U_OWNER_D = "934"
+REV = service_headers("800", is_reviewer=True)
 
 
 def _detail(resp) -> str:

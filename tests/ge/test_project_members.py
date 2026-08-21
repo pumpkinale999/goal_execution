@@ -15,13 +15,13 @@ from tests.ge.conftest import (
 )
 
 
-U_MEMBER_ONLY = "u-member-only"
-U_NEW_ASSIGNEE = "u-new-assignee"
-U_SINGLETON_A = "u-singleton-a"
-U_SINGLETON_B = "u-singleton-b"
-U_SINGLETON_C = "u-singleton-c"
-U_MEMBER_2 = "u-member-2"
-U_MEMBER_3 = "u-member-3"
+U_MEMBER_ONLY = "921"
+U_NEW_ASSIGNEE = "922"
+U_SINGLETON_A = "923"
+U_SINGLETON_B = "924"
+U_SINGLETON_C = "925"
+U_MEMBER_2 = "926"
+U_MEMBER_3 = "927"
 
 
 def _members(client, project_id: str, user_id: str = U_PM) -> list[dict]:
@@ -252,6 +252,8 @@ def test_ge_t182_assignee_upserts_member_without_overwriting_role(client):
         "name": "assignee upsert",
         "pm_user_id": U_PM,
         "program_id": program_id,
+        "lifecycle_start": "2026-01-01",
+        "lifecycle_end": "2026-12-31",
         "phases": [{"sequence": 1, "name": "方案", "gate_items": [], "tasks": []}],
     }
     created = client.post("/api/v1/ge/projects", headers=jwt_headers(U_PM), json=body)

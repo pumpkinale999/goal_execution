@@ -12,6 +12,7 @@ from app.auth import AuthUser
 from app.models.ge import GeProject, GeProjectMember, GeProjectNoteWriteGrant
 from app.services.ge_access import can_read_project, require_govern_project
 from app.services.ge_graph import now_iso
+from app.services.ge_person_id import require_person_user_id
 
 
 def _project_or_404(db: Session, project_id: str) -> GeProject:
@@ -90,7 +91,7 @@ def replace_write_grants(
     # Governance roles are not stored; silently drop PM (and any non-members → 400)
     wanted: set[str] = set()
     for item in raw_ids:
-        uid = str(item or "").strip()
+        uid = require_person_user_id(str(item or ""))
         if not uid:
             continue
         if uid == project.pm_user_id:

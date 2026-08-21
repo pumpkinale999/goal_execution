@@ -31,6 +31,7 @@ from app.services.ge_graph import (
 from app.services.ge_system_tasks import sync_system_lifecycle_task_assignees
 from app.services.ge_goal_subtree_governor import is_goal_subtree_governor
 from app.services.ge_sort_order import next_project_sort_order
+from app.services.ge_person_id import require_person_user_id
 from app.services.ge_queues import invalidate_project_queue_counts
 from app.services.ge_strategic_lifecycle import invalidate_lifecycle_refresh
 from app.services.ge_ws_callback import dispatch_deviation_personal_assistant
@@ -39,6 +40,13 @@ from app.services.ge_ws_callback import dispatch_deviation_personal_assistant
 def _require_active_project(project: GeProject) -> None:
     if project.status != "active":
         raise HTTPException(status_code=409, detail={"detail": "project_not_active"})
+
+
+def _actor_person_id(user: AuthUser) -> str:
+    person_id = require_person_user_id(user.user_id)
+    if not person_id:
+        raise HTTPException(status_code=400, detail={"detail": "invalid_request"})
+    return person_id
 
 
 def _get_project_or_404(db: Session, project_id: str) -> GeProject:
@@ -105,7 +113,7 @@ def patch_project(db: Session, project_id: str, user: AuthUser, body: dict[str, 
         project.name = name
         changed = True
     if body.get("pm_user_id") is not None:
-        pm_user_id = str(body["pm_user_id"]).strip()
+        pm_user_id = require_person_user_id(str(body["pm_user_id"]))
         if not pm_user_id:
             raise HTTPException(status_code=400, detail={"detail": "invalid_assignee"})
         if pm_user_id != project.pm_user_id:
@@ -331,7 +339,7 @@ def submit_gate_item(
     now = now_iso()
     item.payload_dict = stored_payload
     summary = stored_payload.get("summary") or stored_payload.get("actual_value") or item.name
-    item.submitted_by = user.user_id
+    item.submitted_by = _actor_person_id(user)
     item.submitted_at = now
     item.status = "pending_sign"
     item.updated_at = now
@@ -396,7 +404,7 @@ def sign_gate_item(db: Session, gate_item_id: str, user: AuthUser) -> dict[str, 
     )
     now = now_iso()
     item.status = "signed"
-    item.signed_by = user.user_id
+    item.signed_by = _actor_person_id(user)
     item.signed_at = now
     item.updated_at = now
     from app.services.ge_deviations import active_deviation_for_gate_item, close_deviation_on_sign
@@ -484,7 +492,7 @@ def reject_gate_item(
         raise HTTPException(status_code=403, detail={"detail": "not_eligible_signer"})
     now = now_iso()
     item.status = "rejected"
-    item.rejected_by = user.user_id
+    item.rejected_by = _actor_person_id(user)
     item.rejected_at = now
     item.reject_reason = str(reason)
     item.updated_at = now

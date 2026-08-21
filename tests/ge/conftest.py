@@ -16,12 +16,15 @@ from app.constants import (
 )
 from tests.conftest import jwt_headers, service_headers
 
-U_PM = "u-pm"
-U_ZHANGSAN = "u-zhangsan"
-U_LISI = "u-lisi"
-U_WANGWU = "u-wangwu"
-U_STRANGER = "u-stranger"
-U_CREATOR = "u-creator"
+U_PM = "901"
+U_ZHANGSAN = "902"
+U_LISI = "903"
+U_WANGWU = "904"
+U_STRANGER = "999"
+U_CREATOR = "905"
+U_REVIEWER = "800"
+U_OWNER = "910"
+U_READER = "801"
 
 TEST_PROJECT_NOTE_ID = "a0000000-0000-4000-8000-000000000001"
 
@@ -186,7 +189,7 @@ def _reset_formal_program_cache():
 
 
 def ensure_formal_test_program(
-    client: TestClient, *, reviewer: str = "reviewer-1", owner_user_id: str = U_PM
+    client: TestClient, *, reviewer: str = U_REVIEWER, owner_user_id: str = U_PM
 ) -> str:
     """Create annual sub + program for tests that create projects (once per test DB)."""
     global _cached_formal_program_id
@@ -434,7 +437,7 @@ def ensure_program_period(
     period_start: str,
     period_end: str,
     period_granularity: str = "year",
-    reviewer: str = "reviewer-1",
+    reviewer: str = "800",
 ) -> dict[str, Any]:
     resp = client.patch(
         f"/api/v1/ge/programs/{program_id}",

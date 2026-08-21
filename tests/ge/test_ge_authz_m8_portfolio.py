@@ -22,7 +22,7 @@ def _seed_dept(dept_id: str = "m8-dept-a") -> str:
                 OrgDepartment(
                     id=dept_id,
                     name="M8 Dept",
-                    manager_user_id="u-mgr",
+                    manager_user_id="964",
                     parent_id=None,
                     sort_order=1,
                     created_at=now,

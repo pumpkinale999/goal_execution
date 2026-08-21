@@ -15,6 +15,7 @@ from app.services.ge_access import can_read_project, require_govern_project
 from app.services.ge_accountability import display_name
 from app.services.ge_graph import now_iso
 from app.services.ge_note_write_grants import delete_grants_for_user
+from app.services.ge_person_id import require_person_user_id
 
 SLUG_PROJECT_MANAGER = "project_manager"
 SLUG_MEMBER = "member"
@@ -156,7 +157,7 @@ def list_members(db: Session, project_id: str, user: AuthUser) -> dict[str, Any]
 def add_member(db: Session, project_id: str, body: dict[str, Any], user: AuthUser) -> dict[str, Any]:
     project = _project_or_404(db, project_id)
     require_govern_project(db, project, user)
-    user_id = str(body.get("user_id") or "").strip()
+    user_id = require_person_user_id(str(body.get("user_id") or ""))
     role_option_id = str(body.get("role_option_id") or "").strip()
     if not user_id or not role_option_id:
         raise HTTPException(status_code=400, detail={"detail": "invalid_request"})

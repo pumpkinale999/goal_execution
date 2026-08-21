@@ -30,13 +30,13 @@ def test_me_project_access_pm_role_and_visibility(client):
 def test_me_project_access_member_and_singletons(client):
     created = create_project(client, U_PM)
     pid = created["id"]
-    assert _add(client, pid, "u-singleton-a", "product_manager").status_code == 201
+    assert _add(client, pid, "923", "product_manager").status_code == 201
 
     resp = client.get("/api/v1/ge/me/project-access", headers=jwt_headers(U_ZHANGSAN))
     assert resp.status_code == 200, resp.text
     row = next(p for p in resp.json()["projects"] if p["project_id"] == pid)
     assert row["role"] == "member"
-    assert row["doc_singletons"]["product_manager"] == "u-singleton-a"
+    assert row["doc_singletons"]["product_manager"] == "923"
     assert row["doc_singletons"]["technical_designer"] == ""
 
 

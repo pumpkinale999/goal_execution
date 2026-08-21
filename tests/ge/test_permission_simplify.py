@@ -51,14 +51,14 @@ def test_reviewer_service_token_can_proxy_submit_and_sign(client):
 
     submit = client.post(
         f"/api/v1/ge/gate-items/{gi_x}/submit",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json=material_submit_payload("评审员代提交"),
     )
     assert submit.status_code == 200, submit.text
 
     sign = client.post(
         f"/api/v1/ge/gate-items/{gi_x}/sign",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
     )
     assert sign.status_code == 200, sign.text
 
@@ -71,5 +71,5 @@ def test_assignee_cannot_graph_edit(client):
 
 def test_stranger_cannot_read_project(client):
     created = create_project(client, U_PM, {**GOLDEN_PROJECT_BODY})
-    resp = client.get(f"/api/v1/ge/projects/{created['id']}", headers=jwt_headers("u-stranger"))
+    resp = client.get(f"/api/v1/ge/projects/{created['id']}", headers=jwt_headers("999"))
     assert resp.status_code == 403

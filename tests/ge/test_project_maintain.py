@@ -15,7 +15,7 @@ from tests.ge.conftest import (
 def _annual_company(client, year: int = 2026) -> dict:
     resp = client.post(
         "/api/v1/ge/objectives/years",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={"planning_year": year, "name": f"{year} 年度战略目标"},
     )
     assert resp.status_code == 201, resp.text
@@ -46,11 +46,11 @@ def _create_sub(client, company: dict, name: str = "测试子目标") -> dict:
     dept = {"id": f"test-dept-{name}"}
     resp = client.post(
         "/api/v1/ge/objectives",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={
             "name": name,
             "parent_id": company_id,
-            "owner_user_id": "u-owner",
+            "owner_user_id": "910",
             "primary_department_id": dept["id"],
             **_sub_period_fields(company),
         },
@@ -85,7 +85,7 @@ def test_patch_project_forbidden_non_pm(client):
 def test_create_program_requires_objective_id(client):
     resp = client.post(
         "/api/v1/ge/programs",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={"name": "产品群"},
     )
     assert resp.status_code == 400
@@ -96,8 +96,8 @@ def test_create_program_on_company_objective_forbidden(client):
     company = _annual_company(client)
     resp = client.post(
         "/api/v1/ge/programs",
-        headers=service_headers("reviewer-1", is_reviewer=True),
-        json={"name": "产品群", "objective_id": company["id"], "owner_user_id": "u-owner"},
+        headers=service_headers("800", is_reviewer=True),
+        json={"name": "产品群", "objective_id": company["id"], "owner_user_id": "910"},
     )
     assert resp.status_code == 400
     assert resp.json()["detail"] == "program_requires_sub_objective"
@@ -108,11 +108,11 @@ def test_create_and_patch_program(client):
     sub = _create_sub(client, company)
     create = client.post(
         "/api/v1/ge/programs",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={
             "name": "产品群",
             "objective_id": sub["id"],
-            "owner_user_id": "u-owner",
+            "owner_user_id": "910",
             "primary_department_id": sub["primary_department_id"],
         },
     )
@@ -120,7 +120,7 @@ def test_create_and_patch_program(client):
     program_id = create.json()["id"]
     patch = client.patch(
         f"/api/v1/ge/programs/{program_id}",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={"name": "产品群（改）"},
     )
     assert patch.status_code == 200
@@ -132,11 +132,11 @@ def test_patch_program_to_company_objective_forbidden(client):
     sub = _create_sub(client, company, name="子目标A")
     create = client.post(
         "/api/v1/ge/programs",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={
             "name": "产品群",
             "objective_id": sub["id"],
-            "owner_user_id": "u-owner",
+            "owner_user_id": "910",
             "primary_department_id": sub["primary_department_id"],
             "period_granularity": "quarter",
             "period_start": "2027-01-01",
@@ -147,7 +147,7 @@ def test_patch_program_to_company_objective_forbidden(client):
     program_id = create.json()["id"]
     resp = client.patch(
         f"/api/v1/ge/programs/{program_id}",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={"objective_id": company["id"]},
     )
     assert resp.status_code == 400
@@ -158,8 +158,8 @@ def test_create_sub_objective(client):
     company = _annual_company(client, year=2028)
     create = client.post(
         "/api/v1/ge/objectives",
-        headers=service_headers("reviewer-1", is_reviewer=True),
-        json={"name": "2026 增长", "parent_id": company["id"], "owner_user_id": "u-owner"},
+        headers=service_headers("800", is_reviewer=True),
+        json={"name": "2026 增长", "parent_id": company["id"], "owner_user_id": "910"},
     )
     assert create.status_code == 400
     assert create.json()["detail"] == "primary_department_required"
@@ -170,7 +170,7 @@ def test_delete_sub_objective(client):
     sub = _create_sub(client, company, name="待删子目标")
     deleted = client.delete(
         f"/api/v1/ge/objectives/{sub['id']}",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
     )
     assert deleted.status_code == 204
 

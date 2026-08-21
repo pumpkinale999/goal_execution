@@ -23,6 +23,7 @@ from app.models.ge import (
 )
 from app.models.org import UserOrgProfile
 from app.services.ge_access import can_govern_project, require_govern_project
+from app.services.ge_person_id import require_person_user_id
 from app.services.ge_graph import (
     now_iso,
     record_audit,
@@ -324,6 +325,9 @@ def open_deviation(
     if project is None or project.deleted_at is not None:
         raise HTTPException(status_code=404, detail={"detail": "project_not_found"})
     _require_governor(db, project, user)
+    opened_by = require_person_user_id(user.user_id)
+    if not opened_by:
+        raise HTTPException(status_code=400, detail={"detail": "invalid_request"})
     if active_deviation_for_gate_item(db, item.id):
         raise HTTPException(status_code=409, detail={"detail": "deviation_already_open"})
     if item.status in ("signed", "deviation"):
@@ -360,7 +364,7 @@ def open_deviation(
         gate_item_status_at_open=item.status,
         superseded_task_status_at_open=superseded.status,
         revision=0,
-        opened_by_user_id=user.user_id,
+        opened_by_user_id=opened_by,
         opened_at=now,
         created_at=now,
         updated_at=now,
@@ -440,7 +444,10 @@ def activate_deviation(
     now = now_iso()
     remediation_id = str(uuid.uuid4())
     assignee = body.get("assignee_user_id")
-    assignee_id = str(assignee).strip() if assignee is not None and str(assignee).strip() else superseded.assignee_user_id
+    if assignee is not None and str(assignee).strip():
+        assignee_id = require_person_user_id(str(assignee))
+    else:
+        assignee_id = superseded.assignee_user_id
     remediation = GeTask(
         id=remediation_id,
         project_id=project.id,

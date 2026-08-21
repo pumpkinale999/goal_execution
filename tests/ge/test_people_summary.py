@@ -13,7 +13,7 @@ from tests.ge.conftest import (
 )
 
 
-def _create_dept(client, name: str = "研发部", manager: str = "u-owner") -> str:
+def _create_dept(client, name: str = "研发部", manager: str = "910") -> str:
     """Opaque dept id — GE org HTTP unmounted; authority lives in skstudio."""
     _ = (client, manager)
     return f"test-dept-{name}"
@@ -22,7 +22,7 @@ def _create_dept(client, name: str = "研发部", manager: str = "u-owner") -> s
 def _annual_company(client, year: int = 2026) -> dict:
     resp = client.post(
         "/api/v1/ge/objectives/years",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={"planning_year": year, "name": f"{year} 年度战略目标"},
     )
     assert resp.status_code == 201, resp.text
@@ -32,11 +32,11 @@ def _annual_company(client, year: int = 2026) -> dict:
 def _create_sub_and_program(client, company_id: str, dept_id: str) -> tuple[dict, dict]:
     sub = client.post(
         "/api/v1/ge/objectives",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={
             "name": "子目标",
             "parent_id": company_id,
-            "owner_user_id": "u-owner",
+            "owner_user_id": "910",
             "primary_department_id": dept_id,
         },
     )
@@ -44,11 +44,11 @@ def _create_sub_and_program(client, company_id: str, dept_id: str) -> tuple[dict
     sub_body = sub.json()
     prog = client.post(
         "/api/v1/ge/programs",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={
             "name": "专项",
             "objective_id": sub_body["id"],
-            "owner_user_id": "u-prog-owner",
+            "owner_user_id": "911",
             "primary_department_id": dept_id,
         },
     )
@@ -59,7 +59,7 @@ def _create_sub_and_program(client, company_id: str, dept_id: str) -> tuple[dict
 def _create_project_on_program(client, program_id: str, *, pm_user_id: str = U_PM) -> dict:
     resp = client.post(
         "/api/v1/ge/projects",
-        headers=jwt_headers("u-owner"),
+        headers=jwt_headers("910"),
         json={
             **GOLDEN_PROJECT_BODY,
             "program_id": program_id,
@@ -69,7 +69,7 @@ def _create_project_on_program(client, program_id: str, *, pm_user_id: str = U_P
     )
     assert resp.status_code == 201, resp.text
     created = resp.json()
-    bootstrap_startup_gate(client, created["id"], "u-owner")
+    bootstrap_startup_gate(client, created["id"], "910")
     return created
 
 
@@ -82,7 +82,7 @@ def test_program_and_project_people_summary(client):
 
     prog_resp = client.get(
         f"/api/v1/ge/programs/{prog['id']}/people-summary",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
     )
     assert prog_resp.status_code == 200
     prog_body = prog_resp.json()
@@ -119,7 +119,7 @@ def test_include_completed_filter(client):
 
     hidden = client.get(
         f"/api/v1/ge/programs/{prog['id']}/people-summary",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
     )
     assert hidden.status_code == 200
     pm_accountable = [r for r in hidden.json()["accountable"] if r["user_id"] == U_PM]
@@ -127,7 +127,7 @@ def test_include_completed_filter(client):
 
     shown = client.get(
         f"/api/v1/ge/programs/{prog['id']}/people-summary?include_completed=1",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
     )
     assert shown.status_code == 200
     pm_accountable = [r for r in shown.json()["accountable"] if r["user_id"] == U_PM]

@@ -30,6 +30,7 @@ from app.models.ge import (
     GeTaskGateItemProduce,
 )
 from app.services.ge_graph import now_iso, record_audit
+from app.services.ge_person_id import optional_person_user_id, require_person_user_id
 from app.services.ge_goal_subtree_governor import (
     attach_effective_pmbp,
     effective_pmbp_for_objective,
@@ -69,16 +70,13 @@ def _require_owner(body: dict[str, Any]) -> str:
     owner = body.get("owner_user_id")
     if owner is None or not str(owner).strip():
         raise HTTPException(status_code=400, detail={"detail": "owner_required"})
-    return str(owner).strip()
+    return require_person_user_id(str(owner))
 
 
 def _optional_pmbp_user_id(body: dict[str, Any]) -> str | None:
     if "pmbp_user_id" not in body:
         return None
-    raw = body.get("pmbp_user_id")
-    if raw is None or not str(raw).strip():
-        return None
-    return str(raw).strip()
+    return optional_person_user_id(body.get("pmbp_user_id"))
 
 
 def _is_lifecycle_locked(entity: GeObjective | GeProgram) -> bool:
@@ -244,7 +242,10 @@ def patch_objective(db: Session, objective_id: str, body: dict[str, Any]) -> dic
                 _assert_annual_name_unique(db, year=year, name=name, exclude_id=obj.id)
         obj.name = name
     if "owner_user_id" in body:
-        obj.owner_user_id = body.get("owner_user_id")
+        raw = body.get("owner_user_id")
+        if raw is None or not str(raw).strip():
+            raise HTTPException(status_code=400, detail={"detail": "owner_required"})
+        obj.owner_user_id = require_person_user_id(str(raw))
     if "pmbp_user_id" in body:
         obj.pmbp_user_id = _optional_pmbp_user_id(body)
     if "primary_department_id" in body and obj.level == "sub":
@@ -322,7 +323,10 @@ def patch_program(db: Session, program_id: str, body: dict[str, Any]) -> dict[st
         _require_sub_objective(objective)
         program.objective_id = objective_id
     if "owner_user_id" in body:
-        program.owner_user_id = body.get("owner_user_id")
+        raw = body.get("owner_user_id")
+        if raw is None or not str(raw).strip():
+            raise HTTPException(status_code=400, detail={"detail": "owner_required"})
+        program.owner_user_id = require_person_user_id(str(raw))
     if "pmbp_user_id" in body:
         program.pmbp_user_id = _optional_pmbp_user_id(body)
     if "primary_department_id" in body:
@@ -392,9 +396,9 @@ def create_objective_year(db: Session, body: dict[str, Any], *, actor_user_id: s
     now = now_iso()
     raw_owner = body.get("owner_user_id")
     owner_user_id = (
-        str(raw_owner).strip()
+        require_person_user_id(str(raw_owner))
         if raw_owner is not None and str(raw_owner).strip()
-        else str(actor_user_id)
+        else require_person_user_id(str(actor_user_id))
     )
 
     company = GeObjective(

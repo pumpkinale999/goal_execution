@@ -5,7 +5,7 @@ from __future__ import annotations
 from tests.conftest import jwt_headers, service_headers
 
 
-def _create_dept(client, name: str = "研发部", manager: str = "u-owner") -> str:
+def _create_dept(client, name: str = "研发部", manager: str = "910") -> str:
     """Opaque dept id — GE org HTTP unmounted; authority lives in skstudio."""
     _ = (client, manager)
     return f"test-dept-{name}"
@@ -14,7 +14,7 @@ def _create_dept(client, name: str = "研发部", manager: str = "u-owner") -> s
 def _annual_company(client, year: int = 2026) -> dict:
     resp = client.post(
         "/api/v1/ge/objectives/years",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={"planning_year": year, "name": f"{year} 年度战略目标"},
     )
     assert resp.status_code == 201, resp.text
@@ -24,11 +24,11 @@ def _annual_company(client, year: int = 2026) -> dict:
 def _create_sub(client, company_id: str, name: str, dept_id: str) -> str:
     resp = client.post(
         "/api/v1/ge/objectives",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={
             "name": name,
             "parent_id": company_id,
-            "owner_user_id": "u-owner",
+            "owner_user_id": "910",
             "primary_department_id": dept_id,
         },
     )
@@ -39,11 +39,11 @@ def _create_sub(client, company_id: str, name: str, dept_id: str) -> str:
 def _create_program(client, sub_id: str, name: str, dept_id: str) -> str:
     resp = client.post(
         "/api/v1/ge/programs",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={
             "name": name,
             "objective_id": sub_id,
-            "owner_user_id": "u-owner",
+            "owner_user_id": "910",
             "primary_department_id": dept_id,
         },
     )
@@ -54,10 +54,10 @@ def _create_program(client, sub_id: str, name: str, dept_id: str) -> str:
 def _create_project(client, program_id: str, name: str) -> str:
     resp = client.post(
         "/api/v1/ge/projects",
-        headers=jwt_headers("u-owner"),
+        headers=jwt_headers("910"),
         json={
             "name": name,
-            "pm_user_id": "u-owner",
+            "pm_user_id": "910",
             "program_id": program_id,
             "phases": [{"sequence": 1, "name": "阶段1", "gate_items": [], "tasks": []}],
         },
@@ -67,7 +67,7 @@ def _create_project(client, program_id: str, name: str) -> str:
 
 
 def _find_company(client, company_id: str) -> dict:
-    resp = client.get("/api/v1/ge/objectives", headers=jwt_headers("u-1"))
+    resp = client.get("/api/v1/ge/objectives", headers=jwt_headers("801"))
     assert resp.status_code == 200
     return next(item for item in resp.json() if item["id"] == company_id)
 
@@ -97,7 +97,7 @@ def test_sub_objective_reorder(client):
 
     resp = client.post(
         f"/api/v1/ge/objectives/{sub_a}/reorder",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={"direction": "down"},
     )
     assert resp.status_code == 200
@@ -117,7 +117,7 @@ def test_program_reorder(client):
 
     resp = client.post(
         f"/api/v1/ge/programs/{prog_b}/reorder",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={"direction": "up"},
     )
     assert resp.status_code == 200
@@ -139,14 +139,14 @@ def test_project_reorder(client):
 
     resp = client.post(
         f"/api/v1/ge/projects/{proj_b}/reorder",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={"direction": "up"},
     )
     assert resp.status_code == 200
 
     detail = client.get(
         f"/api/v1/ge/programs/{program_id}",
-        headers=jwt_headers("u-owner"),
+        headers=jwt_headers("910"),
     ).json()
     project_ids = [project["id"] for project in detail["projects"]]
     assert project_ids == [proj_b, proj_a]
@@ -161,13 +161,13 @@ def test_copy_year_preserves_sort_order(client):
     prog_second = _create_program(client, sub_id, "Second", dept_id)
     client.post(
         f"/api/v1/ge/programs/{prog_second}/reorder",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={"direction": "up"},
     )
 
     target = client.post(
         "/api/v1/ge/objectives/years",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={
             "planning_year": 2027,
             "name": "2027 年度战略目标",
@@ -191,7 +191,7 @@ def test_annual_roots_sorted_by_year_desc(client):
     _annual_company(client, 2024)
     _annual_company(client, 2026)
 
-    resp = client.get("/api/v1/ge/objectives", headers=jwt_headers("u-1"))
+    resp = client.get("/api/v1/ge/objectives", headers=jwt_headers("801"))
     assert resp.status_code == 200
     annual_roots = [
         item
@@ -217,7 +217,7 @@ def test_reorder_blocked_for_archived(client):
         db.commit()
     resp_archived = client.post(
         f"/api/v1/ge/objectives/{sub_id}/reorder",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={"direction": "down"},
     )
     assert resp_archived.status_code == 403
@@ -228,21 +228,21 @@ def test_reorder_company_roots_same_year_only(client):
     """GE-T197: company root reorder swaps same-year siblings only."""
     other_year = client.post(
         "/api/v1/ge/objectives/years",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={"planning_year": 2025, "name": "2025 根"},
     ).json()
     r1 = client.post(
         "/api/v1/ge/objectives/years",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={"planning_year": 2026, "name": "R1"},
     ).json()
     r2 = client.post(
         "/api/v1/ge/objectives/years",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={"planning_year": 2026, "name": "R2"},
     ).json()
 
-    before = client.get("/api/v1/ge/objectives", headers=jwt_headers("u-1")).json()
+    before = client.get("/api/v1/ge/objectives", headers=jwt_headers("801")).json()
     annual = [item for item in before if item.get("level") == "company" and not item.get("is_default")]
     years_before = [item["planning_year"] for item in annual]
     assert years_before == sorted(years_before, reverse=True)
@@ -251,12 +251,12 @@ def test_reorder_company_roots_same_year_only(client):
 
     resp = client.post(
         f"/api/v1/ge/objectives/{r2['id']}/reorder",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={"direction": "up"},
     )
     assert resp.status_code == 200, resp.text
 
-    after = client.get("/api/v1/ge/objectives", headers=jwt_headers("u-1")).json()
+    after = client.get("/api/v1/ge/objectives", headers=jwt_headers("801")).json()
     annual_after = [
         item for item in after if item.get("level") == "company" and not item.get("is_default")
     ]
@@ -283,7 +283,7 @@ def test_reorder_archived_company_root_blocked(client):
         db.commit()
     resp = client.post(
         f"/api/v1/ge/objectives/{root['id']}/reorder",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={"direction": "down"},
     )
     assert resp.status_code == 403

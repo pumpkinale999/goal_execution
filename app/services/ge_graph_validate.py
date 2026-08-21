@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.models.ge import GeGateGateItemInclude, GeGateItem, GePhase, GeTaskGateItemPrerequisite, GeTaskGateItemProduce
 from app.services.ge_graph import load_project_graph
 from app.constants import SYSTEM_END_PHASE_NAME
+from app.services.ge_person_id import require_person_user_id
 from app.services.ge_system_phases import is_start_phase
 
 
@@ -37,8 +38,10 @@ def validate_phases_body(
             if form not in ("material", "metric", "status"):
                 raise HTTPException(status_code=400, detail={"detail": "unsupported_gate_item_form"})
         for task in phase.get("tasks") or []:
-            if not task.get("assignee_user_id"):
+            assignee = require_person_user_id(str(task.get("assignee_user_id") or ""))
+            if not assignee:
                 raise HTTPException(status_code=400, detail={"detail": "invalid_assignee"})
+            task["assignee_user_id"] = assignee
             produces = set(task.get("produces") or [])
             prerequisites = set(task.get("prerequisites") or [])
             if produces & prerequisites:

@@ -71,7 +71,7 @@ def test_submitted_gate_item_not_movable(client):
 
     submit = client.post(
         f"/api/v1/ge/gate-items/{gi_id}/submit",
-        headers=jwt_headers("u-zhangsan"),
+        headers=jwt_headers("902"),
         json=material_submit_payload("submitted"),
     )
     assert submit.status_code == 200

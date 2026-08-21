@@ -6,7 +6,7 @@ from tests.conftest import jwt_headers
 
 
 def test_objectives_tree_has_no_default_chain(client):
-    resp = client.get("/api/v1/ge/objectives", headers=jwt_headers("u-1"))
+    resp = client.get("/api/v1/ge/objectives", headers=jwt_headers("801"))
     assert resp.status_code == 200
     data = resp.json()
     assert not any(obj.get("is_default") for obj in data)

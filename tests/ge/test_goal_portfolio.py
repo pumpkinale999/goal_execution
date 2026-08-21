@@ -6,7 +6,7 @@ from tests.conftest import jwt_headers, service_headers
 from tests.ge.conftest import GOLDEN_PROJECT_BODY, U_PM, U_ZHANGSAN, bootstrap_startup_gate
 
 
-def _create_project_on_program(client, program_id: str, *, pm_user_id: str = U_PM, owner_user_id: str = "u-owner") -> dict:
+def _create_project_on_program(client, program_id: str, *, pm_user_id: str = U_PM, owner_user_id: str = "910") -> dict:
     resp = client.post(
         "/api/v1/ge/projects",
         headers=jwt_headers(owner_user_id),
@@ -23,7 +23,7 @@ def _create_project_on_program(client, program_id: str, *, pm_user_id: str = U_P
     return created
 
 
-def _create_dept(client, name: str = "研发部", manager: str = "u-owner") -> str:
+def _create_dept(client, name: str = "研发部", manager: str = "910") -> str:
     """Opaque dept id — GE org HTTP unmounted; authority lives in skstudio."""
     _ = (client, manager)
     return f"test-dept-{name}"
@@ -32,17 +32,17 @@ def _create_dept(client, name: str = "研发部", manager: str = "u-owner") -> s
 def _annual_company(client, year: int = 2026) -> dict:
     resp = client.post(
         "/api/v1/ge/objectives/years",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={"planning_year": year, "name": f"{year} 年度战略目标"},
     )
     assert resp.status_code == 201, resp.text
     return resp.json()
 
 
-def _create_sub_and_program(client, company_id: str, dept_id: str, *, owner: str = "u-owner") -> tuple[dict, dict]:
+def _create_sub_and_program(client, company_id: str, dept_id: str, *, owner: str = "910") -> tuple[dict, dict]:
     sub = client.post(
         "/api/v1/ge/objectives",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={
             "name": "子目标",
             "parent_id": company_id,
@@ -54,11 +54,11 @@ def _create_sub_and_program(client, company_id: str, dept_id: str, *, owner: str
     sub_body = sub.json()
     prog = client.post(
         "/api/v1/ge/programs",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={
             "name": "专项",
             "objective_id": sub_body["id"],
-            "owner_user_id": "u-prog-owner",
+            "owner_user_id": "911",
             "primary_department_id": dept_id,
         },
     )
@@ -69,7 +69,7 @@ def _create_sub_and_program(client, company_id: str, dept_id: str, *, owner: str
 def _create_membership(client, user_id: str, department_id: str, team_id: str | None = None) -> None:
     resp = client.post(
         f"/api/v1/org/users/{user_id}/memberships",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={"department_id": department_id, "team_id": team_id},
     )
     assert resp.status_code == 201, resp.text
@@ -86,7 +86,7 @@ def test_department_goal_portfolio_primary_and_participation(client):
 
     resp = client.get(
         f"/api/v1/ge/portfolios/departments/{dept_id}",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
     )
     assert resp.status_code == 200, resp.text
     body = resp.json()
@@ -107,7 +107,7 @@ def test_team_and_user_goal_portfolio(client):
     sub, prog = _create_sub_and_program(client, company["id"], dept_id, owner=U_PM)
     team_resp = client.post(
         "/api/v1/org/teams",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={"department_id": dept_id, "name": "平台组", "lead_user_id": U_PM},
     )
     assert team_resp.status_code == 201, team_resp.text
@@ -117,7 +117,7 @@ def test_team_and_user_goal_portfolio(client):
 
     team_portfolio = client.get(
         f"/api/v1/ge/portfolios/teams/{team_id}",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
     )
     assert team_portfolio.status_code == 200
     assert "primary" not in team_portfolio.json()
@@ -125,7 +125,7 @@ def test_team_and_user_goal_portfolio(client):
 
     user_portfolio = client.get(
         f"/api/v1/ge/portfolios/users/{U_PM}",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
     )
     assert user_portfolio.status_code == 200
     user_body = user_portfolio.json()
@@ -133,7 +133,7 @@ def test_team_and_user_goal_portfolio(client):
 
     zhangsan_portfolio = client.get(
         f"/api/v1/ge/portfolios/users/{U_ZHANGSAN}",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
     )
     assert zhangsan_portfolio.status_code == 200
     assert any(row["user_id"] == U_ZHANGSAN for row in zhangsan_portfolio.json()["contributing"])
@@ -147,7 +147,7 @@ def test_delete_department_blocked_when_primary_objectives(client):
 
     resp = client.delete(
         f"/api/v1/org/departments/{dept_id}",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
     )
     assert resp.status_code == 409
     assert resp.json()["detail"] == "department_has_primary_objectives"
@@ -162,7 +162,7 @@ def test_migrate_then_delete_department(client):
 
     migrate = client.post(
         f"/api/v1/ge/portfolios/departments/{source_id}/migrate-primary-objectives",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
         json={"target_department_id": target_id},
     )
     assert migrate.status_code == 200, migrate.text
@@ -170,13 +170,13 @@ def test_migrate_then_delete_department(client):
 
     delete = client.delete(
         f"/api/v1/org/departments/{source_id}",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
     )
     assert delete.status_code == 204
 
     portfolio = client.get(
         f"/api/v1/ge/portfolios/departments/{target_id}",
-        headers=service_headers("reviewer-1", is_reviewer=True),
+        headers=service_headers("800", is_reviewer=True),
     )
     assert portfolio.status_code == 200
     assert len(portfolio.json()["primary"]) >= 1

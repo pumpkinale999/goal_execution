@@ -39,6 +39,7 @@ from app.services.ge_schedule_validate import (
     validate_gate_item_due_in_phase,
     validate_phase_window,
 )
+from app.services.ge_person_id import require_person_user_id
 from app.services.ge_sort_order import next_project_sort_order
 from app.services.ge_strategic_lifecycle import invalidate_lifecycle_refresh
 from app.services.ge_system_tasks import _ensure_prerequisite_link, seed_system_lifecycle_graph
@@ -130,7 +131,7 @@ def create_project(
     commit: bool = True,
 ) -> dict[str, Any]:
     start_start, start_end, end_start, end_end = _parse_lifecycle_dates(body)
-    pm_user_id = str(body.get("pm_user_id") or "").strip()
+    pm_user_id = require_person_user_id(str(body.get("pm_user_id") or ""))
     if not pm_user_id:
         raise HTTPException(status_code=400, detail={"detail": "invalid_assignee"})
     business_phases = normalize_business_phases_for_create(
@@ -157,7 +158,9 @@ def create_project(
         if not actor_user_id:
             raise HTTPException(status_code=400, detail={"detail": "invalid_request"})
         user = AuthUser(user_id=str(actor_user_id), auth_method="service", is_reviewer=False)
-    actor_user_id = user.user_id
+    actor_user_id = require_person_user_id(user.user_id)
+    if not actor_user_id:
+        raise HTTPException(status_code=400, detail={"detail": "invalid_request"})
     if not can_create_project(db, user, program_id=program_id):
         raise HTTPException(status_code=403, detail={"detail": "not_goal_subtree_governor"})
     project_id = str(uuid.uuid4())
