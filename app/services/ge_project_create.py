@@ -38,6 +38,7 @@ from app.services.ge_schedule_validate import (
     plan_date_to_ord,
     validate_gate_item_due_in_phase,
     validate_phase_window,
+    validate_project_schedule_at_create,
 )
 from app.services.ge_person_id import require_person_user_id
 from app.services.ge_sort_order import next_project_sort_order
@@ -350,6 +351,19 @@ def create_project(
     ensure_members_for_project_assignees(db, project_id=project_id)
     upsert_pm(db, project_id=project_id, pm_user_id=pm_user_id)
     db.flush()
+    from app.models.ge import GeObjective
+    from app.services.ge_schedule_derive import build_program_period
+    from app.services.ge_schedule_validate import validate_project_schedule_at_create
+
+    program = db.get(GeProgram, program_id)
+    objective = None
+    if program is not None:
+        objective = program.objective or db.get(GeObjective, program.objective_id)
+    program_period = build_program_period(program, objective=objective)
+    project_phases = (
+        db.query(GePhase).filter(GePhase.project_id == project_id).order_by(GePhase.sequence).all()
+    )
+    validate_project_schedule_at_create(project_phases, program_period=program_period, require_program=True)
     validate_project_graph_db(db, project_id)
     record_audit(
         db,

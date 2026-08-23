@@ -296,6 +296,106 @@ def validate_project_schedule(
                 )
 
 
+def validate_project_schedule_at_create(
+    phases: list[PhaseScheduleLike],
+    *,
+    program_period: dict[str, Any] | None = None,
+    require_program: bool = True,
+) -> None:
+    """Create-time schedule guard: program bounds + bookend ordering; no adjacent overlap.
+
+    Default 方案 shell may overlap 开始占位 until patch_phase; full graph checks run on edit.
+    """
+    if require_program:
+        require_program_period(program_period)
+
+    for phase in phases:
+        validate_phase_window(phase.planned_start, phase.planned_end)
+
+    if program_period_ok(program_period):
+        assert program_period is not None
+        _validate_program_bounds(phases, program_period)
+
+    start = _start_system_phase(phases)
+    end = _end_system_phase(phases)
+    if (
+        start
+        and start.planned_start
+        and start.planned_end
+        and end
+        and end.planned_start
+        and end.planned_end
+    ):
+        start_ord = plan_date_to_ord(start.planned_start)
+        end_ord = plan_date_to_ord(end.planned_end)
+        if start_ord > end_ord:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "detail": "invalid_project_schedule",
+                    "reason": "start_after_end",
+                    "start_window": {"planned_start": start.planned_start, "planned_end": start.planned_end},
+                    "end_window": {"planned_start": end.planned_start, "planned_end": end.planned_end},
+                },
+            )
+        if plan_date_to_ord(start.planned_end) > end_ord:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "detail": "invalid_project_schedule",
+                    "reason": "start_end_after_project_end",
+                    "start_window": {"planned_start": start.planned_start, "planned_end": start.planned_end},
+                    "end_window": {"planned_start": end.planned_start, "planned_end": end.planned_end},
+                },
+            )
+        if plan_date_to_ord(end.planned_start) < start_ord:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "detail": "invalid_project_schedule",
+                    "reason": "end_start_before_project_start",
+                    "start_window": {"planned_start": start.planned_start, "planned_end": start.planned_end},
+                    "end_window": {"planned_start": end.planned_start, "planned_end": end.planned_end},
+                },
+            )
+
+        project_start = start.planned_start
+        project_end = end.planned_end
+        sorted_phases = sorted(phases, key=lambda p: p.sequence)
+        for phase in phases:
+            if phase.is_system:
+                continue
+            win_start, win_end = effective_window_for_phase(phase, sorted_phases, program_period)
+            if not win_start or not win_end:
+                continue
+            if plan_date_to_ord(win_start) < plan_date_to_ord(project_start):
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "detail": "phase_schedule_outside_project",
+                        "phase_name": phase.name,
+                        "phase_window": {"planned_start": win_start, "planned_end": win_end},
+                        "project_window": {
+                            "planned_start": project_start,
+                            "planned_end": project_end,
+                        },
+                    },
+                )
+            if plan_date_to_ord(win_end) > plan_date_to_ord(project_end):
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "detail": "phase_schedule_outside_project",
+                        "phase_name": phase.name,
+                        "phase_window": {"planned_start": win_start, "planned_end": win_end},
+                        "project_window": {
+                            "planned_start": project_start,
+                            "planned_end": project_end,
+                        },
+                    },
+                )
+
+
 def reject_task_schedule_fields(body: dict[str, Any]) -> None:
     if TASK_SCHEDULE_KEYS.intersection(body.keys()):
         raise HTTPException(status_code=400, detail={"detail": "unsupported_task_schedule_field"})

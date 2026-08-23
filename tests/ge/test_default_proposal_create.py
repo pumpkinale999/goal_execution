@@ -97,3 +97,46 @@ def test_create_rejects_inverted_lifecycle(client):
     )
     assert resp.status_code == 400
     assert resp.json()["detail"] == "invalid_lifecycle_window"
+
+
+def test_create_rejects_out_of_bounds_bookends(client):
+    """M-C: end bookend past program period is rejected at create (not failed_partial later)."""
+    program_id = ensure_formal_test_program(client)
+    from app.db import get_session_factory
+    from app.models.ge import GeProgram
+
+    with get_session_factory()() as db:
+        program = db.get(GeProgram, program_id)
+        assert program is not None
+        program.period_start = "2026-07-01"
+        program.period_end = "2026-09-30"
+        db.commit()
+
+    resp = client.post(
+        "/api/v1/ge/projects",
+        headers=jwt_headers(U_PM),
+        json={
+            "name": "越界书挡",
+            "pm_user_id": U_PM,
+            "program_id": program_id,
+            "start_planned_start": "2026-07-01",
+            "start_planned_end": "2026-07-07",
+            "end_planned_start": "2026-09-30",
+            "end_planned_end": "2026-10-02",
+            "phases": [{"sequence": 1, "name": "方案", "gate_items": [], "tasks": []}],
+        },
+    )
+    assert resp.status_code == 400
+    detail = resp.json()["detail"]
+    if isinstance(detail, dict):
+        assert detail.get("detail") in (
+            "invalid_project_schedule",
+            "phase_schedule_outside_program",
+            "phase_schedule_overlap",
+        )
+    else:
+        assert detail in (
+            "invalid_project_schedule",
+            "phase_schedule_outside_program",
+            "phase_schedule_overlap",
+        )
