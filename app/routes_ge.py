@@ -18,6 +18,11 @@ from app.services.ge_access import (
     can_struct_program,
     filter_projects_for_user,
 )
+from app.services.ge_personal_tree import (
+    compute_personal_tree_sets,
+    program_ids_in_projection,
+    program_in_projection,
+)
 from app.services.ge_related_project_counts import (
     my_related_project_counts_by_program,
     my_visible_project_counts_by_program,
@@ -118,9 +123,14 @@ def list_objectives(
     user: Annotated[AuthUser, Depends(get_current_user)],
 ) -> list[dict[str, Any]]:
     # GE-PERF.1: one-shot load + in-memory tree (no per-node sibling_* queries)
+    # GE-VIS-1: non-reviewers get personal_tree projection (appendix C).
     all_objectives = db.query(GeObjective).all()
     all_programs = db.query(GeProgram).all()
     refresh_lifecycle_entities(db, all_objectives, all_programs)
+    projection = compute_personal_tree_sets(db, user)
+    keep_obj = projection.objective_ids
+    keep_prog = projection.program_ids
+
     related_counts = my_related_project_counts_by_program(db, user.user_id)
     visible_counts = my_visible_project_counts_by_program(db, user)
 
@@ -133,12 +143,20 @@ def list_objectives(
 
     children_by_parent: dict[str | None, list[GeObjective]] = {}
     for obj in all_objectives:
+        if obj.id not in keep_obj:
+            continue
+        if obj.parent_id is not None and obj.parent_id not in keep_obj:
+            continue
         children_by_parent.setdefault(obj.parent_id, []).append(obj)
     for siblings in children_by_parent.values():
         siblings.sort(key=lambda o: (o.sort_order, o.name))
 
     programs_by_objective: dict[str, list[GeProgram]] = {}
     for program in all_programs:
+        if program.id not in keep_prog:
+            continue
+        if program.objective_id not in keep_obj:
+            continue
         programs_by_objective.setdefault(program.objective_id, []).append(program)
     for programs in programs_by_objective.values():
         programs.sort(key=lambda p: (p.sort_order, p.name))
@@ -174,12 +192,15 @@ def list_objectives(
 @router.get("/programs")
 def list_programs(
     db: Annotated[Session, Depends(get_db)],
-    _user: Annotated[AuthUser, Depends(get_current_user)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
 ) -> list[dict[str, Any]]:
+    """GE-VIS-1: non-reviewers see only programs in personal_tree."""
     refresh_lifecycle_batch(db)
     programs = db.query(GeProgram).order_by(GeProgram.sort_order, GeProgram.name).all()
+    keep = program_ids_in_projection(db, user)
+    visible = [p for p in programs if p.id in keep]
     db.commit()
-    return [program_out(p, db) for p in programs]
+    return [program_out(p, db) for p in visible]
 
 
 @router.get("/programs/{program_id}")
@@ -190,6 +211,8 @@ def get_program(
 ) -> dict[str, Any]:
     program = db.get(GeProgram, program_id)
     if program is None:
+        raise HTTPException(status_code=404, detail={"detail": "not_found"})
+    if not program_in_projection(db, user, program_id):
         raise HTTPException(status_code=404, detail={"detail": "not_found"})
     refresh_lifecycle_on_read(db, program)
     projects = sibling_projects(db, program_id)

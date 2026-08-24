@@ -122,6 +122,8 @@ def create_project(actor: str, program_id: str, name: str, *, reviewer: bool = F
             "program_id": program_id,
             "pm_user_id": pm,
             "phases": [{"sequence": 1, "name": "方案", "gate_items": [], "tasks": []}],
+            "lifecycle_start": "2027-01-01",
+            "lifecycle_end": "2027-03-31",
         },
     )
     if code == 201 and isinstance(payload, dict) and payload.get("id"):
@@ -288,6 +290,8 @@ def main() -> int:
             "program_id": LIVE_PROG,
             "pm_user_id": PM,
             "phases": [{"sequence": 1, "name": "方案", "gate_items": [], "tasks": []}],
+            "lifecycle_start": "2027-01-01",
+            "lifecycle_end": "2027-03-31",
         },
     )
 
@@ -331,6 +335,8 @@ def main() -> int:
             "program_id": prog_id,
             "pm_user_id": PM,
             "phases": [{"sequence": 1, "name": "方案", "gate_items": [], "tasks": []}],
+            "lifecycle_start": "2027-01-01",
+            "lifecycle_end": "2027-03-31",
         },
     )
     if phase_id:
@@ -372,6 +378,8 @@ def main() -> int:
             "program_id": prog_id,
             "pm_user_id": PM,
             "phases": [{"sequence": 1, "name": "方案", "gate_items": [], "tasks": []}],
+            "lifecycle_start": "2027-01-01",
+            "lifecycle_end": "2027-03-31",
         },
     )
     if phase_id:
@@ -417,6 +425,8 @@ def main() -> int:
             "program_id": LIVE_PROG,
             "pm_user_id": "1",
             "phases": [{"sequence": 1, "name": "方案", "gate_items": [], "tasks": []}],
+            "lifecycle_start": "2027-01-01",
+            "lifecycle_end": "2027-03-31",
         },
     )
     vic = create_project("2", LIVE_PROG, f"vic-{uuid.uuid4().hex[:6]}", pm="2")
@@ -434,6 +444,8 @@ def main() -> int:
             "program_id": LIVE_PROG,
             "pm_user_id": PM,
             "phases": [{"sequence": 1, "name": "方案", "gate_items": [], "tasks": []}],
+            "lifecycle_start": "2027-01-01",
+            "lifecycle_end": "2027-03-31",
         },
     )
     # ancestor of live: company owner 1315 can create under live prog

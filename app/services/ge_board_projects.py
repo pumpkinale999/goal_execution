@@ -1,4 +1,7 @@
-"""Objective board-projects read API (PRA §4.11 sub · §4.12 company)."""
+"""Objective board-projects read API (PRA §4.11 sub · §4.12 company).
+
+GE-VIS-1: objective must be in personal_tree; programs[] trimmed to projection.
+"""
 
 from __future__ import annotations
 
@@ -10,6 +13,10 @@ from sqlalchemy.orm import Session
 from app.auth import AuthUser
 from app.models.ge import GeObjective, GeProgram, GeProject
 from app.services.ge_access import filter_projects_for_user
+from app.services.ge_personal_tree import (
+    compute_personal_tree_sets,
+    objective_in_projection,
+)
 from app.services.ge_sort_order import sibling_objectives, sibling_programs
 from app.services.ge_strategic_lifecycle import refresh_lifecycle_on_read
 
@@ -43,7 +50,10 @@ def _load_projects_for_programs(db: Session, program_ids: list[str]) -> list[GeP
 
 
 def _board_for_sub(db: Session, objective_id: str, user: AuthUser) -> dict[str, Any]:
-    programs = sibling_programs(db, objective_id)
+    projection = compute_personal_tree_sets(db, user)
+    programs = [
+        p for p in sibling_programs(db, objective_id) if p.id in projection.program_ids
+    ]
     for prog in programs:
         refresh_lifecycle_on_read(db, prog)
 
@@ -67,15 +77,22 @@ def _board_for_sub(db: Session, objective_id: str, user: AuthUser) -> dict[str, 
 
 
 def _board_for_company(db: Session, objective_id: str, user: AuthUser) -> dict[str, Any]:
-    """Direct subs + their programs/projects (soft-filtered)."""
+    """Direct subs + their programs/projects (projection-filtered)."""
+    projection = compute_personal_tree_sets(db, user)
     children = sibling_objectives(db, objective_id)
-    subs = [c for c in children if str(c.level or "") == "sub"]
+    subs = [
+        c
+        for c in children
+        if str(c.level or "") == "sub" and c.id in projection.objective_ids
+    ]
     for sub in subs:
         refresh_lifecycle_on_read(db, sub)
 
     programs: list[GeProgram] = []
     for sub in subs:
         for prog in sibling_programs(db, sub.id):
+            if prog.id not in projection.program_ids:
+                continue
             refresh_lifecycle_on_read(db, prog)
             programs.append(prog)
 
@@ -115,15 +132,15 @@ def get_objective_board_projects(
 ) -> dict[str, Any]:
     """Return board-projects payload for sub (§4.11) or company (§4.12).
 
-    Normative:
-    - missing → 404
-    - ``level=sub|company`` → 200 soft filter; other levels → 400
-    - entry ACL = soft filter like ``GET /programs/{id}`` (no governor hard 403)
-    - visibility = ``filter_projects_for_user`` only; keep cancelled/archived in payload
-    - do not pre-strip board-ring exclusions (AA owns that)
+    Normative (GE-VIS-1):
+    - missing or outside personal_tree → 404 ``not_found``
+    - ``level=sub|company`` → 200; other levels → 400
+    - ``programs[]`` ⊆ personal_tree; projects via ``filter_projects_for_user``
     """
     root = db.get(GeObjective, objective_id)
     if root is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"detail": "not_found"})
+    if not objective_in_projection(db, user, objective_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"detail": "not_found"})
     refresh_lifecycle_on_read(db, root)
 

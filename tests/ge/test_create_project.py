@@ -122,10 +122,40 @@ def test_subtree_owner_can_force_delete_non_empty_project(client):
     assert resp.status_code == 204
 
 
-def test_creator_read_not_pm(client):
+def test_governor_creator_can_read_via_governor_not_created_by(client):
+    """Creator who is program owner still reads via governor (created_by alone is not a grant)."""
     program_id = ensure_formal_test_program(client, owner_user_id=U_CREATOR)
     body = {**GOLDEN_PROJECT_BODY, "pm_user_id": U_PM, "program_id": program_id}
     created = create_project(client, U_CREATOR, body)
     project_id = created["id"]
     graph = get_graph(client, project_id, U_CREATOR)
     assert graph["project"]["status"] == "active"
+    assert graph["project"]["created_by_user_id"] == U_CREATOR
+
+
+def test_created_by_alone_cannot_read(client):
+    """GE-VIS-1 T7: created_by without PM/participant/governor → no read."""
+    from app.db import get_session_factory
+    from app.models.ge import GeProject
+
+    program_id = ensure_formal_test_program(client, owner_user_id=U_GOVERNOR)
+    body = {**GOLDEN_PROJECT_BODY, "pm_user_id": U_PM, "program_id": program_id}
+    created = create_project(client, U_GOVERNOR, body)
+    project_id = created["id"]
+
+    factory = get_session_factory()
+    with factory() as db:
+        project = db.get(GeProject, project_id)
+        assert project is not None
+        project.created_by_user_id = U_STRANGER
+        db.commit()
+
+    denied = client.get(
+        f"/api/v1/ge/projects/{project_id}/graph",
+        headers=jwt_headers(U_STRANGER),
+    )
+    assert denied.status_code == 403
+    assert denied.json()["detail"] == "not_project_participant"
+
+    get_graph(client, project_id, U_GOVERNOR)
+    get_graph(client, project_id, U_PM)

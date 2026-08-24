@@ -43,8 +43,9 @@ info:
     v1.26.1 (GE-AUTHZ docs): consensus v0.1.9 · Org portfolio headers §3.2 · summaries service+Actor (no JWT participant wording)
     v1.28.0 (证据层 M2): GateItemInput form metric|status · content_ref · submit 400/503 evidence codes · GE-T200～T207
     v1.30.0 (M41): Objective/Program pmbp_user_id · effective_pmbp_* read-only · PATCH owner vs PMBP field gates · GE-T220～T227
+    v1.31.0 (GE-VIS-1): personal left-tree projection · GET /objectives|/programs|/programs/{id}|board-projects scoped to projection (reviewer=full) · created_by audit-only (no read)
     Out of scope: skstudio BFF orchestration /api/v1/org|ge/* · GE-AUTHZ consensus v0.1.9 (see impl §1.4 · §4.0 · §10.42)
-  version: 1.30.0
+  version: 1.31.0
 servers:
   - url: /api/v1
     description: goal_execution service (service + Actor + Is-Reviewer only · GE-AUTHZ)
@@ -330,11 +331,11 @@ paths:
   /ge/objectives:
     get:
       operationId: listGeObjectives
-      summary: Objective tree with nested program metadata (P2 · is_goal_subtree_governor sees full subtree via programs/projects; service+Actor)
+      summary: Personal left-tree projection (GE-VIS-1) · nested programs; reviewer=full tree; non-reviewer=governed∪anchor+ancestors
       tags: [ge-objectives]
       responses:
         '200':
-          description: Objective tree
+          description: Objective tree (personal projection unless X-Actor-Is-Reviewer=1)
           content:
             application/json:
               schema:
@@ -496,11 +497,11 @@ paths:
   /ge/programs:
     get:
       operationId: listGePrograms
-      summary: Program list (metadata only)
+      summary: Programs in personal projection (GE-VIS-1); reviewer=full list
       tags: [ge-programs]
       responses:
         '200':
-          description: Program list
+          description: Program list (personal projection unless X-Actor-Is-Reviewer=1)
           content:
             application/json:
               schema:
@@ -535,7 +536,7 @@ paths:
   /ge/programs/{program_id}:
     get:
       operationId: getGeProgram
-      summary: Program detail with projects[] (service+Actor+Is-Reviewer; can_read_project (participant∪creator∪governor∨reviewer))
+      summary: Program detail (GE-VIS-1 · ∉ projection → 404 not_found; projects[] via can_read_project; created_by audit-only)
       tags: [ge-programs]
       parameters:
         - $ref: '#/components/parameters/ProgramId'

@@ -29,13 +29,15 @@ def is_participant(db: Session, project: GeProject, user_id: str) -> bool:
 
 
 def can_read_project(db: Session, project: GeProject, user: AuthUser) -> bool:
+    """Read = PM ∨ participant ∨ subtree governor ∨ reviewer.
+
+    ``created_by_user_id`` is audit-only (GE-VIS-1); it does not grant read.
+    """
     if project.deleted_at is not None:
         return False
     if user.is_reviewer:
         return True
     if is_participant(db, project, user.user_id):
-        return True
-    if project.created_by_user_id == user.user_id:
         return True
     return is_goal_subtree_governor(db, user_id=user.user_id, project_id=project.id)
 
@@ -110,9 +112,6 @@ def filter_projects_for_user(db: Session, projects: list[GeProject], user: AuthU
     visible: list[GeProject] = []
     for project in active:
         if project.pm_user_id == uid:
-            visible.append(project)
-            continue
-        if project.created_by_user_id == uid:
             visible.append(project)
             continue
         if project.id in participant_ids:

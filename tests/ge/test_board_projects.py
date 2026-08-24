@@ -29,6 +29,9 @@ def _create_sub_and_programs(client, company_id: str, dept_id: str) -> tuple[dic
             "parent_id": company_id,
             "owner_user_id": "910",
             "primary_department_id": dept_id,
+            "period_granularity": "year",
+            "period_start": "2026-01-01",
+            "period_end": "2026-12-31",
         },
     )
     assert sub.status_code == 201, sub.text
@@ -55,6 +58,18 @@ def _create_sub_and_programs(client, company_id: str, dept_id: str) -> tuple[dic
         },
     )
     assert prog_b.status_code == 201, prog_b.text
+    from app.db import get_session_factory
+    from app.models.ge import GeProgram
+
+    factory = get_session_factory()
+    with factory() as db:
+        for pid in (prog_a.json()["id"], prog_b.json()["id"]):
+            program = db.get(GeProgram, pid)
+            assert program is not None
+            program.period_start = "2026-01-01"
+            program.period_end = "2026-12-31"
+            program.period_granularity = "year"
+        db.commit()
     return sub_body, prog_a.json(), prog_b.json()
 
 
@@ -126,7 +141,8 @@ def test_board_projects_company_returns_200_with_subs(client):
     assert any(p["id"] == project["id"] for p in body["projects"])
 
 
-def test_board_projects_company_stranger_returns_200_empty_projects(client):
+def test_board_projects_company_stranger_returns_404(client):
+    """GE-VIS-1 T16: stranger company board → 404 (not soft-empty leak)."""
     company = _annual_company(client)
     dept = _create_dept()
     _sub, prog_a, _prog_b = _create_sub_and_programs(client, company["id"], dept)
@@ -136,16 +152,12 @@ def test_board_projects_company_stranger_returns_200_empty_projects(client):
         f"/api/v1/ge/objectives/{company['id']}/board-projects",
         headers=jwt_headers(U_STRANGER),
     )
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
-    assert body["objective_id"] == company["id"]
-    assert body["projects"] == []
-    assert len(body["subs"]) >= 1
-    assert len(body["programs"]) >= 1
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "not_found"
 
 
-def test_board_projects_stranger_returns_200_empty_projects(client):
-    """S17: stranger deep-link → 200 + empty projects[] (soft filter, not hard 403)."""
+def test_board_projects_stranger_returns_404(client):
+    """GE-VIS-1 T16: stranger sub board → 404."""
     company = _annual_company(client)
     dept = _create_dept()
     sub, prog_a, prog_b = _create_sub_and_programs(client, company["id"], dept)
@@ -155,23 +167,18 @@ def test_board_projects_stranger_returns_200_empty_projects(client):
         f"/api/v1/ge/objectives/{sub['id']}/board-projects",
         headers=jwt_headers(U_STRANGER),
     )
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
-    assert body["objective_id"] == sub["id"]
-    prog_ids = {p["id"] for p in body["programs"]}
-    assert prog_a["id"] in prog_ids
-    assert prog_b["id"] in prog_ids
-    assert body["projects"] == []
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "not_found"
+    _ = prog_b
 
 
-def test_board_projects_sibling_non_owner_returns_200(client):
-    """S13: non-owner under same company still gets 200 (soft entry ACL)."""
+def test_board_projects_sibling_non_owner_returns_404(client):
+    """GE-VIS-1: sibling owner of another sub cannot board-read this sub."""
     company = _annual_company(client)
     dept = _create_dept()
     sub, prog_a, _prog_b = _create_sub_and_programs(client, company["id"], dept)
     project = _create_project(client, prog_a["id"], name="PM可见", pm=U_PM)
 
-    # Sibling actor owns another sub under the same company but not this one.
     sibling_sub = client.post(
         "/api/v1/ge/objectives",
         headers=service_headers("800", is_reviewer=True),
@@ -188,11 +195,7 @@ def test_board_projects_sibling_non_owner_returns_200(client):
         f"/api/v1/ge/objectives/{sub['id']}/board-projects",
         headers=service_headers("966", is_reviewer=False),
     )
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
-    assert body["objective_id"] == sub["id"]
-    # Soft filter: sibling owner is not PM/participant → empty projects
-    assert project["id"] not in {p["id"] for p in body["projects"]}
+    assert resp.status_code == 404
 
     # PM can still see their project on the same endpoint
     as_pm = client.get(
@@ -201,7 +204,9 @@ def test_board_projects_sibling_non_owner_returns_200(client):
     )
     assert as_pm.status_code == 200, as_pm.text
     assert any(p["id"] == project["id"] for p in as_pm.json()["projects"])
-
+    # Sibling programs not owned by PM may be absent; PM's program stays
+    prog_ids = {p["id"] for p in as_pm.json()["programs"]}
+    assert prog_a["id"] in prog_ids
 
 def test_board_projects_cancelled_still_returned_for_reviewer(client):
     company = _annual_company(client)

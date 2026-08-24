@@ -74,8 +74,8 @@ def test_governor_program_projects_full_list(client):
     assert created["id"] in {p["id"] for p in resp.json()["projects"]}
 
     stranger = client.get(f"/api/v1/ge/programs/{program_id}", headers=jwt_headers(U_STRANGER))
-    assert stranger.status_code == 200
-    assert created["id"] not in {p["id"] for p in stranger.json()["projects"]}
+    assert stranger.status_code == 404
+    assert stranger.json()["detail"] == "not_found"
 
 
 def test_governor_structural_patch_and_canvas_write_allowed(client):
@@ -165,6 +165,17 @@ def test_non_default_program_create_requires_governor(client):
     )
     assert create_prog.status_code == 201
     program_id = create_prog.json()["id"]
+    from app.db import get_session_factory
+    from app.models.ge import GeProgram
+
+    factory = get_session_factory()
+    with factory() as db:
+        program = db.get(GeProgram, program_id)
+        assert program is not None
+        program.period_start = "2026-01-01"
+        program.period_end = "2026-12-31"
+        program.period_granularity = "year"
+        db.commit()
 
     body = {**GOLDEN_PROJECT_BODY, "program_id": program_id}
     forbidden = client.post("/api/v1/ge/projects", headers=jwt_headers(U_STRANGER), json=body)
@@ -191,6 +202,17 @@ def test_ancestor_owner_governs_nested_program(client):
     )
     assert create_prog.status_code == 201
     program_id = create_prog.json()["id"]
+    from app.db import get_session_factory
+    from app.models.ge import GeProgram
+
+    factory = get_session_factory()
+    with factory() as db:
+        program = db.get(GeProgram, program_id)
+        assert program is not None
+        program.period_start = "2026-01-01"
+        program.period_end = "2026-12-31"
+        program.period_granularity = "year"
+        db.commit()
 
     body = {**GOLDEN_PROJECT_BODY, "program_id": program_id, "pm_user_id": U_PM}
     created = client.post("/api/v1/ge/projects", headers=jwt_headers(U_OWNER), json=body)

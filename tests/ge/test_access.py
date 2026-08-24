@@ -47,6 +47,7 @@ def test_program_projects_participant_filter(client):
     assert participant.status_code == 200
     assert created["id"] in {p["id"] for p in participant.json()["projects"]}
     stranger = client.get(f"/api/v1/ge/programs/{program_id}", headers=jwt_headers(U_STRANGER))
-    assert created["id"] not in {p["id"] for p in stranger.json()["projects"]}
+    assert stranger.status_code == 404
+    assert stranger.json()["detail"] == "not_found"
     reviewer = client.get(f"/api/v1/ge/programs/{program_id}", headers=service_headers("reviewer", is_reviewer=True))
     assert created["id"] in {p["id"] for p in reviewer.json()["projects"]}

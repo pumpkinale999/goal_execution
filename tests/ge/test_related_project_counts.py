@@ -36,11 +36,11 @@ def test_related_count_pm_sees_one(client):
 
 
 def test_related_count_stranger_zero_same_program(client):
+    """GE-VIS-1: stranger personal tree omits unrelated programs."""
     created = create_project(client, U_PM)
     tree = client.get("/api/v1/ge/objectives", headers=jwt_headers(U_STRANGER)).json()
-    visible, related = _program_counts(tree, created["program_id"])
-    assert visible == 0
-    assert related == 0
+    prog_ids = {p["id"] for p in _walk_programs(tree)}
+    assert created["program_id"] not in prog_ids
 
 
 def test_related_count_assignee_only_not_counted(client):
