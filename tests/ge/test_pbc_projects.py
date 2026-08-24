@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from tests.conftest import jwt_headers, service_headers
+from tests.ge.conftest import ensure_org_department
 from tests.ge.conftest import GOLDEN_PROJECT_BODY, U_PM, bootstrap_startup_gate
 
 
@@ -26,6 +27,7 @@ def _create_sub_program_project(
     period_end: str,
     name: str = "专项",
 ) -> dict:
+    ensure_org_department("dept-pbc-proj", name="PBC专项部门")
     sub = client.post(
         "/api/v1/ge/objectives",
         headers=service_headers("800", is_reviewer=True),

@@ -14,6 +14,7 @@ from tests.ge.conftest import (
     U_PM,
     U_STRANGER,
     create_project,
+    ensure_org_department,
     get_graph,
 )
 
@@ -43,6 +44,7 @@ def _annual(client, *, name: str, owner: str, year: int = 2026) -> dict:
 
 
 def _sub_and_program(client, parent_id: str, *, owner: str, name: str = "M41子目标") -> tuple[dict, dict]:
+    ensure_org_department("test-dept-m41", name="M41测试部门")
     sub = client.post(
         "/api/v1/ge/objectives",
         headers=REV,

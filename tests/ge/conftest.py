@@ -182,6 +182,45 @@ def bootstrap_golden_phase_schedule(client: TestClient, project_id: str, user_id
 _cached_formal_program_id: str | None = None
 
 
+def ensure_org_department(
+    dept_id: str,
+    *,
+    name: str | None = None,
+    manager_user_id: str | None = None,
+) -> str:
+    """Insert org_departments row when tests use opaque dept ids (skstudio authority)."""
+    from app.db import get_session_factory
+    from app.models.org import OrgDepartment
+    from app.services.ge_graph import now_iso
+
+    now = now_iso()
+    with get_session_factory()() as db:
+        if db.get(OrgDepartment, dept_id) is None:
+            db.add(
+                OrgDepartment(
+                    id=dept_id,
+                    name=name or dept_id,
+                    manager_user_id=manager_user_id,
+                    parent_id=None,
+                    sort_order=0,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            db.commit()
+    return dept_id
+
+
+def create_test_department(
+    client=None,
+    name: str = "研发部",
+    manager: str = "910",
+) -> str:
+    _ = (client, manager)
+    dept_id = f"test-dept-{name}"
+    return ensure_org_department(dept_id, name=name, manager_user_id=manager)
+
+
 @pytest.fixture(autouse=True)
 def _reset_formal_program_cache():
     global _cached_formal_program_id
@@ -209,8 +248,8 @@ def ensure_formal_test_program(
     )
     assert year_resp.status_code == 201, year_resp.text
     company_id = year_resp.json()["id"]
-    # Org authority is skstudio; GE only stores opaque primary_department_id.
-    dept_id = "test-dept-formal"
+    # Org authority is skstudio; GE stores primary_department_id with FK to org_departments.
+    dept_id = ensure_org_department("test-dept-formal", name="测试部门", manager_user_id=owner_user_id)
     sub_resp = client.post(
         "/api/v1/ge/objectives",
         headers=rev_headers,
@@ -253,6 +292,26 @@ def ensure_formal_test_program(
     return program_id
 
 
+def ensure_program_year_period(
+    program_id: str,
+    *,
+    start: str = "2026-01-01",
+    end: str = "2026-12-31",
+) -> None:
+    """Widen program period so system Start phase (Jan) fits inside program window."""
+    from app.db import get_session_factory
+    from app.models.ge import GeProgram
+
+    with get_session_factory()() as db:
+        program = db.get(GeProgram, program_id)
+        if program is None:
+            return
+        program.period_start = start
+        program.period_end = end
+        program.period_granularity = "year"
+        db.commit()
+
+
 def create_project(
     client: TestClient,
     user_id: str,
@@ -264,6 +323,8 @@ def create_project(
     payload = dict(body or GOLDEN_PROJECT_BODY)
     if not payload.get("program_id"):
         payload["program_id"] = ensure_formal_test_program(client)
+    else:
+        ensure_program_year_period(payload["program_id"])
     if "project_note_id" not in payload:
         payload["project_note_id"] = TEST_PROJECT_NOTE_ID
     payload.setdefault("lifecycle_start", "2026-01-01")

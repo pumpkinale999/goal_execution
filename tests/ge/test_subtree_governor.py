@@ -10,6 +10,7 @@ from tests.ge.conftest import (
     U_ZHANGSAN,
     create_project,
     ensure_formal_test_program,
+    ensure_org_department,
     get_graph,
     material_submit_payload,
     task_id_by_title,
@@ -153,6 +154,7 @@ def test_steward_can_proxy_submit_and_sign(client):
 
 def test_non_default_program_create_requires_governor(client):
     sub_id, _program_id = _formal_sub_and_program(client)
+    ensure_org_department("test-dept-gov", name="Governor部门")
     create_prog = client.post(
         "/api/v1/ge/programs",
         headers=service_headers("800", is_reviewer=True),
@@ -190,6 +192,7 @@ def test_non_default_program_create_requires_governor(client):
 def test_ancestor_owner_governs_nested_program(client):
     sub_id, _program_id = _formal_sub_and_program(client)
     _patch_objective_owner(client, sub_id, U_OWNER)
+    ensure_org_department("test-dept-nested", name="嵌套部门")
     create_prog = client.post(
         "/api/v1/ge/programs",
         headers=service_headers("800", is_reviewer=True),

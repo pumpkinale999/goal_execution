@@ -5,10 +5,11 @@ from __future__ import annotations
 from tests.conftest import jwt_headers, service_headers
 
 
+from tests.ge.conftest import create_test_department
+
+
 def _create_dept(client, name: str = "研发部", manager: str = "910") -> str:
-    """Opaque dept id — GE org HTTP unmounted; authority lives in skstudio."""
-    _ = (client, manager)
-    return f"test-dept-{name}"
+    return create_test_department(client, name=name, manager=manager)
 
 
 def _create_year(client, year: int, name: str, **extra) -> dict:

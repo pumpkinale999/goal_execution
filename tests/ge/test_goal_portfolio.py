@@ -23,10 +23,11 @@ def _create_project_on_program(client, program_id: str, *, pm_user_id: str = U_P
     return created
 
 
+from tests.ge.conftest import create_test_department
+
+
 def _create_dept(client, name: str = "研发部", manager: str = "910") -> str:
-    """Opaque dept id — GE org HTTP unmounted; authority lives in skstudio."""
-    _ = (client, manager)
-    return f"test-dept-{name}"
+    return create_test_department(client, name=name, manager=manager)
 
 
 def _annual_company(client, year: int = 2026) -> dict:

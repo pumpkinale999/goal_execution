@@ -8,6 +8,7 @@ from tests.ge.conftest import (
     U_CREATOR,
     U_PM,
     create_project,
+    create_test_department,
     ensure_formal_test_program,
 )
 
@@ -43,7 +44,7 @@ def _sub_period_fields(company: dict) -> dict[str, str]:
 
 def _create_sub(client, company: dict, name: str = "测试子目标") -> dict:
     company_id = company["id"]
-    dept = {"id": f"test-dept-{name}"}
+    dept_id = create_test_department(client, name=name)
     resp = client.post(
         "/api/v1/ge/objectives",
         headers=service_headers("800", is_reviewer=True),
@@ -51,7 +52,7 @@ def _create_sub(client, company: dict, name: str = "测试子目标") -> dict:
             "name": name,
             "parent_id": company_id,
             "owner_user_id": "910",
-            "primary_department_id": dept["id"],
+            "primary_department_id": dept_id,
             **_sub_period_fields(company),
         },
     )

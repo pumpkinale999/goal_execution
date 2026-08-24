@@ -6,8 +6,11 @@ from tests.conftest import jwt_headers, service_headers
 from tests.ge.conftest import GOLDEN_PROJECT_BODY, U_PM, U_STRANGER, bootstrap_startup_gate
 
 
+from tests.ge.conftest import ensure_org_department
+
+
 def _create_dept() -> str:
-    return "test-dept-board"
+    return ensure_org_department("test-dept-board", name="看板部门")
 
 
 def _annual_company(client) -> dict:

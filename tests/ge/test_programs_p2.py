@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from tests.conftest import jwt_headers, service_headers
+from tests.ge.conftest import ensure_org_department
 
 
 def _annual_company(client, year: int = 2026) -> dict:
@@ -30,7 +31,7 @@ def _create_sub(client, company: dict) -> dict:
             "period_start": f"{year}-01-01",
             "period_end": f"{year}-12-31",
         }
-    dept = {"id": "test-dept-p2"}
+    dept_id = ensure_org_department("test-dept-p2", name="P2测试部门")
     resp = client.post(
         "/api/v1/ge/objectives",
         headers=service_headers("800", is_reviewer=True),
@@ -38,7 +39,7 @@ def _create_sub(client, company: dict) -> dict:
             "name": "子目标",
             "parent_id": company_id,
             "owner_user_id": "910",
-            "primary_department_id": dept["id"],
+            "primary_department_id": dept_id,
             **period_fields,
         },
     )

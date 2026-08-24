@@ -12,10 +12,11 @@ def _patch_today(monkeypatch, d: date) -> None:
     monkeypatch.setattr(ge_strategic_lifecycle, "today", lambda: d)
 
 
+from tests.ge.conftest import create_test_department
+
+
 def _create_dept(client, name: str = "研发部", manager: str = "910") -> str:
-    """Opaque dept id — GE org HTTP unmounted; authority lives in skstudio."""
-    _ = (client, manager)
-    return f"test-dept-{name}"
+    return create_test_department(client, name=name, manager=manager)
 
 
 def _annual_company(client, year: int = 2026) -> dict:
@@ -53,6 +54,23 @@ def test_create_sub_requires_primary_department(client):
     )
     assert resp.status_code == 400
     assert resp.json()["detail"] == "primary_department_required"
+
+
+def test_create_sub_rejects_unknown_department(client):
+    """Invalid primary_department_id → 400 department_not_found (not FK 500)."""
+    company = _annual_company(client)
+    resp = client.post(
+        "/api/v1/ge/objectives",
+        headers=service_headers("800", is_reviewer=True),
+        json={
+            "name": "子目标坏部门",
+            "parent_id": company["id"],
+            "owner_user_id": "910",
+            "primary_department_id": "d",
+        },
+    )
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == "department_not_found"
 
 
 def test_create_sub_defaults_quarter_period(client):
@@ -128,7 +146,10 @@ def test_read_refresh_pending_assessment(client, monkeypatch):
     assert create.status_code == 201
     sub_id = create.json()["id"]
     _patch_today(monkeypatch, date(2020, 4, 1))
-    listed = client.get("/api/v1/ge/objectives", headers=jwt_headers("801"))
+    listed = client.get(
+        "/api/v1/ge/objectives",
+        headers=service_headers("800", is_reviewer=True),
+    )
     assert listed.status_code == 200
     sub = _find_node(listed.json(), sub_id)
     assert sub is not None
@@ -158,10 +179,10 @@ def test_locked_objective_allows_owner_patch_rejects_period(client, monkeypatch)
     ok = client.patch(
         f"/api/v1/ge/objectives/{sub['id']}",
         headers=service_headers("800", is_reviewer=True),
-        json={"name": "锁定子目标", "owner_user_id": "anne"},
+        json={"name": "锁定子目标", "owner_user_id": "903"},
     )
     assert ok.status_code == 200, ok.text
-    assert ok.json()["owner_user_id"] == "anne"
+    assert ok.json()["owner_user_id"] == "903"
 
     blocked = client.patch(
         f"/api/v1/ge/objectives/{sub['id']}",
@@ -335,8 +356,9 @@ def test_auto_not_met_after_30_days(client, monkeypatch):
         },
     ).json()
     _patch_today(monkeypatch, date(2018, 5, 15))
-    client.get("/api/v1/ge/objectives", headers=jwt_headers("801"))
-    listed = client.get("/api/v1/ge/objectives", headers=jwt_headers("801"))
+    rev = service_headers("800", is_reviewer=True)
+    client.get("/api/v1/ge/objectives", headers=rev)
+    listed = client.get("/api/v1/ge/objectives", headers=rev)
     node = _find_node(listed.json(), sub["id"])
     assert node["lifecycle_status"] == "archived"
 
