@@ -68,14 +68,10 @@ def _governed_objective_ids(db: Session, user_id: str) -> set[str]:
                 governed.add(child_id)
                 queue.append(child_id)
 
-    # Programs owned/pmbp'd by user also pull their objective into the set.
-    prog_rows = db.query(
-        GeProgram.objective_id, GeProgram.owner_user_id, GeProgram.pmbp_user_id
-    ).all()
-    for objective_id, owner, pmbp in prog_rows:
-        if (owner and str(owner).strip() == uid) or (pmbp and str(pmbp).strip() == uid):
-            if objective_id:
-                governed.add(objective_id)
+    # T3/C3: program owner/pmbp must NOT lift the parent objective into
+    # governed — that would pull sibling programs into full subtree (C20
+    # applies only to true objective governors). Owned programs enter via
+    # _governed_program_ids_for_user; ancestors are skeleton-only.
     return governed
 
 

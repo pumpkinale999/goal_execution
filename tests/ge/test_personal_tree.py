@@ -88,6 +88,84 @@ def test_t3_program_governor_sees_full_program_including_empty(client):
     assert counts["my_related_project_count"] == 0
 
 
+def test_t3b_program_governor_does_not_see_sibling_programs(client):
+    """T3/C3: owning a program must not lift parent objective → sibling leak.
+
+    Sub-objective owner is a third party so A is only a program governor, not
+    an objective governor (which would correctly see all specialties).
+    """
+    rev = service_headers("800", is_reviewer=True)
+    year = client.post(
+        "/api/v1/ge/objectives/years",
+        headers=rev,
+        json={"planning_year": 2026, "name": "T3b 年"},
+    )
+    assert year.status_code == 201, year.text
+    company_id = year.json()["id"]
+    sub_owner = "930"
+    sub = client.post(
+        "/api/v1/ge/objectives",
+        headers=rev,
+        json={
+            "name": "T3b 子目标",
+            "parent_id": company_id,
+            "owner_user_id": sub_owner,
+            "primary_department_id": "test-dept-formal",
+            "period_granularity": "year",
+            "period_start": "2026-01-01",
+            "period_end": "2026-12-31",
+        },
+    )
+    assert sub.status_code == 201, sub.text
+    objective_id = sub.json()["id"]
+
+    prog_a_resp = client.post(
+        "/api/v1/ge/programs",
+        headers=rev,
+        json={
+            "name": "T3b-我的专项",
+            "objective_id": objective_id,
+            "owner_user_id": U_OWNER,
+            "primary_department_id": "test-dept-formal",
+        },
+    )
+    assert prog_a_resp.status_code == 201, prog_a_resp.text
+    prog_a = prog_a_resp.json()["id"]
+
+    prog_b_resp = client.post(
+        "/api/v1/ge/programs",
+        headers=rev,
+        json={
+            "name": "T3b-兄弟专项",
+            "objective_id": objective_id,
+            "owner_user_id": U_OTHER_OWNER,
+            "primary_department_id": "test-dept-formal",
+        },
+    )
+    assert prog_b_resp.status_code == 201, prog_b_resp.text
+    prog_b = prog_b_resp.json()["id"]
+
+    tree = client.get("/api/v1/ge/objectives", headers=jwt_headers(U_OWNER)).json()
+    prog_ids = {p["id"] for p in _walk_programs(tree)}
+    assert prog_a in prog_ids
+    assert prog_b not in prog_ids
+    assert objective_id in _walk_objective_ids(tree)
+
+    denied = client.get(f"/api/v1/ge/programs/{prog_b}", headers=jwt_headers(U_OWNER))
+    assert denied.status_code == 404
+    assert denied.json()["detail"] == "not_found"
+
+    tree_b = client.get("/api/v1/ge/objectives", headers=jwt_headers(U_OTHER_OWNER)).json()
+    prog_ids_b = {p["id"] for p in _walk_programs(tree_b)}
+    assert prog_b in prog_ids_b
+    assert prog_a not in prog_ids_b
+
+    # Objective governor still sees both specialties under the node.
+    tree_sub = client.get("/api/v1/ge/objectives", headers=jwt_headers(sub_owner)).json()
+    prog_ids_sub = {p["id"] for p in _walk_programs(tree_sub)}
+    assert prog_a in prog_ids_sub and prog_b in prog_ids_sub
+
+
 def test_t6_reviewer_full_tree(client):
     created = create_project(client, U_PM)
     tree = client.get(
