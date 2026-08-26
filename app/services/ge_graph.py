@@ -24,6 +24,7 @@ from app.models.ge import (
     GeTaskGateItemProduce,
 )
 from app.services.ge_system_phases import is_start_phase
+from app.services.ge_system_tasks import sync_system_lifecycle_task_assignees
 
 
 def now_iso() -> str:
@@ -341,6 +342,89 @@ def apply_phase_transition(db: Session, project: GeProject, opened_phase: GePhas
             }
         )
     return {"events": events}
+
+
+def recompute_stuck_phases_if_needed(db: Session, project_id: str) -> bool:
+    """Heal missed ``sign_gate_item`` transitions: active phase + fully signed gate.
+
+    Idempotent — safe on every graph read (PRA sense / Canvas).
+    """
+    project = load_project_graph(db, project_id)
+    if project is None or project.status != "active":
+        return False
+    stuck = False
+    for phase in project.phases:
+        if phase.status != "active":
+            continue
+        gate = phase.gate
+        if gate is None:
+            continue
+        if gate_is_open(db, gate, phase):
+            stuck = True
+            break
+    if not stuck:
+        return False
+    recompute_gate_and_phases(db, project_id)
+    return True
+
+
+@dataclass
+class HealSummary:
+    """Result of idempotent active-project graph heal (§4.3.2 · §10.50/§10.51)."""
+
+    project_completed: bool = False
+    stuck_phases: list[str] = field(default_factory=list)
+    system_assignees_synced: bool = False
+
+    @property
+    def changed(self) -> bool:
+        return self.project_completed or bool(self.stuck_phases) or self.system_assignees_synced
+
+    def as_response_dict(self) -> dict[str, Any]:
+        return {
+            "project_completed": self.project_completed,
+            "stuck_phases": list(self.stuck_phases),
+            "system_assignees_synced": self.system_assignees_synced,
+        }
+
+
+def heal_active_project_graph_state(db: Session, project_id: str) -> HealSummary:
+    """Idempotent heal for active projects: completion · stuck phase · system assignees."""
+    summary = HealSummary()
+    project = load_project_graph(db, project_id)
+    if project is None or project.status != "active":
+        return summary
+
+    if reconcile_project_completion(db, project_id):
+        summary.project_completed = True
+        return summary
+
+    stuck_phase_ids: list[str] = []
+    for phase in project.phases:
+        if phase.status != "active":
+            continue
+        gate = phase.gate
+        if gate is None:
+            continue
+        if gate_is_open(db, gate, phase):
+            stuck_phase_ids.append(phase.id)
+
+    if recompute_stuck_phases_if_needed(db, project_id):
+        summary.stuck_phases = stuck_phase_ids
+
+    project = load_project_graph(db, project_id)
+    if project is None or project.status != "active":
+        return summary
+
+    if sync_system_lifecycle_task_assignees(
+        db,
+        project_id=project.id,
+        pm_user_id=project.pm_user_id,
+        now=now_iso(),
+    ):
+        summary.system_assignees_synced = True
+
+    return summary
 
 
 def recompute_gate_and_phases(db: Session, project_id: str) -> dict[str, Any]:

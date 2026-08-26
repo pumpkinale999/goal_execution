@@ -17,6 +17,7 @@ from app.services.ge_access import (
     can_struct_objective,
     can_struct_program,
     filter_projects_for_user,
+    require_govern_project,
 )
 from app.services.ge_personal_tree import (
     compute_personal_tree_sets,
@@ -34,12 +35,11 @@ from app.services.ge_goal_subtree_governor import (
 )
 from app.services.ge_graph import (
     build_project_graph,
+    heal_active_project_graph_state,
     load_project_graph,
     now_iso,
-    reconcile_project_completion,
     record_audit,
 )
-from app.services.ge_system_tasks import sync_system_lifecycle_task_assignees
 from app.services.ge_graph_edit import (
     add_gate_item,
     add_phase,
@@ -345,21 +345,13 @@ def get_project_graph(
         raise HTTPException(status_code=404, detail={"detail": "project_not_found"})
     if not can_read_project(db, project, user):
         raise HTTPException(status_code=403, detail={"detail": "not_project_participant"})
-    if project.status == "active" and reconcile_project_completion(db, project_id):
-        db.commit()
-        project = load_project_graph(db, project_id)
-        if project is None:
-            raise HTTPException(status_code=404, detail={"detail": "project_not_found"})
-    if sync_system_lifecycle_task_assignees(
-        db,
-        project_id=project.id,
-        pm_user_id=project.pm_user_id,
-        now=now_iso(),
-    ):
-        db.commit()
-        project = load_project_graph(db, project_id)
-        if project is None:
-            raise HTTPException(status_code=404, detail={"detail": "project_not_found"})
+    if project.status == "active":
+        heal = heal_active_project_graph_state(db, project_id)
+        if heal.changed:
+            db.commit()
+            project = load_project_graph(db, project_id)
+            if project is None:
+                raise HTTPException(status_code=404, detail={"detail": "project_not_found"})
     sense_view = str(view or "canvas").strip().lower() == "sense"
     graph = build_project_graph(
         db,
@@ -373,6 +365,31 @@ def get_project_graph(
     from app.services.ge_assess_definition import attach_definition_gaps
 
     return attach_definition_gaps(graph)
+
+
+@router.post("/projects/{project_id}/recompute-phases")
+def post_recompute_phases(
+    project_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(get_current_user)],
+) -> dict[str, Any]:
+    """Explicit graph heal for governors (Panel empty-state sync · §10.51)."""
+    project = load_project_graph(db, project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail={"detail": "project_not_found"})
+    require_govern_project(db, project, user)
+    heal = heal_active_project_graph_state(db, project_id)
+    if heal.changed:
+        record_audit(
+            db,
+            actor_user_id=user.user_id,
+            entity_type="project",
+            entity_id=project_id,
+            action="recompute_phases",
+            payload=heal.as_response_dict(),
+        )
+        db.commit()
+    return {"project_id": project_id, "healed": heal.as_response_dict()}
 
 
 @router.get("/projects/{project_id}/definition-gaps")

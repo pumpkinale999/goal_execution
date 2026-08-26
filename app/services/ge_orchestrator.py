@@ -422,6 +422,7 @@ def sign_gate_item(db: Session, gate_item_id: str, user: AuthUser) -> dict[str, 
         payload={},
     )
     affected = tasks_linked_to_gate_item(db, item.id)
+    db.flush()
     recompute_gate_and_phases(db, project.id)
     db.commit()
     invalidate_project_queue_counts()
