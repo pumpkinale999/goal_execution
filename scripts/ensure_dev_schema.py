@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Dev schema bootstrap for Postgres (local / deploy target).
+"""Dev / deploy schema bootstrap for Postgres.
 
-Historical Alembic revisions contain SQLite SQL and must not be replayed.
-Always: ORM ``create_all`` + ``alembic stamp head``.
+Empty DB (no alembic_version): ORM ``create_all`` + ``alembic stamp head``.
+Already at head: no-op.
+Behind head: refuse stamp — run ``alembic upgrade head`` first (ORG-DEPT-GE-MAINT C9).
 """
 
 from __future__ import annotations
@@ -31,6 +32,15 @@ def ensure_perf_indexes(engine) -> None:
     with engine.begin() as conn:
         for stmt in _GE_PERF_INDEXES:
             conn.execute(text(stmt))
+
+
+def decide_schema_action(*, current: str | None, head_rev: str) -> str:
+    """Return 'ok' | 'stamp' | 'refuse'. Pure helper for GE-T280."""
+    if current == head_rev:
+        return "ok"
+    if current is None:
+        return "stamp"
+    return "refuse"
 
 
 def main() -> int:
@@ -67,9 +77,19 @@ def main() -> int:
 
     Base.metadata.create_all(bind=engine)
     ensure_perf_indexes(engine)
-    if current == head_rev:
+
+    action = decide_schema_action(current=current, head_rev=head_rev)
+    if action == "ok":
         print(f"[ensure_dev_schema] Postgres OK (head={head_rev}, tables={len(tables)})")
         return 0
+    if action == "refuse":
+        print(
+            f"[ensure_dev_schema] 错误: alembic current={current!r} 落后 head={head_rev!r}；"
+            "禁止 stamp 假前进。请先: alembic upgrade head"
+            "（生产见 GE_ALEMBIC_UPGRADE / up-prod.sh）",
+            file=sys.stderr,
+        )
+        return 1
 
     command.stamp(cfg, head_rev)
     print(f"[ensure_dev_schema] create_all + stamp → {head_rev} (was {current!r})")

@@ -86,7 +86,7 @@ from app.services.ge_strategic_lifecycle import (
     refresh_lifecycle_entities,
     refresh_lifecycle_on_read,
 )
-from app.schemas.org import ReorderRequest
+from app.schemas.reorder import ReorderRequest
 from app.services.ge_sort_order import (
     annual_root_sort_key,
     reorder_objective,

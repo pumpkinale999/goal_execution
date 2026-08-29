@@ -182,15 +182,19 @@ def bootstrap_golden_phase_schedule(client: TestClient, project_id: str, user_id
 _cached_formal_program_id: str | None = None
 
 
-def ensure_org_department(
+def opaque_department_id(
     dept_id: str,
     *,
     name: str | None = None,
     manager_user_id: str | None = None,
 ) -> str:
-    """Return opaque department id; GE no longer stores org_* authority (ORG-DEPT-GE-VAL-F1/F2)."""
+    """Return opaque department id; GE does not store org_* (ORG-DEPT-GE-MAINT)."""
     _ = (name, manager_user_id)
     return dept_id
+
+
+# Back-compat alias for older tests
+ensure_org_department = opaque_department_id
 
 
 def create_test_department(
@@ -200,7 +204,7 @@ def create_test_department(
 ) -> str:
     _ = (client, manager)
     dept_id = f"test-dept-{name}"
-    return ensure_org_department(dept_id, name=name, manager_user_id=manager)
+    return opaque_department_id(dept_id, name=name, manager_user_id=manager)
 
 
 @pytest.fixture(autouse=True)

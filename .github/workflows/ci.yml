@@ -21,5 +21,8 @@ jobs:
       - name: Pytest
         run: pytest -v
 
+      - name: Ban GE org imports (GE-T270)
+        run: python scripts/check_no_ge_org_imports.py
+
       - name: Smoke script (syntax)
         run: bash -n scripts/ge-smoke.sh

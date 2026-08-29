@@ -105,30 +105,11 @@ def _parse_planned_due(value: str | None) -> date | None:
         return None
 
 
-def resolve_report_chain(db: Session, user_id: str) -> list[str]:
-    """GE no longer owns org profiles; report chain is empty (org authority = skstudio)."""
-    _ = (db, user_id)
-    return []
-
-
-def notification_recipients(
-    db: Session,
-    *,
-    assignee_user_id: str | None,
-    include_report_chain: bool,
-) -> list[str]:
+def notification_recipients(*, assignee_user_id: str | None) -> list[str]:
+    """Assignees only; report chain is expanded by skstudio deviation-notify callback."""
     if not assignee_user_id:
         return []
-    recipients = [assignee_user_id]
-    if include_report_chain:
-        recipients.extend(resolve_report_chain(db, assignee_user_id))
-    out: list[str] = []
-    seen: set[str] = set()
-    for uid in recipients:
-        if uid and uid not in seen:
-            seen.add(uid)
-            out.append(uid)
-    return out
+    return [assignee_user_id]
 
 
 def active_deviation_for_gate_item(db: Session, gate_item_id: str) -> GeDeviation | None:
@@ -497,11 +478,7 @@ def activate_deviation(
         entity_refs={"gate_item_id": item.id, "deviation_id": dev.id},
     )
 
-    recipients = notification_recipients(
-        db,
-        assignee_user_id=remediation.assignee_user_id,
-        include_report_chain=True,
-    )
+    recipients = notification_recipients(assignee_user_id=remediation.assignee_user_id)
     pa_payload = {
         "deviation_id": dev.id,
         "gate_item_id": item.id,
@@ -512,6 +489,7 @@ def activate_deviation(
         "remediation_plan": plan,
         "remediation_due": dev.remediation_due,
         "remediation_task_id": remediation.id,
+        "assignee_user_id": remediation.assignee_user_id,
         "notify_report_chain": True,
     }
     dispatch_deviation_personal_assistant(
@@ -599,11 +577,7 @@ def extend_deviation(
     )
 
     include_chain = new_revision >= 2
-    recipients = notification_recipients(
-        db,
-        assignee_user_id=remediation.assignee_user_id,
-        include_report_chain=include_chain,
-    )
+    recipients = notification_recipients(assignee_user_id=remediation.assignee_user_id)
     pa_payload = {
         "deviation_id": dev.id,
         "gate_item_id": item.id,
@@ -613,6 +587,7 @@ def extend_deviation(
         "revision": new_revision,
         "remediation_due": dev.remediation_due,
         "extend_reason": audit_reason,
+        "assignee_user_id": remediation.assignee_user_id,
         "notify_report_chain": include_chain,
     }
     dispatch_deviation_personal_assistant(
@@ -746,11 +721,8 @@ def close_deviation_on_sign(
         payload={"gate_item_id": item.id},
     )
 
-    recipients = notification_recipients(
-        db,
-        assignee_user_id=remediation.assignee_user_id if remediation else None,
-        include_report_chain=True,
-    )
+    assignee = remediation.assignee_user_id if remediation else None
+    recipients = notification_recipients(assignee_user_id=assignee)
     return {
         "event": "ge.deviation.closed",
         "recipient_user_ids": recipients,
@@ -761,6 +733,7 @@ def close_deviation_on_sign(
             "project_name": project.name,
             "gate_item_name": item.name,
             "signed_by": signed_by,
+            "assignee_user_id": assignee,
             "notify_report_chain": True,
         },
     }

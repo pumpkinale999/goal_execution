@@ -34,8 +34,15 @@ sudo ./deploy/ubuntu/ge-deploy.sh deploy        # pip + ensure_dev_schema + syst
 
 ## Schema
 
-`deploy` 调用 `scripts/ensure_dev_schema.py`（ORM create_all + alembic stamp）。  
-**禁止**对空 Postgres 执行历史 `alembic upgrade head`。
+`deploy` 调用 `scripts/ensure_dev_schema.py`：
+
+- **空库**（无 `alembic_version`）：ORM `create_all` + `alembic stamp head`
+- **已在 head**：no-op
+- **落后 head**：**拒绝 stamp**（exit 1），须先 `alembic upgrade head`
+
+生产经 `up-prod.sh` 发版时 **默认**跑 `alembic upgrade head`（`GE_ALEMBIC_UPGRADE` 默认 `1`；设 `0` 跳过）。upgrade 后应断言 `org_departments` / `org_teams` / `user_org_*` **不存在**。
+
+**禁止**用 stamp 把版本号「假前进」到含 DROP 的 revision 却不执行 DDL。
 
 ## 日常升级
 

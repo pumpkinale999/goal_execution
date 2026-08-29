@@ -101,7 +101,7 @@ def _assert_patch_allowed(entity: GeObjective | GeProgram, body: dict[str, Any])
 def _validate_department(db: Session, department_id: str | None) -> None:
     """Require non-empty primary_department_id; existence is skstudio BFF / org_local (ORG-DEPT-GE-VAL).
 
-    GE must not look up org_departments in this database.
+    GE must not look up local org department rows in this database.
     """
     _ = db
     if not department_id or not str(department_id).strip():

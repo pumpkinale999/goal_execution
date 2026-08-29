@@ -245,6 +245,11 @@ def test_activate_deviation(client, monkeypatch):
     assert data["deviation"]["remediation_task_id"]
     assert pa_calls
     assert pa_calls[0]["event"] == "ge.deviation.activated"
+    assert pa_calls[0]["payload"].get("notify_report_chain") is True
+    # GE-T260 · recipients are assignee-only; report chain expanded by skstudio callback
+    recipients = pa_calls[0]["recipient_user_ids"]
+    assert len(recipients) == 1
+    assert pa_calls[0]["payload"].get("assignee_user_id") == recipients[0]
 
 
 def test_open_phase_submit_409(client):
