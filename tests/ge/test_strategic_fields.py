@@ -41,7 +41,7 @@ def test_migration_columns_on_annual_company(client):
 
 
 def test_create_sub_requires_primary_department(client):
-    """GE-T139: non-default sub without primary_department_id → 400."""
+    """GE-T241: non-default sub without primary_department_id → 400."""
     company = _annual_company(client)
     resp = client.post(
         "/api/v1/ge/objectives",
@@ -56,21 +56,65 @@ def test_create_sub_requires_primary_department(client):
     assert resp.json()["detail"] == "primary_department_required"
 
 
-def test_create_sub_rejects_unknown_department(client):
-    """Invalid primary_department_id → 400 department_not_found (not FK 500)."""
+def test_create_sub_accepts_unknown_department_id(client):
+    """GE-T240: opaque primary_department_id (no local org row) → 201; existence is BFF."""
     company = _annual_company(client)
     resp = client.post(
         "/api/v1/ge/objectives",
         headers=service_headers("800", is_reviewer=True),
         json={
-            "name": "子目标坏部门",
+            "name": "子目标外源部门",
             "parent_id": company["id"],
             "owner_user_id": "910",
             "primary_department_id": "d",
         },
     )
-    assert resp.status_code == 400
-    assert resp.json()["detail"] == "department_not_found"
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["primary_department_id"] == "d"
+
+
+def test_patch_sub_and_program_accept_unknown_department_id(client):
+    """GE-T242: patch primary_department_id to opaque id → 200."""
+    company = _annual_company(client)
+    dept_id = _create_dept(client)
+    sub = client.post(
+        "/api/v1/ge/objectives",
+        headers=service_headers("800", is_reviewer=True),
+        json={
+            "name": "子目标可改部门",
+            "parent_id": company["id"],
+            "owner_user_id": "910",
+            "primary_department_id": dept_id,
+        },
+    )
+    assert sub.status_code == 201, sub.text
+    sub_id = sub.json()["id"]
+    patch_sub = client.patch(
+        f"/api/v1/ge/objectives/{sub_id}",
+        headers=service_headers("800", is_reviewer=True),
+        json={"primary_department_id": "opaque-dept-x"},
+    )
+    assert patch_sub.status_code == 200, patch_sub.text
+    assert patch_sub.json()["primary_department_id"] == "opaque-dept-x"
+
+    prog = client.post(
+        "/api/v1/ge/programs",
+        headers=service_headers("800", is_reviewer=True),
+        json={
+            "name": "专项可改部门",
+            "objective_id": sub_id,
+            "owner_user_id": "910",
+            "primary_department_id": dept_id,
+        },
+    )
+    assert prog.status_code == 201, prog.text
+    patch_prog = client.patch(
+        f"/api/v1/ge/programs/{prog.json()['id']}",
+        headers=service_headers("800", is_reviewer=True),
+        json={"primary_department_id": "opaque-dept-y"},
+    )
+    assert patch_prog.status_code == 200, patch_prog.text
+    assert patch_prog.json()["primary_department_id"] == "opaque-dept-y"
 
 
 def test_create_sub_defaults_quarter_period(client):

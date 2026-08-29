@@ -14,7 +14,6 @@ from app.constants import (
     SAMPLE_PROJECT_NAME,
     SAMPLE_SUB_OBJECTIVE_NAME,
 )
-from app.models.org import OrgDepartment
 from app.models.ge import (
     GeDeviation,
     GeGate,
@@ -100,11 +99,13 @@ def _assert_patch_allowed(entity: GeObjective | GeProgram, body: dict[str, Any])
 
 
 def _validate_department(db: Session, department_id: str | None) -> None:
-    """primary_department_id must reference a row in org_departments (skstudio authority)."""
-    if not department_id:
+    """Require non-empty primary_department_id; existence is skstudio BFF / org_local (ORG-DEPT-GE-VAL).
+
+    GE must not look up org_departments in this database.
+    """
+    _ = db
+    if not department_id or not str(department_id).strip():
         raise HTTPException(status_code=400, detail={"detail": "primary_department_required"})
-    if db.get(OrgDepartment, department_id) is None:
-        raise HTTPException(status_code=400, detail={"detail": "department_not_found"})
 
 
 def _apply_objective_period(
