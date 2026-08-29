@@ -256,42 +256,6 @@ def user_contributing_projects(db: Session, user_id: str, *, include_completed: 
     return q.distinct().all()
 
 
-def department_subtree_ids(db: Session, department_id: str) -> set[str]:
-    from app.models.org import OrgDepartment
-
-    ids: set[str] = {department_id}
-    queue = [department_id]
-    while queue:
-        parent = queue.pop()
-        children = db.query(OrgDepartment).filter(OrgDepartment.parent_id == parent).all()
-        for child in children:
-            if child.id not in ids:
-                ids.add(child.id)
-                queue.append(child.id)
-    return ids
-
-
-def user_ids_in_departments(db: Session, department_ids: set[str]) -> set[str]:
-    from app.models.org import UserOrgMembership
-
-    if not department_ids:
-        return set()
-    rows = (
-        db.query(UserOrgMembership.user_id)
-        .filter(UserOrgMembership.department_id.in_(department_ids))
-        .distinct()
-        .all()
-    )
-    return {r[0] for r in rows}
-
-
-def user_ids_in_team(db: Session, team_id: str) -> set[str]:
-    from app.models.org import UserOrgMembership
-
-    rows = db.query(UserOrgMembership.user_id).filter(UserOrgMembership.team_id == team_id).all()
-    return {r[0] for r in rows}
-
-
 def is_user_participant_in_subtree(db: Session, user_id: str, objective_id: str) -> bool:
     obj_ids = objective_descendant_ids(db, objective_id)
     programs = db.query(GeProgram).filter(GeProgram.objective_id.in_(obj_ids)).all()

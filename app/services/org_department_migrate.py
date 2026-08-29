@@ -1,4 +1,7 @@
-"""Primary department migration (M31 · §4.1.5)."""
+"""Primary department migration (M31 · §4.1.5).
+
+ORG-DEPT-GE-VAL-F1: do not validate source/target against GE org_* tables.
+"""
 
 from __future__ import annotations
 
@@ -8,7 +11,6 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.models.ge import GeObjective, GeProgram
-from app.models.org import OrgDepartment
 
 
 def department_has_primary_objectives(db: Session, department_id: str) -> bool:
@@ -32,12 +34,6 @@ def migrate_primary_objectives(
     source_department_id: str,
     target_department_id: str,
 ) -> dict[str, int]:
-    source = db.get(OrgDepartment, source_department_id)
-    if source is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"detail": "not_found"})
-    target = db.get(OrgDepartment, target_department_id)
-    if target is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"detail": "target_not_found"})
     if source_department_id == target_department_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"detail": "same_department"})
 

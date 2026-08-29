@@ -1,10 +1,10 @@
-"""GE-AUTHZ-T15 / T16 · M8 portfolio domain authz via §3.2 headers."""
+"""GE-AUTHZ-T15 / T16 · M8 portfolio domain authz via §3.2 headers.
+
+ORG-DEPT-GE-VAL-F1: authz tests must not seed GE org_* as portfolio authority.
+"""
 
 from __future__ import annotations
 
-from app.db import get_session_factory
-from app.models.org import OrgDepartment
-from app.services.ge_graph import now_iso
 from app.services.ge_portfolio_authz import (
     HDR_PORTFOLIO_DEPTS,
     HDR_PORTFOLIO_TEAMS,
@@ -14,27 +14,8 @@ from app.services.ge_portfolio_authz import (
 from tests.conftest import service_headers
 
 
-def _seed_dept(dept_id: str = "m8-dept-a") -> str:
-    now = now_iso()
-    with get_session_factory()() as db:
-        if db.get(OrgDepartment, dept_id) is None:
-            db.add(
-                OrgDepartment(
-                    id=dept_id,
-                    name="M8 Dept",
-                    manager_user_id="964",
-                    parent_id=None,
-                    sort_order=1,
-                    created_at=now,
-                    updated_at=now,
-                )
-            )
-            db.commit()
-    return dept_id
-
-
 def test_ge_authz_t15_department_requires_claim_or_reviewer(client):
-    dept_id = _seed_dept()
+    dept_id = "m8-dept-a"
     stranger = client.get(
         f"/api/v1/ge/portfolios/departments/{dept_id}",
         headers=service_headers("stranger"),
@@ -58,8 +39,7 @@ def test_ge_authz_t15_department_requires_claim_or_reviewer(client):
 
 
 def test_ge_authz_t15_migrate_reviewer_only(client):
-    source = _seed_dept("m8-src")
-    _seed_dept("m8-tgt")
+    source = "m8-src"
     denied = client.post(
         f"/api/v1/ge/portfolios/departments/{source}/migrate-primary-objectives",
         headers={
@@ -79,7 +59,7 @@ def test_ge_authz_t15_migrate_reviewer_only(client):
 
 
 def test_ge_authz_t16_missing_headers_not_silent_allow(client):
-    dept_id = _seed_dept("m8-missing")
+    dept_id = "m8-missing"
     resp = client.get(
         f"/api/v1/ge/portfolios/departments/{dept_id}",
         headers=service_headers("actor-x"),

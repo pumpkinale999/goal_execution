@@ -1,33 +1,17 @@
-"""GE-T151～T154 · M31 goal-portfolio + migrate."""
+"""GE-T250～T254 · ORG-DEPT-GE-VAL-F1 portfolio/migrate without GE org_*."""
 
 from __future__ import annotations
 
-from tests.conftest import jwt_headers, service_headers
-from tests.ge.conftest import GOLDEN_PROJECT_BODY, U_PM, U_ZHANGSAN, bootstrap_startup_gate
+from urllib.parse import urlencode
 
-
-def _create_project_on_program(client, program_id: str, *, pm_user_id: str = U_PM, owner_user_id: str = "910") -> dict:
-    resp = client.post(
-        "/api/v1/ge/projects",
-        headers=jwt_headers(owner_user_id),
-        json={
-            **GOLDEN_PROJECT_BODY,
-            "program_id": program_id,
-            "pm_user_id": pm_user_id,
-            "project_note_id": "a0000000-0000-4000-8000-000000000001",
-        },
-    )
-    assert resp.status_code == 201, resp.text
-    created = resp.json()
-    bootstrap_startup_gate(client, created["id"], owner_user_id)
-    return created
-
-
-from tests.ge.conftest import create_test_department
-
-
-def _create_dept(client, name: str = "研发部", manager: str = "910") -> str:
-    return create_test_department(client, name=name, manager=manager)
+from tests.conftest import service_headers
+from tests.ge.conftest import (
+    GOLDEN_PROJECT_BODY,
+    U_PM,
+    U_ZHANGSAN,
+    create_project,
+    ensure_program_year_period,
+)
 
 
 def _annual_company(client, year: int = 2026) -> dict:
@@ -40,7 +24,9 @@ def _annual_company(client, year: int = 2026) -> dict:
     return resp.json()
 
 
-def _create_sub_and_program(client, company_id: str, dept_id: str, *, owner: str = "910") -> tuple[dict, dict]:
+def _create_sub_and_program(
+    client, company_id: str, dept_id: str, *, owner: str = "910"
+) -> tuple[dict, dict]:
     sub = client.post(
         "/api/v1/ge/objectives",
         headers=service_headers("800", is_reviewer=True),
@@ -64,29 +50,38 @@ def _create_sub_and_program(client, company_id: str, dept_id: str, *, owner: str
         },
     )
     assert prog.status_code == 201, prog.text
-    return sub_body, prog.json()
+    prog_body = prog.json()
+    ensure_program_year_period(prog_body["id"])
+    return sub_body, prog_body
 
 
-def _create_membership(client, user_id: str, department_id: str, team_id: str | None = None) -> None:
-    resp = client.post(
-        f"/api/v1/org/users/{user_id}/memberships",
-        headers=service_headers("800", is_reviewer=True),
-        json={"department_id": department_id, "team_id": team_id},
+def _dept_portfolio_url(dept_id: str, *member_ids: str) -> str:
+    q = urlencode([("member_user_ids", m) for m in member_ids])
+    base = f"/api/v1/ge/portfolios/departments/{dept_id}"
+    return f"{base}?{q}" if q else base
+
+
+def _create_project_on_program(client, program_id: str, *, pm_user_id: str = U_PM, actor: str = "910") -> dict:
+    return create_project(
+        client,
+        actor,
+        body={
+            **GOLDEN_PROJECT_BODY,
+            "program_id": program_id,
+            "pm_user_id": pm_user_id,
+        },
     )
-    assert resp.status_code == 201, resp.text
 
 
-def test_department_goal_portfolio_primary_and_participation(client):
-    """GE-T151: department portfolio has primary + participation rollup."""
+def test_ge_t250_department_portfolio_opaque_dept_with_injected_members(client):
+    """GE-T250: no GE org row; inject members → primary + participation."""
     company = _annual_company(client)
-    dept_id = _create_dept(client, "产品部")
+    dept_id = "opaque-dept-product"
     sub, prog = _create_sub_and_program(client, company["id"], dept_id)
-    _create_membership(client, U_PM, dept_id)
-    _create_membership(client, U_ZHANGSAN, dept_id)
     _create_project_on_program(client, prog["id"])
 
     resp = client.get(
-        f"/api/v1/ge/portfolios/departments/{dept_id}",
+        _dept_portfolio_url(dept_id, U_PM, U_ZHANGSAN),
         headers=service_headers("800", is_reviewer=True),
     )
     assert resp.status_code == 200, resp.text
@@ -94,71 +89,35 @@ def test_department_goal_portfolio_primary_and_participation(client):
     primary_ids = {(row["node_type"], row["node_id"]) for row in body["primary"]}
     assert ("objective", sub["id"]) in primary_ids
     assert ("program", prog["id"]) in primary_ids
-
     accountable_users = {row["user_id"] for row in body["accountable"]}
     assert U_PM in accountable_users
     contributing_users = {row["user_id"] for row in body["contributing"]}
     assert U_ZHANGSAN in contributing_users
 
 
-def test_team_and_user_goal_portfolio(client):
-    """GE-T152: team has no primary; user portfolio lists accountable + contributing."""
+def test_ge_t251_team_portfolio_injected_members(client):
+    """GE-T251: team portfolio uses injected members; no primary; no GE org."""
     company = _annual_company(client)
-    dept_id = _create_dept(client, "工程部")
-    sub, prog = _create_sub_and_program(client, company["id"], dept_id, owner=U_PM)
-    team_resp = client.post(
-        "/api/v1/org/teams",
-        headers=service_headers("800", is_reviewer=True),
-        json={"department_id": dept_id, "name": "平台组", "lead_user_id": U_PM},
-    )
-    assert team_resp.status_code == 201, team_resp.text
-    team_id = team_resp.json()["id"]
-    _create_membership(client, U_PM, dept_id, team_id)
-    _create_project_on_program(client, prog["id"], pm_user_id=U_PM, owner_user_id=U_PM)
+    dept_id = "opaque-dept-eng"
+    _sub, prog = _create_sub_and_program(client, company["id"], dept_id, owner=U_PM)
+    _create_project_on_program(client, prog["id"], pm_user_id=U_PM, actor=U_PM)
 
+    team_id = "opaque-team-platform"
+    q = urlencode([("member_user_ids", U_PM)])
     team_portfolio = client.get(
-        f"/api/v1/ge/portfolios/teams/{team_id}",
+        f"/api/v1/ge/portfolios/teams/{team_id}?{q}",
         headers=service_headers("800", is_reviewer=True),
     )
-    assert team_portfolio.status_code == 200
+    assert team_portfolio.status_code == 200, team_portfolio.text
     assert "primary" not in team_portfolio.json()
     assert any(row["user_id"] == U_PM for row in team_portfolio.json()["accountable"])
 
-    user_portfolio = client.get(
-        f"/api/v1/ge/portfolios/users/{U_PM}",
-        headers=service_headers("800", is_reviewer=True),
-    )
-    assert user_portfolio.status_code == 200
-    user_body = user_portfolio.json()
-    assert any(row["user_id"] == U_PM for row in user_body["accountable"])
 
-    zhangsan_portfolio = client.get(
-        f"/api/v1/ge/portfolios/users/{U_ZHANGSAN}",
-        headers=service_headers("800", is_reviewer=True),
-    )
-    assert zhangsan_portfolio.status_code == 200
-    assert any(row["user_id"] == U_ZHANGSAN for row in zhangsan_portfolio.json()["contributing"])
-
-
-def test_delete_department_blocked_when_primary_objectives(client):
-    """GE-T153: DELETE department with primary objectives → 409."""
+def test_ge_t252_migrate_without_org_rows(client):
+    """GE-T252: migrate primary ids with no GE org rows."""
     company = _annual_company(client)
-    dept_id = _create_dept(client, "待删部门")
-    _create_sub_and_program(client, company["id"], dept_id)
-
-    resp = client.delete(
-        f"/api/v1/org/departments/{dept_id}",
-        headers=service_headers("800", is_reviewer=True),
-    )
-    assert resp.status_code == 409
-    assert resp.json()["detail"] == "department_has_primary_objectives"
-
-
-def test_migrate_then_delete_department(client):
-    """GE-T154: migrate primary objectives then DELETE succeeds."""
-    company = _annual_company(client)
-    source_id = _create_dept(client, "源部门")
-    target_id = _create_dept(client, "目标部门")
+    source_id = "opaque-migrate-src"
+    target_id = "opaque-migrate-tgt"
     _create_sub_and_program(client, company["id"], source_id)
 
     migrate = client.post(
@@ -169,15 +128,65 @@ def test_migrate_then_delete_department(client):
     assert migrate.status_code == 200, migrate.text
     assert migrate.json()["objectives_migrated"] >= 1
 
-    delete = client.delete(
-        f"/api/v1/org/departments/{source_id}",
-        headers=service_headers("800", is_reviewer=True),
-    )
-    assert delete.status_code == 204
-
     portfolio = client.get(
-        f"/api/v1/ge/portfolios/departments/{target_id}",
+        _dept_portfolio_url(target_id),
         headers=service_headers("800", is_reviewer=True),
     )
     assert portfolio.status_code == 200
     assert len(portfolio.json()["primary"]) >= 1
+
+
+def test_ge_t253_empty_member_user_ids_primary_only(client):
+    """GE-T253: omit/empty member_user_ids → primary only, 200."""
+    company = _annual_company(client)
+    dept_id = "opaque-dept-empty-members"
+    sub, prog = _create_sub_and_program(client, company["id"], dept_id)
+
+    resp = client.get(
+        f"/api/v1/ge/portfolios/departments/{dept_id}",
+        headers=service_headers("800", is_reviewer=True),
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    primary_ids = {(row["node_type"], row["node_id"]) for row in body["primary"]}
+    assert ("objective", sub["id"]) in primary_ids
+    assert ("program", prog["id"]) in primary_ids
+    assert body["accountable"] == []
+    assert body["contributing"] == []
+
+
+def test_ge_t254_primary_exact_department_not_subtree(client):
+    """GE-T254: child-dept primary does not appear on parent portfolio primary."""
+    company = _annual_company(client)
+    parent_id = "opaque-parent-dept"
+    child_id = "opaque-child-dept"
+    _create_sub_and_program(client, company["id"], child_id)
+
+    parent_portfolio = client.get(
+        _dept_portfolio_url(parent_id),
+        headers=service_headers("800", is_reviewer=True),
+    )
+    assert parent_portfolio.status_code == 200
+    assert parent_portfolio.json()["primary"] == []
+
+    child_portfolio = client.get(
+        _dept_portfolio_url(child_id),
+        headers=service_headers("800", is_reviewer=True),
+    )
+    assert child_portfolio.status_code == 200
+    assert len(child_portfolio.json()["primary"]) >= 1
+
+
+def test_user_goal_portfolio_unchanged(client):
+    """Regression: user portfolio does not need org or member_user_ids."""
+    company = _annual_company(client)
+    dept_id = "opaque-user-port"
+    _sub, prog = _create_sub_and_program(client, company["id"], dept_id, owner=U_PM)
+    _create_project_on_program(client, prog["id"], pm_user_id=U_PM, actor=U_PM)
+
+    user_portfolio = client.get(
+        f"/api/v1/ge/portfolios/users/{U_PM}",
+        headers=service_headers("800", is_reviewer=True),
+    )
+    assert user_portfolio.status_code == 200
+    assert any(row["user_id"] == U_PM for row in user_portfolio.json()["accountable"])

@@ -21,7 +21,6 @@ from app.models.ge import (
     GeTask,
     GeTaskGateItemProduce,
 )
-from app.models.org import UserOrgProfile
 from app.services.ge_access import can_govern_project, require_govern_project
 from app.services.ge_person_id import require_person_user_id
 from app.services.ge_graph import (
@@ -107,20 +106,9 @@ def _parse_planned_due(value: str | None) -> date | None:
 
 
 def resolve_report_chain(db: Session, user_id: str) -> list[str]:
-    chain: list[str] = []
-    seen: set[str] = {user_id}
-    current = user_id
-    while True:
-        profile = db.get(UserOrgProfile, current)
-        if profile is None or not profile.manager_user_id:
-            break
-        manager = profile.manager_user_id
-        if manager in seen:
-            break
-        chain.append(manager)
-        seen.add(manager)
-        current = manager
-    return chain
+    """GE no longer owns org profiles; report chain is empty (org authority = skstudio)."""
+    _ = (db, user_id)
+    return []
 
 
 def notification_recipients(

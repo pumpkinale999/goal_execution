@@ -12,14 +12,9 @@ from app.models.ge import (
     GeTaskGateItemProduce,
 )
 from app.models.observation_mount import GeObservationOutbox, GeObservationSubscription
-from app.models.org import OrgDepartment, OrgTeam, UserOrgMembership, UserOrgProfile
 
 __all__ = [
     "Base",
-    "OrgDepartment",
-    "OrgTeam",
-    "UserOrgProfile",
-    "UserOrgMembership",
     "GeObjective",
     "GeProgram",
     "GeProject",

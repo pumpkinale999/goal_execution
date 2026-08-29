@@ -2,29 +2,35 @@
 
 ORG-PERF.1 / GE-PERF-05: set-based rollup — no per-user
 ``user_accountable_for_user_id`` loops.
+
+ORG-DEPT-GE-VAL-F1: department/team portfolio must not read GE org_* tables;
+member scope comes from BFF via ``member_user_ids``.
 """
 
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Any
+from typing import Any, Iterable
 
-from fastapi import HTTPException, status
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.models.ge import GeObjective, GeProgram, GeProject, GeTask
-from app.models.org import OrgDepartment, OrgTeam, UserOrgMembership
 from app.services.ge_accountability import (
     collect_accountable_entries,
     display_name,
     filter_objectives,
     is_archived_entity,
     portfolio_item_from_accountable,
-    user_ids_in_team,
 )
 from app.services.ge_strategic import planning_year_from_start
 from app.services.ge_strategic_lifecycle import refresh_lifecycle_on_read
+
+
+def _normalize_member_user_ids(member_user_ids: Iterable[str] | None) -> set[str]:
+    if not member_user_ids:
+        return set()
+    return {str(u).strip() for u in member_user_ids if str(u).strip()}
 
 
 def _portfolio_payload(
@@ -148,8 +154,6 @@ def _rollup_for_users(
     tasks = (
         db.query(GeTask).filter(GeTask.project_id.in_(project_ids)).all() if project_ids else []
     )
-    # Contributing projects: those with a non-PM assignee in user_ids (prior semantics
-    # used the union of such projects, then expanded to all non-PM assignees on them).
     contrib_project_ids = {
         t.project_id
         for t in tasks
@@ -168,23 +172,6 @@ def _filter_primary(primary: list[dict[str, Any]], *, include_archived: bool) ->
     if include_archived:
         return primary
     return [p for p in primary if (p.get("lifecycle_status") or "active") != "archived"]
-
-
-def _department_subtree_ids_from_rows(
-    all_depts: list[OrgDepartment], department_id: str
-) -> set[str]:
-    children_by_parent: dict[str | None, list[str]] = defaultdict(list)
-    for dept in all_depts:
-        children_by_parent[dept.parent_id].append(dept.id)
-    ids: set[str] = {department_id}
-    queue = [department_id]
-    while queue:
-        parent = queue.pop()
-        for child_id in children_by_parent.get(parent, []):
-            if child_id not in ids:
-                ids.add(child_id)
-                queue.append(child_id)
-    return ids
 
 
 def _primary_from_entities(
@@ -224,35 +211,29 @@ def get_department_goal_portfolio(
     db: Session,
     department_id: str,
     *,
+    member_user_ids: Iterable[str] | None = None,
     include_completed: bool = False,
     include_archived: bool = False,
 ) -> dict[str, Any]:
-    all_depts = db.query(OrgDepartment).all()
-    if not any(d.id == department_id for d in all_depts):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"detail": "not_found"})
+    """Primary by exact department_id; participation from injected member_user_ids only."""
+    user_ids = _normalize_member_user_ids(member_user_ids)
 
-    subtree_ids = _department_subtree_ids_from_rows(all_depts, department_id)
-    member_rows = (
-        db.query(UserOrgMembership.user_id)
-        .filter(UserOrgMembership.department_id.in_(list(subtree_ids)))
-        .distinct()
+    objectives = (
+        db.query(GeObjective)
+        .filter(
+            GeObjective.is_default.is_(False),
+            GeObjective.primary_department_id == department_id,
+        )
         .all()
     )
-    user_ids = {r[0] for r in member_rows}
-    uid_list = list(user_ids)
-
-    obj_clauses = [GeObjective.primary_department_id == department_id]
-    if uid_list:
-        obj_clauses.append(GeObjective.owner_user_id.in_(uid_list))
-    objectives = (
-        db.query(GeObjective).filter(GeObjective.is_default.is_(False), or_(*obj_clauses)).all()
+    programs = (
+        db.query(GeProgram)
+        .filter(
+            GeProgram.is_default.is_(False),
+            GeProgram.primary_department_id == department_id,
+        )
+        .all()
     )
-
-    prog_clauses = [GeProgram.primary_department_id == department_id]
-    if uid_list:
-        prog_clauses.append(GeProgram.owner_user_id.in_(uid_list))
-    programs = db.query(GeProgram).filter(GeProgram.is_default.is_(False), or_(*prog_clauses)).all()
-
     for obj in objectives:
         refresh_lifecycle_on_read(db, obj)
     for prog in programs:
@@ -272,75 +253,16 @@ def get_department_goal_portfolio(
             include_archived=include_archived,
         )
 
-    acc_objectives = filter_objectives(
-        [o for o in objectives if o.owner_user_id in user_ids],
+    accountable, contributing = _rollup_for_users(
+        db,
+        user_ids,
+        include_completed=include_completed,
         include_archived=include_archived,
     )
-    acc_programs = [
-        p
-        for p in programs
-        if p.owner_user_id in user_ids and (include_archived or not is_archived_entity(p))
-    ]
-
-    # Single JOIN covers PM + assignee projects and assignee rows for contributing
-    row_q = (
-        db.query(
-            GeProject.id,
-            GeProject.name,
-            GeProject.pm_user_id,
-            GeProject.status,
-            GeTask.id,
-            GeTask.assignee_user_id,
-            GeTask.project_id,
-        )
-        .outerjoin(GeTask, GeTask.project_id == GeProject.id)
-        .filter(
-            GeProject.deleted_at.is_(None),
-            or_(
-                GeProject.pm_user_id.in_(uid_list),
-                GeTask.assignee_user_id.in_(uid_list),
-            ),
-        )
-    )
-    if not include_completed:
-        row_q = row_q.filter(GeProject.status != "completed")
-    rows = row_q.all()
-
-    projects_by_id: dict[str, GeProject] = {}
-    tasks: list[GeTask] = []
-    seen_task_ids: set[str] = set()
-    for pid, pname, pm, status_val, task_id, assignee, task_pid in rows:
-        if pid not in projects_by_id:
-            projects_by_id[pid] = GeProject(
-                id=pid,
-                name=pname,
-                pm_user_id=pm,
-                status=status_val,
-            )
-        if task_id and task_id not in seen_task_ids:
-            seen_task_ids.add(task_id)
-            tasks.append(
-                GeTask(id=task_id, assignee_user_id=assignee, project_id=task_pid or pid)
-            )
-
-    projects = list(projects_by_id.values())
-    pm_projects = [p for p in projects if p.pm_user_id in user_ids]
-    accountable_entries = collect_accountable_entries(acc_objectives, acc_programs, pm_projects)
-
-    pm_by = {p.id: p.pm_user_id for p in projects}
-    contrib_ids = {
-        t.project_id
-        for t in tasks
-        if t.assignee_user_id in user_ids
-        and t.assignee_user_id
-        and t.assignee_user_id != pm_by.get(t.project_id)
-    }
-    contrib_projects = [p for p in projects if p.id in contrib_ids]
-
     return _portfolio_payload(
         primary=primary,
-        accountable=_group_accountable(accountable_entries),
-        contributing=_contributing_from_tasks(contrib_projects, tasks),
+        accountable=accountable,
+        contributing=contributing,
         include_completed=include_completed,
         include_archived=include_archived,
     )
@@ -350,14 +272,12 @@ def get_team_goal_portfolio(
     db: Session,
     team_id: str,
     *,
+    member_user_ids: Iterable[str] | None = None,
     include_completed: bool = False,
     include_archived: bool = False,
 ) -> dict[str, Any]:
-    team = db.get(OrgTeam, team_id)
-    if team is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"detail": "not_found"})
-
-    user_ids = user_ids_in_team(db, team_id)
+    _ = team_id  # identity for route/authz; membership resolved by BFF
+    user_ids = _normalize_member_user_ids(member_user_ids)
     accountable, contributing = _rollup_for_users(
         db,
         user_ids,

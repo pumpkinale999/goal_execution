@@ -188,26 +188,8 @@ def ensure_org_department(
     name: str | None = None,
     manager_user_id: str | None = None,
 ) -> str:
-    """Insert org_departments row when tests use opaque dept ids (skstudio authority)."""
-    from app.db import get_session_factory
-    from app.models.org import OrgDepartment
-    from app.services.ge_graph import now_iso
-
-    now = now_iso()
-    with get_session_factory()() as db:
-        if db.get(OrgDepartment, dept_id) is None:
-            db.add(
-                OrgDepartment(
-                    id=dept_id,
-                    name=name or dept_id,
-                    manager_user_id=manager_user_id,
-                    parent_id=None,
-                    sort_order=0,
-                    created_at=now,
-                    updated_at=now,
-                )
-            )
-            db.commit()
+    """Return opaque department id; GE no longer stores org_* authority (ORG-DEPT-GE-VAL-F1/F2)."""
+    _ = (name, manager_user_id)
     return dept_id
 
 

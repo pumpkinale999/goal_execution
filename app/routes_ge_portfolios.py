@@ -69,6 +69,7 @@ def get_department_portfolio(
     user: Annotated[AuthUser, Depends(require_service_user)],
     include_completed: int = Query(default=0, ge=0, le=1),
     include_archived: int = Query(default=0, ge=0, le=1),
+    member_user_ids: Annotated[list[str] | None, Query()] = None,
     x_actor_org_portfolio_department_ids: Annotated[
         str | None, Header(alias=HDR_PORTFOLIO_DEPTS)
     ] = None,
@@ -81,6 +82,7 @@ def get_department_portfolio(
     return get_department_goal_portfolio(
         db,
         department_id,
+        member_user_ids=member_user_ids,
         include_completed=bool(include_completed),
         include_archived=bool(include_archived),
     )
@@ -93,6 +95,7 @@ def get_team_portfolio(
     user: Annotated[AuthUser, Depends(require_service_user)],
     include_completed: int = Query(default=0, ge=0, le=1),
     include_archived: int = Query(default=0, ge=0, le=1),
+    member_user_ids: Annotated[list[str] | None, Query()] = None,
     x_actor_org_portfolio_team_ids: Annotated[
         str | None, Header(alias=HDR_PORTFOLIO_TEAMS)
     ] = None,
@@ -105,6 +108,7 @@ def get_team_portfolio(
     return get_team_goal_portfolio(
         db,
         team_id,
+        member_user_ids=member_user_ids,
         include_completed=bool(include_completed),
         include_archived=bool(include_archived),
     )
