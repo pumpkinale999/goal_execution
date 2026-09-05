@@ -14,6 +14,7 @@ from app.services.ge_goal_portfolio import (
     get_team_goal_portfolio,
     get_user_goal_portfolio,
 )
+from app.services.ge_personal_tree import build_subject_personal_tree
 from app.services.ge_pbc_projects import projects_for_users_in_period
 from app.services.ge_portfolio_authz import (
     HDR_PORTFOLIO_DEPTS,
@@ -142,6 +143,41 @@ def get_user_portfolio(
         db,
         user_id,
         include_completed=bool(include_completed),
+        include_archived=bool(include_archived),
+    )
+
+
+@router.get("/users/{user_id}/personal-tree")
+def get_user_personal_tree(
+    user_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[AuthUser, Depends(require_service_user)],
+    include_archived: int = Query(default=0, ge=0, le=1),
+    x_actor_org_portfolio_department_ids: Annotated[
+        str | None, Header(alias=HDR_PORTFOLIO_DEPTS)
+    ] = None,
+    x_actor_org_portfolio_team_ids: Annotated[
+        str | None, Header(alias=HDR_PORTFOLIO_TEAMS)
+    ] = None,
+    x_target_org_department_id: Annotated[str | None, Header(alias=HDR_TARGET_DEPT)] = None,
+    x_target_org_team_id: Annotated[str | None, Header(alias=HDR_TARGET_TEAM)] = None,
+) -> dict[str, Any]:
+    """Subject personal left-tree spine (GE-VIS-1 · DESK-GE1 MS7a).
+
+    Subject = path user_id (never JWT actor). Always non-reviewer geometry even
+    when the service actor is a reviewer.
+    """
+    require_user_portfolio(
+        user,
+        user_id,
+        portfolio_department_ids=x_actor_org_portfolio_department_ids,
+        portfolio_team_ids=x_actor_org_portfolio_team_ids,
+        target_department_id=x_target_org_department_id,
+        target_team_id=x_target_org_team_id,
+    )
+    return build_subject_personal_tree(
+        db,
+        user_id,
         include_archived=bool(include_archived),
     )
 

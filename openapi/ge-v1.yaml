@@ -239,6 +239,35 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GoalPortfolio'
+  /ge/portfolios/users/{user_id}/personal-tree:
+    get:
+      operationId: getUserPersonalTree
+      summary: Subject personal left-tree spine (GE-VIS-1 · DESK-GE1 MS7a)
+      description: |
+        Subject = path user_id (not JWT actor). Always non-reviewer personal_tree
+        geometry. Returns flat objectives/programs with parent_id / objective_id.
+      tags: [org]
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - name: include_archived
+          in: query
+          schema: { type: integer, enum: [0, 1], default: 0 }
+      responses:
+        '200':
+          description: Personal tree spine
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [subject_user_id, objectives, programs]
+                properties:
+                  subject_user_id: { type: string }
+                  objectives:
+                    type: array
+                    items: { type: object }
+                  programs:
+                    type: array
+                    items: { type: object }
   /org/members:
     get:
       operationId: listOrgMembers

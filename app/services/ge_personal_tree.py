@@ -9,6 +9,7 @@ Reviewers get the full tree (caller skips this module).
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -181,3 +182,108 @@ def program_in_projection(db: Session, user: AuthUser, program_id: str) -> bool:
     if user.is_reviewer:
         return True
     return program_id in program_ids_in_projection(db, user)
+
+
+def subject_as_projection_user(subject_user_id: str) -> AuthUser:
+    """Force non-reviewer projection for a subject (DESK-GE1 / G11).
+
+    Never inherit caller reviewer flag — subject personal_tree ≠ full tree.
+    """
+    return AuthUser(
+        user_id=str(subject_user_id or "").strip(),
+        auth_method="service",
+        is_reviewer=False,
+    )
+
+
+def _objective_spine_row(obj: GeObjective) -> dict[str, Any]:
+    from app.services.ge_strategic import strategic_fields_out
+
+    row: dict[str, Any] = {
+        "id": obj.id,
+        "name": obj.name,
+        "level": obj.level,
+        "owner_user_id": obj.owner_user_id,
+        "pmbp_user_id": obj.pmbp_user_id,
+        "is_default": bool(obj.is_default),
+        "sort_order": obj.sort_order,
+        **strategic_fields_out(obj),
+    }
+    if obj.parent_id:
+        row["parent_id"] = obj.parent_id
+    return row
+
+
+def _program_spine_row(program: GeProgram) -> dict[str, Any]:
+    from app.services.ge_strategic import strategic_fields_out
+
+    return {
+        "id": program.id,
+        "name": program.name,
+        "objective_id": program.objective_id,
+        "owner_user_id": program.owner_user_id,
+        "pmbp_user_id": program.pmbp_user_id,
+        "is_default": bool(program.is_default),
+        "sort_order": program.sort_order,
+        **strategic_fields_out(program),
+    }
+
+
+def build_subject_personal_tree(
+    db: Session,
+    subject_user_id: str,
+    *,
+    include_archived: bool = False,
+) -> dict[str, Any]:
+    """Flat personal_tree spine for subject (GE-VIS-1 · DESK-GE1 MS7a).
+
+    Returns objectives/programs in projection with hang fields. Caller (BFF)
+    rebuilds nest via parent_id / objective_id. Always non-reviewer geometry.
+    """
+    from app.services.ge_accountability import is_archived_entity
+    from app.services.ge_strategic_lifecycle import refresh_lifecycle_entities
+
+    uid = str(subject_user_id or "").strip()
+    if not uid:
+        return {"subject_user_id": "", "objectives": [], "programs": []}
+
+    subject = subject_as_projection_user(uid)
+    all_objectives = db.query(GeObjective).all()
+    all_programs = db.query(GeProgram).all()
+    refresh_lifecycle_entities(db, all_objectives, all_programs)
+
+    projection = compute_personal_tree_sets(db, subject)
+    keep_obj = projection.objective_ids
+    keep_prog = projection.program_ids
+
+    objectives_out: list[dict[str, Any]] = []
+    for obj in all_objectives:
+        if obj.id not in keep_obj:
+            continue
+        if obj.is_default:
+            continue
+        if not include_archived and is_archived_entity(obj):
+            continue
+        objectives_out.append(_objective_spine_row(obj))
+    objectives_out.sort(key=lambda r: (int(r.get("sort_order") or 0), str(r.get("name") or "")))
+
+    keep_obj_final = {r["id"] for r in objectives_out}
+    programs_out: list[dict[str, Any]] = []
+    for program in all_programs:
+        if program.id not in keep_prog:
+            continue
+        if program.is_default:
+            continue
+        if not include_archived and is_archived_entity(program):
+            continue
+        if program.objective_id not in keep_obj_final:
+            # Parent objective filtered out (e.g. archived) — drop program from spine.
+            continue
+        programs_out.append(_program_spine_row(program))
+    programs_out.sort(key=lambda r: (int(r.get("sort_order") or 0), str(r.get("name") or "")))
+
+    return {
+        "subject_user_id": uid,
+        "objectives": objectives_out,
+        "programs": programs_out,
+    }
