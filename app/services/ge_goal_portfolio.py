@@ -22,6 +22,8 @@ from app.services.ge_accountability import (
     filter_objectives,
     is_archived_entity,
     portfolio_item_from_accountable,
+    program_names_for_projects,
+    _contributing_project_row,
 )
 from app.services.ge_strategic import planning_year_from_start
 from app.services.ge_strategic_lifecycle import refresh_lifecycle_on_read
@@ -71,12 +73,16 @@ def _group_accountable(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def _contributing_from_tasks(
     projects: list[GeProject],
     tasks: list[GeTask],
+    *,
+    program_names: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     """Same shape as collect_contributing_entries, without an extra SQL round-trip."""
     if not projects:
         return []
+    names = program_names or {}
     pm_by_project = {p.id: p.pm_user_id for p in projects}
     name_by_project = {p.id: p.name for p in projects}
+    program_id_by_project = {p.id: p.program_id for p in projects}
     project_ids = set(pm_by_project)
     counts: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     for task in tasks:
@@ -93,11 +99,13 @@ def _contributing_from_tasks(
                 "user_id": uid,
                 "display_name": display_name(uid),
                 "projects": [
-                    {
-                        "project_id": pid,
-                        "project_name": name_by_project[pid],
-                        "task_count": count,
-                    }
+                    _contributing_project_row(
+                        pid,
+                        project_name=name_by_project[pid],
+                        program_id=program_id_by_project.get(pid),
+                        program_names=names,
+                        task_count=count,
+                    )
                     for pid, count in sorted(proj_counts.items())
                 ],
             }
@@ -148,7 +156,11 @@ def _rollup_for_users(
     objectives = filter_objectives(objectives, include_archived=include_archived)
     programs = [p for p in programs if include_archived or not is_archived_entity(p)]
     pm_projects = [p for p in projects if p.pm_user_id in user_ids]
-    accountable_entries = collect_accountable_entries(objectives, programs, pm_projects)
+    # One program-name SELECT for all projects in this rollup (PM + contributor).
+    program_names = program_names_for_projects(db, projects)
+    accountable_entries = collect_accountable_entries(
+        objectives, programs, pm_projects, program_names=program_names
+    )
 
     project_ids = [p.id for p in projects]
     tasks = (
@@ -164,7 +176,7 @@ def _rollup_for_users(
     contrib_projects = [p for p in projects if p.id in contrib_project_ids]
     return (
         _group_accountable(accountable_entries),
-        _contributing_from_tasks(contrib_projects, tasks),
+        _contributing_from_tasks(contrib_projects, tasks, program_names=program_names),
     )
 
 

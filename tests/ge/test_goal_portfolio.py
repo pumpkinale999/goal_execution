@@ -190,3 +190,9 @@ def test_user_goal_portfolio_unchanged(client):
     )
     assert user_portfolio.status_code == 200
     assert any(row["user_id"] == U_PM for row in user_portfolio.json()["accountable"])
+    # DESK-GE1: project items carry program_id/name in one portfolio round-trip.
+    pm_row = next(row for row in user_portfolio.json()["accountable"] if row["user_id"] == U_PM)
+    project_items = [i for i in pm_row["items"] if i.get("node_type") == "project"]
+    assert project_items
+    assert project_items[0].get("program_id") == prog["id"]
+    assert project_items[0].get("program_name") == prog["name"]

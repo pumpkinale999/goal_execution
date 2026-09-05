@@ -80,7 +80,10 @@ def collect_accountable_entries(
     objectives: list[GeObjective],
     programs: list[GeProgram],
     projects: list[GeProject],
+    *,
+    program_names: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
+    names = program_names or {}
     entries: list[dict[str, Any]] = []
     for obj in objectives:
         if obj.owner_user_id:
@@ -107,16 +110,21 @@ def collect_accountable_entries(
                 }
             )
     for project in projects:
-        entries.append(
-            {
-                "user_id": project.pm_user_id,
-                "display_name": display_name(project.pm_user_id),
-                "role": "pm",
-                "node_type": "project",
-                "node_id": project.id,
-                "node_name": project.name,
-            }
-        )
+        prog_id = project.program_id
+        entry: dict[str, Any] = {
+            "user_id": project.pm_user_id,
+            "display_name": display_name(project.pm_user_id),
+            "role": "pm",
+            "node_type": "project",
+            "node_id": project.id,
+            "node_name": project.name,
+            "program_id": prog_id,
+        }
+        if prog_id:
+            pname = names.get(prog_id)
+            if pname:
+                entry["program_name"] = pname
+        entries.append(entry)
     return entries
 
 
@@ -126,6 +134,8 @@ def collect_contributing_entries(db: Session, projects: list[GeProject]) -> list
     project_ids = [p.id for p in projects]
     pm_by_project = {p.id: p.pm_user_id for p in projects}
     name_by_project = {p.id: p.name for p in projects}
+    program_id_by_project = {p.id: p.program_id for p in projects}
+    program_names = program_names_for_projects(db, projects)
     tasks = db.query(GeTask).filter(GeTask.project_id.in_(project_ids)).all()
     counts: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     for task in tasks:
@@ -140,16 +150,48 @@ def collect_contributing_entries(db: Session, projects: list[GeProject]) -> list
                 "user_id": uid,
                 "display_name": display_name(uid),
                 "projects": [
-                    {
-                        "project_id": pid,
-                        "project_name": name_by_project[pid],
-                        "task_count": count,
-                    }
+                    _contributing_project_row(
+                        pid,
+                        project_name=name_by_project[pid],
+                        program_id=program_id_by_project.get(pid),
+                        program_names=program_names,
+                        task_count=count,
+                    )
                     for pid, count in sorted(proj_counts.items())
                 ],
             }
         )
     return contributing
+
+
+def program_names_for_projects(db: Session, projects: list[GeProject]) -> dict[str, str]:
+    """One SELECT for all program names referenced by projects (no N+1)."""
+    prog_ids = {p.program_id for p in projects if p.program_id}
+    if not prog_ids:
+        return {}
+    rows = db.query(GeProgram).filter(GeProgram.id.in_(prog_ids)).all()
+    return {r.id: r.name for r in rows if r.name}
+
+
+def _contributing_project_row(
+    project_id: str,
+    *,
+    project_name: str,
+    program_id: str | None,
+    program_names: dict[str, str],
+    task_count: int,
+) -> dict[str, Any]:
+    row: dict[str, Any] = {
+        "project_id": project_id,
+        "project_name": project_name,
+        "task_count": task_count,
+    }
+    if program_id:
+        row["program_id"] = program_id
+        pname = program_names.get(program_id)
+        if pname:
+            row["program_name"] = pname
+    return row
 
 
 def refresh_objectives_in_subtree(db: Session, root_id: str) -> list[GeObjective]:
@@ -203,12 +245,18 @@ def primary_entries_for_department(db: Session, department_id: str) -> list[dict
 
 
 def portfolio_item_from_accountable(entry: dict[str, Any]) -> dict[str, Any]:
-    return {
+    item: dict[str, Any] = {
         "node_type": entry["node_type"],
         "node_id": entry["node_id"],
         "node_name": entry["node_name"],
         "role": entry["role"],
     }
+    if entry.get("node_type") == "project":
+        if entry.get("program_id"):
+            item["program_id"] = entry["program_id"]
+        if entry.get("program_name"):
+            item["program_name"] = entry["program_name"]
+    return item
 
 
 def can_read_program_scope(db: Session, user: AuthUser, program_id: str) -> bool:
