@@ -80,17 +80,17 @@ def _contributing_from_tasks(
     if not projects:
         return []
     names = program_names or {}
-    pm_by_project = {p.id: p.pm_user_id for p in projects}
     name_by_project = {p.id: p.name for p in projects}
     program_id_by_project = {p.id: p.program_id for p in projects}
-    project_ids = set(pm_by_project)
+    project_ids = {p.id for p in projects}
     counts: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     for task in tasks:
         if task.project_id not in project_ids:
             continue
         uid = task.assignee_user_id
-        if not uid or uid == pm_by_project.get(task.project_id):
+        if not uid:
             continue
+        # DESK-GE1 MS5: include PM when they hold assignee tasks (dual-fill).
         counts[uid][task.project_id] += 1
     contributing: list[dict[str, Any]] = []
     for uid, proj_counts in sorted(counts.items()):
@@ -169,9 +169,7 @@ def _rollup_for_users(
     contrib_project_ids = {
         t.project_id
         for t in tasks
-        if t.assignee_user_id in user_ids
-        and t.assignee_user_id
-        and t.assignee_user_id != next((p.pm_user_id for p in projects if p.id == t.project_id), None)
+        if t.assignee_user_id in user_ids and t.assignee_user_id
     }
     contrib_projects = [p for p in projects if p.id in contrib_project_ids]
     return (

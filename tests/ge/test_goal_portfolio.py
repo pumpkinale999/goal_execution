@@ -181,7 +181,7 @@ def test_user_goal_portfolio_unchanged(client):
     """Regression: user portfolio does not need org or member_user_ids."""
     company = _annual_company(client)
     dept_id = "opaque-user-port"
-    _sub, prog = _create_sub_and_program(client, company["id"], dept_id, owner=U_PM)
+    sub, prog = _create_sub_and_program(client, company["id"], dept_id, owner=U_PM)
     _create_project_on_program(client, prog["id"], pm_user_id=U_PM, actor=U_PM)
 
     user_portfolio = client.get(
@@ -196,3 +196,18 @@ def test_user_goal_portfolio_unchanged(client):
     assert project_items
     assert project_items[0].get("program_id") == prog["id"]
     assert project_items[0].get("program_name") == prog["name"]
+    # DESK-GE1 MS5: objective hang fields (parent_id / level) on owner portfolio.
+    obj_items = [i for i in pm_row["items"] if i.get("node_type") == "objective"]
+    assert obj_items
+    assert any(i.get("parent_id") == company["id"] and i.get("level") == "sub" for i in obj_items)
+    # Program hang field objective_id on program owner portfolio.
+    owner911 = client.get(
+        "/api/v1/ge/portfolios/users/911",
+        headers=service_headers("800", is_reviewer=True),
+    )
+    assert owner911.status_code == 200
+    row911 = next(r for r in owner911.json()["accountable"] if r["user_id"] == "911")
+    prog_items = [i for i in row911["items"] if i.get("node_type") == "program" and i["node_id"] == prog["id"]]
+    assert prog_items
+    assert prog_items[0].get("objective_id") == sub["id"]
+

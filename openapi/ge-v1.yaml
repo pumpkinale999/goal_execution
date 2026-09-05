@@ -1817,6 +1817,11 @@ components:
                     node_id: { type: string }
                     node_name: { type: string }
                     role: { type: string }
+                    level: { type: string, nullable: true, description: "objective level (company|sub); DESK-GE1 MS5" }
+                    parent_id: { type: string, nullable: true, description: "objective parent; DESK-GE1 MS5" }
+                    objective_id: { type: string, nullable: true, description: "program → objective; DESK-GE1 MS5" }
+                    program_id: { type: string, nullable: true, description: "project → program" }
+                    program_name: { type: string, nullable: true }
         contributing:
           type: array
           items:
@@ -1833,6 +1838,8 @@ components:
                     project_id: { type: string }
                     project_name: { type: string }
                     task_count: { type: integer }
+                    program_id: { type: string, nullable: true }
+                    program_name: { type: string, nullable: true }
         include_completed: { type: boolean }
         include_archived: { type: boolean }
     PeriodGranularity:

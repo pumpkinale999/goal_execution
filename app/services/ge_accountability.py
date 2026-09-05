@@ -87,16 +87,18 @@ def collect_accountable_entries(
     entries: list[dict[str, Any]] = []
     for obj in objectives:
         if obj.owner_user_id:
-            entries.append(
-                {
-                    "user_id": obj.owner_user_id,
-                    "display_name": display_name(obj.owner_user_id),
-                    "role": "owner",
-                    "node_type": "objective",
-                    "node_id": obj.id,
-                    "node_name": obj.name,
-                }
-            )
+            entry: dict[str, Any] = {
+                "user_id": obj.owner_user_id,
+                "display_name": display_name(obj.owner_user_id),
+                "role": "owner",
+                "node_type": "objective",
+                "node_id": obj.id,
+                "node_name": obj.name,
+                "level": obj.level,
+            }
+            if obj.parent_id:
+                entry["parent_id"] = obj.parent_id
+            entries.append(entry)
     for prog in programs:
         if prog.owner_user_id:
             entries.append(
@@ -107,6 +109,7 @@ def collect_accountable_entries(
                     "node_type": "program",
                     "node_id": prog.id,
                     "node_name": prog.name,
+                    "objective_id": prog.objective_id,
                 }
             )
     for project in projects:
@@ -132,7 +135,6 @@ def collect_contributing_entries(db: Session, projects: list[GeProject]) -> list
     if not projects:
         return []
     project_ids = [p.id for p in projects]
-    pm_by_project = {p.id: p.pm_user_id for p in projects}
     name_by_project = {p.id: p.name for p in projects}
     program_id_by_project = {p.id: p.program_id for p in projects}
     program_names = program_names_for_projects(db, projects)
@@ -140,8 +142,10 @@ def collect_contributing_entries(db: Session, projects: list[GeProject]) -> list
     counts: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     for task in tasks:
         uid = task.assignee_user_id
-        if not uid or uid == pm_by_project.get(task.project_id):
+        if not uid:
             continue
+        # DESK-GE1 MS5: PM with assignee tasks still counts as contributing
+        # (又管又参与 dual-fill). Pure PM with no assignee work stays out.
         counts[uid][task.project_id] += 1
     contributing: list[dict[str, Any]] = []
     for uid, proj_counts in sorted(counts.items()):
@@ -251,7 +255,16 @@ def portfolio_item_from_accountable(entry: dict[str, Any]) -> dict[str, Any]:
         "node_name": entry["node_name"],
         "role": entry["role"],
     }
-    if entry.get("node_type") == "project":
+    ntype = entry.get("node_type")
+    if ntype == "objective":
+        if entry.get("level") in ("company", "sub") or entry.get("level"):
+            item["level"] = entry["level"]
+        if entry.get("parent_id"):
+            item["parent_id"] = entry["parent_id"]
+    elif ntype == "program":
+        if entry.get("objective_id"):
+            item["objective_id"] = entry["objective_id"]
+    elif ntype == "project":
         if entry.get("program_id"):
             item["program_id"] = entry["program_id"]
         if entry.get("program_name"):
