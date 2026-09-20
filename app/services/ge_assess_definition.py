@@ -17,6 +17,9 @@ from app.constants import (
 )
 
 _INACTIVE = frozenset({"cancelled", "archived"})
+_DEVIATED_TASK = "deviated"
+_DEVIATION_GI = "deviation"
+_DEV_OPEN_ACTIVE = frozenset({"open", "active"})
 
 
 def _nonempty(value: Any) -> str | None:
@@ -45,6 +48,23 @@ def _effective_assignee(task: dict[str, Any], pm_user_id: str | None) -> str:
     if _is_system_start_end_produce(task) and pm_user_id:
         return str(pm_user_id)
     return _nonempty(task.get("assignee_user_id")) or ""
+
+
+def _gi_in_open_deviation(gi: dict[str, Any]) -> bool:
+    """True while Deviation owns the produce contract (open/active)."""
+    if str(gi.get("status") or "") == _DEVIATION_GI:
+        return True
+    dev = gi.get("deviation")
+    if isinstance(dev, dict) and str(dev.get("status") or "") in _DEV_OPEN_ACTIVE:
+        return True
+    return False
+
+
+def _is_live_producer(task: dict[str, Any], gi_id: str) -> bool:
+    """Any-phase produce counts; replaced (deviated) tasks do not."""
+    if str(task.get("status") or "") == _DEVIATED_TASK:
+        return False
+    return gi_id in (task.get("produces") or [])
 
 
 def _is_start_gate_orphan_allowed(gi: dict[str, Any]) -> bool:
@@ -157,12 +177,11 @@ def assess_definition_gaps_from_graph(graph: dict[str, Any]) -> list[dict[str, A
                     "entity_kind": "gate",
                     "entity_id": gi_id,
                 }
-                producers = [
-                    t
-                    for t in tasks
-                    if gi_id in (t.get("produces") or [])
-                ]
-                if not producers:
+                # Produce may be cross-phase (task moved after link). Same-phase-only
+                # counting false-flags「缺少产出任务」, then PRA L1 blocks delay while
+                # deviation locks produce — a deadlock. Count all live producers.
+                producers = [t for t in all_tasks if _is_live_producer(t, gi_id)]
+                if not producers and not _gi_in_open_deviation(gi):
                     gaps.append(
                         _gap(
                             type_="definition.stage_incomplete",

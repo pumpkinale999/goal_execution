@@ -116,6 +116,37 @@ def test_assess_ok_graph_empty():
     assert assess_definition_gaps_from_graph(_minimal_ok_graph()) == []
 
 
+def test_assess_cross_phase_produce_is_not_missing():
+    """Producer in another phase still satisfies the gate (avoid false 缺少产出任务)."""
+    g = _minimal_ok_graph()
+    producer = g["phases"][1]["tasks"].pop(0)
+    producer["produces"] = ["gi-x"]
+    g["phases"][2]["tasks"].append(producer)
+    gaps = assess_definition_gaps_from_graph(g)
+    assert not any(x["evidence"].get("missing") == "producer_task" for x in gaps)
+
+
+def test_assess_ignores_deviated_task_as_producer():
+    g = _minimal_ok_graph()
+    g["phases"][1]["tasks"][0]["status"] = "deviated"
+    g["phases"][1]["tasks"][0]["produces"] = ["gi-x"]
+    gaps = assess_definition_gaps_from_graph(g)
+    assert any(
+        x["evidence"].get("missing") == "producer_task" and x["evidence"].get("gate_id") == "gi-x"
+        for x in gaps
+    )
+
+
+def test_assess_skips_producer_gap_while_gate_in_deviation():
+    """Deviation owns produce; a false 缺少产出任务 would L1-block delay and lock the canvas."""
+    g = _minimal_ok_graph()
+    g["phases"][1]["gate_items"][0]["status"] = "deviation"
+    g["phases"][1]["gate_items"][0]["deviation"] = {"id": "d1", "status": "open"}
+    g["phases"][1]["tasks"][0]["produces"] = []
+    gaps = assess_definition_gaps_from_graph(g)
+    assert not any(x["evidence"].get("missing") == "producer_task" for x in gaps)
+
+
 def test_assess_start_window_and_project_envelope():
     g = _minimal_ok_graph()
     g["phases"][0]["planned_start"] = None
