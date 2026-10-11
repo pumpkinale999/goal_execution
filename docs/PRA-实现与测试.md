@@ -90,7 +90,7 @@ PM → 专项 owner → 子目标 owner → 目标 owner → 评审员（AA_REVI
 
 ## SDA（M5.3–M5.5 现网）
 
-仓内：[`active_agent/docs/SDA.md`](../active_agent/docs/SDA.md)。
+仓内：[`active_agent/docs/SDA.md`](../../active_agent/docs/SDA.md)。
 
 | 能力 | 状态 |
 | ---- | ---- |
@@ -266,7 +266,7 @@ cd active_agent
 ## 文档
 
 - 仓内：`M1.md` · `M2-M3.md` · `M4-ge-mount.md` · **`SDA.md`**
-- OpenAPI：[`openapi/sda-events.md`](./openapi/sda-events.md)
+- OpenAPI：[`openapi/sda-events.md`](../../platform_docs/openapi/sda-events.md)
 
 ---
 
@@ -311,7 +311,7 @@ cd active_agent
 
 ## M6 完成定义（现网 · 切换日一刀切 · v0.2.44）
 
-产品契约：PRA/GE **§4.9**（含 **§4.9.8 produce/prereq 就绪集**；**Retire 依赖矩阵 UI**）；壳层指针：[skstudio-壳层与导航UI迭代.md](./skstudio-壳层与导航UI迭代.md) §4.2；仓内投影笔记：`active_agent/docs/SDA.md`（= Panel 主表面）。  
+产品契约：PRA/GE **§4.9**（含 **§4.9.8 produce/prereq 就绪集**；**Retire 依赖矩阵 UI**）；壳层指针：[skstudio-壳层与导航UI迭代.md](../../skstudio/docs/skstudio-壳层与导航UI迭代.md) §4.2；仓内投影笔记：`active_agent/docs/SDA.md`（= Panel 主表面）。  
 **已知软缺口**：GE `sign` 仍即时写阶段完成（与 AA `notify_phase_complete` 叠层，**已不再**要求人批阶段）。Panel E2E 冒烟已齐（M6.5-E2E-1～6）；仓库级 Playwright 全量仍非门禁。
 
 ### A · `active_agent`
@@ -605,7 +605,7 @@ Chrome：样例项目已完成态，未再走完整提交→签收→评审 Netw
 | B11 | 看板读路径 | **不**调用 `load_scan_bundle`；延迟来自缓存批量查询 | **代码齐**（`program_board._ids_in_delay_work`） |
 
 **竖切记录（v0.2.65）**：AA 单测 B1–B5；FE vitest 默认 Tab=看板、bucket 过滤；环段 0 仍可点选；空专项空态文案。  
-**竖切记录（v0.2.91 · BOARD-CACHE）**：消除 N×sense graph；公司目标看板 503 根因修复；见 [迭代](./PRA-目标看板work_state缓存迭代.md) · [release-v29.00.44](./migration/release-v29.00.44.md)。
+**竖切记录（v0.2.91 · BOARD-CACHE）**：消除 N×sense graph；公司目标看板 503 根因修复；见 [迭代](./PRA-目标看板work_state缓存迭代.md) · [release-v29.00.44](../../platform_docs/migration/release-v29.00.44.md)。
 
 ---
 

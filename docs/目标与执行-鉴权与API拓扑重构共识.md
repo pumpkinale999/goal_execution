@@ -10,13 +10,13 @@
 
 | 文档 | 关系 |
 | ---- | ---- |
-| [数字员工与Actor身份共识.md](./数字员工与Actor身份共识.md) | **Actor 主语**：人类 / 数字员工；代行 vs 履职；缺省 Actor=人类（与现网一致） |
+| [数字员工与Actor身份共识.md](../../platform_docs/数字员工与Actor身份共识.md) | **Actor 主语**：人类 / 数字员工；代行 vs 履职；缺省 Actor=人类（与现网一致） |
 | [目标与执行及其组织支撑(需求).md](./目标与执行及其组织支撑(需求).md) | 产品语义（§2.6 评审员 · §3.3.5 子树负责）；谓词实现名以**本文**为准 |
 | [目标与执行及其组织支撑(实现与测试).md](./目标与执行及其组织支撑(实现与测试).md) | REST / BFF / 测试；§1.4 / §4.0 旧双通道表述以本文废止并回写 |
-| [平台控制面与Postgres迁移共识.md](./平台控制面与Postgres迁移共识.md) | org 权威在 skstudio；GE 不挂 `/org`（本文沿用） |
-| [skstudio-建群审批-需求与设计.md](./skstudio-建群审批-需求与设计.md) | 评审员名单 `SKSTUDIO_GROUP_CREATION_REVIEWERS` |
-| [组织知识库-项目Note权限迭代.md](./组织知识库-项目Note权限迭代.md) | K27 项目文档；读权与 `can_read_project` 对齐 |
-| [组织知识库-鉴权与API拓扑共识.md](./组织知识库-鉴权与API拓扑共识.md) | **KB-AUTHZ**：kbase 镜像本文原则（单门 `/api/v1/kbase`） |
+| [平台控制面与Postgres迁移共识.md](../../platform_docs/平台控制面与Postgres迁移共识.md) | org 权威在 skstudio；GE 不挂 `/org`（本文沿用） |
+| [skstudio-建群审批-需求与设计.md](../../skstudio/docs/skstudio-建群审批-需求与设计.md) | 评审员名单 `SKSTUDIO_GROUP_CREATION_REVIEWERS` |
+| [组织知识库-项目Note权限迭代.md](../../knowledge_base/docs/组织知识库-项目Note权限迭代.md) | K27 项目文档；读权与 `can_read_project` 对齐 |
+| [组织知识库-鉴权与API拓扑共识.md](../../knowledge_base/docs/组织知识库-鉴权与API拓扑共识.md) | **KB-AUTHZ**：kbase 镜像本文原则（单门 `/api/v1/kbase`） |
 | [目标与执行-项目管理BP迭代.md](./目标与执行-项目管理BP迭代.md) | **M41** PMBP · 谓词 · UI · 测试 |
 | [目标与执行-Person身份硬切迭代.md](./目标与执行-Person身份硬切迭代.md) | **M42** Person≡`str(users.id)` · 写路径与 Actor uid 同形 |
 
@@ -28,7 +28,7 @@
 
 | # | 共识 |
 | - | ---- |
-| C0 | **skstudio 是唯一产品入口**：浏览器、PA、GA、Hermes 等访问 GE/组织相关业务 API **必须**经 skstudio；**禁止**产品调用方直连 GE `:8092`（运维探活 / 卫星单测除外）。与 [KB-AUTHZ K0](./组织知识库-鉴权与API拓扑共识.md) 同原则。测试：前缀门禁（GE-AUTHZ-T12/T13）保持；**不得**新增「Agent 直连 GE」正路径测 |
+| C0 | **skstudio 是唯一产品入口**：浏览器、PA、GA、Hermes 等访问 GE/组织相关业务 API **必须**经 skstudio；**禁止**产品调用方直连 GE `:8092`（运维探活 / 卫星单测除外）。与 [KB-AUTHZ K0](../../knowledge_base/docs/组织知识库-鉴权与API拓扑共识.md) 同原则。测试：前缀门禁（GE-AUTHZ-T12/T13）保持；**不得**新增「Agent 直连 GE」正路径测 |
 | C1 | **skstudio** 负责 Authentication + 平台已断言事实（`actor`、`is_reviewer`、**组织事实头**）；**GE** 负责**一切 GE 能力**的 Authorization |
 | C2 | **`service` token** 只表示「请求来自可信平台」，**绝不**等于已授权；废除 `auth_method==service → can_*=True` |
 | C3 | **skstudio → GE** **唯一**传输：`SERVICE` + `X-Actor-User-Id` + `X-Actor-Is-Reviewer` +（按需）**组织事实头**；**任何**产品调用方**永不**持 GE service token 直打卫星 |
@@ -614,7 +614,7 @@ M8 portfolio/组织头鉴权 → M9 单轨读+删预检 → M10 硬删兼容符�
 | 2026-08-18 | **v0.1.16** | **M41 现网**：谓词/PATCH 门禁已落地 · 链 [M41](./目标与执行-项目管理BP迭代.md) **v0.2.0** |
 | 2026-08-18 | **v0.1.15** | **M41 谓词**：C7 修订 governor = owner∪effective PMBP · 新增 **`is_goal_direct_owner`** · §4 谓词表 · §5.1 PATCH `owner`/`pmbp` 门禁 · 链 [M41](./目标与执行-项目管理BP迭代.md) **v0.1.0** |
 | 2026-08-15 | **v0.1.14** | §5.1：角标双计数字段真源链 **v0.3.1**；钉 `projects[]` 可含取消/归档 ≠ 徽章口径 |
-| 2026-08-05 | **v0.1.13** | 链 [数字员工与Actor身份共识](./数字员工与Actor身份共识.md)；缺省 Actor=人类；履职扩展不改 C0–C3 |
+| 2026-08-05 | **v0.1.13** | 链 [数字员工与Actor身份共识](../../platform_docs/数字员工与Actor身份共识.md)；缺省 Actor=人类；履职扩展不改 C0–C3 |
 | 2026-08-02 | **v0.1.12** | **C0**：明示 skstudio **唯一产品入口**；Agent 与浏览器同拓扑（经 skstudio）；C3/C4/§2 图对齐 KB-AUTHZ；测试勿加 Agent 直连 GE 正路径（与 KB v0.1.6 工程纪律一致） |
 | 2026-08-02 | **v0.1.11** | **M12 CLEAN**：剥 FE jwt\|bff 壳 · 删 GE BFF no-op · 废 skstudio `mint_mapped_actor_jwt`/`GOAL_EXECUTION_JWT_SECRET` · 修 `/ge/ge/` · T17～T20 扩 · 《需求》**v2.38.36** / 《实现》**v1.39.51** |
 | 2026-08-02 | **v0.1.10** | **M8–M11 现网**：portfolio GE 鉴权+§3.2 头 · 单轨读 · 硬删兼容/预检 · 文档扫陈旧 · T15～T20；M9–M11 标现网；《需求》**v2.38.35** / 《实现》**v1.39.50** 收口 |

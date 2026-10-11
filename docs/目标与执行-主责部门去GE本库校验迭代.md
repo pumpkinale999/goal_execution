@@ -11,12 +11,12 @@
 
 | 文档 | 关系 |
 | ---- | ---- |
-| [平台控制面与Postgres迁移共识.md](./平台控制面与Postgres迁移共识.md) | **D2** 组织权威→skstudio；**M3** GE 去组织真源 / org 表依赖 |
+| [平台控制面与Postgres迁移共识.md](../../platform_docs/平台控制面与Postgres迁移共识.md) | **D2** 组织权威→skstudio；**M3** GE 去组织真源 / org 表依赖 |
 | [目标与执行及其组织支撑(需求).md](./目标与执行及其组织支撑(需求).md) | 战略字段 · 主责部门必填语义 |
 | [目标与执行及其组织支撑(实现与测试).md](./目标与执行及其组织支撑(实现与测试).md) | 现行运行时：组织权威在 skstudio；本迭代收口写路径残留 |
 | [目标与执行-Person身份硬切迭代.md](./目标与执行-Person身份硬切迭代.md) | **对照模式**：卫星验形态/非空，目录存在性在控制面 |
 | [目标与执行-主责部门去GE本库校验评价.md](./目标与执行-主责部门去GE本库校验评价.md) | 文档闸 / 实现闸 / 发版前置 / **生产闸**综合评价与评级 |
-| [skstudio-组织与企微同步.md](./skstudio-组织与企微同步.md) | org 真源 = skstudio |
+| [skstudio-组织与企微同步.md](../../skstudio/docs/skstudio-组织与企微同步.md) | org 真源 = skstudio |
 
 > **一句话**：GE 写 `primary_department_id` **禁止**再查本库 `org_departments`；存在性由 skstudio BFF/`org_local` 校验；同发解生产「创建子目标/专项失败」。写路径双胞胎（子目标+专项）同刀；组合读路径另开 F1。
 

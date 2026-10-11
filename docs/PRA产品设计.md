@@ -5,7 +5,7 @@
 - **状态**：**现网** — **M0–M6 现网**；主表面 **Project Panel**；**Panel 空态同步推进事项（§4.9.4 · 规划）**；**项目进展成果列**对齐证据层；**项目内办事优先级**：**定义 → 延迟 → 其它**（§3.3.0）；**SDA 角色门禁**；**专项/子目标看板**（§4.10/§4.11 · **现网** · **环左·图例右** · **延迟桶读 work_state 缓存**）；**公司目标看板**（§4.12 · **现网**：三环级联 · **环上·图例下** · 图例 `名称(n)` · 真表）；**公司目标排行榜**（§4.13 · **代码齐 / 待冒烟**）；协同 = produce/prereq；阶段完成 = notify；**M6 DoD** 落 [PRA-实现与测试](./PRA-实现与测试.md)；链 GE **v2.38.71** / 实现 **v1.39.83+**；缺省 Mute。**后置**集中见 **§5.5**。**性能优先级**：全组合扫描可慢；**单项目变化 → 判断/Panel 要快**（写路径 `pra_write_path` SLO：P50&lt;800ms / P95&lt;2s）；**看板读**须 O(1) DB、**禁止** per-project 拉 sense graph（[BOARD-CACHE](./PRA-目标看板work_state缓存迭代.md)）。**项目办事态机**：[共识](./PRA-项目办事态机共识.md) **v0.3.0** / [PRA-WS1 现网](./PRA-项目办事态机迭代.md) / [写后重评 PRA-WS1.1 现网](./PRA-项目办事态机写后重评迭代.md)。**SDA 步骤呈现**（槽位+模板 · 现网）：[共识](./PRA-SDA步骤呈现共识.md) **v0.1.2** / [STEP](./PRA-SDA步骤呈现迭代.md) / [分槽现网](./PRA-SDA步骤呈现分槽迭代.md)。
 - **缩写**：**PRA**（PRoject Agent；**不用** PA）
 - **读者**：产品、架构、GE / Hermes profile 设计与实现者
-- **上位理论**：[主动agent.md](./主动agent.md)（感知 · 决策 · 行动）
+- **上位理论**：[主动agent.md](../../platform_docs/hermes-self/主动agent.md)（感知 · 决策 · 行动）
 - **一致性**：开放票须跟 GE 真源收敛，见 [PRA-一致性合约迭代.md](./PRA-一致性合约迭代.md)（废止「改期不自动关 remediate」；**INV-3** 以办事态为准，见下挂链）。
 - **冲突处理**：项目 / 阶段 / 门控 / 任务域语义服从 [目标与执行及其组织支撑(需求).md](./目标与执行及其组织支撑(需求).md)；本文约束 PRA **如何感知、决策与行动闭环**，不改写 GE 状态机。行动运转态落在**主动 Agent 运行时**（见 §4.1），不以本服务替代 GE 真源。
 
@@ -13,14 +13,14 @@
 
 | 文档 | 关系 |
 | ---- | ---- |
-| [主动agent.md](./主动agent.md) | 主动 Agent 理论；本文 = PRA 实例 |
-| [business-os框架.md](./business-os框架.md) | Business OS 角色目标（§6.2 PRA） |
-| [business-os共识.md](./business-os共识.md) | 现网细账与红线 |
+| [主动agent.md](../../platform_docs/hermes-self/主动agent.md) | 主动 Agent 理论；本文 = PRA 实例 |
+| [business-os框架.md](../../platform_docs/business-os框架.md) | Business OS 角色目标（§6.2 PRA） |
+| [business-os共识.md](../../platform_docs/business-os共识.md) | 现网细账与红线 |
 | [目标与执行及其组织支撑(需求).md](./目标与执行及其组织支撑(需求).md) | 项目 · 阶段 · 门控 · 任务真源 |
 | [Governance-Assistant产品设计.md](./Governance-Assistant产品设计.md) | 三维偏差上卷对象 |
-| [Personal-Assistant产品设计.md](./Personal-Assistant产品设计.md) | 对人行动通道（Decide/Act 阶段再用） |
-| [专业智能体规范.md](./专业智能体规范.md) | Master→Expert（Decide/Act 阶段再用） |
-| [组织PBC共识.md](./组织PBC共识.md) | PRA **不**改写 PBC、**不**自动打档 |
+| [Personal-Assistant产品设计.md](../../platform_docs/hermes-self/Personal-Assistant产品设计.md) | 对人行动通道（Decide/Act 阶段再用） |
+| [专业智能体规范.md](../../platform_docs/专业智能体规范.md) | Master→Expert（Decide/Act 阶段再用） |
+| [组织PBC共识.md](../../pbc/docs/组织PBC共识.md) | PRA **不**改写 PBC、**不**自动打档 |
 | [PRA-一致性合约迭代.md](./PRA-一致性合约迭代.md) | **GE 真源 ↔ AA 票**一致性 INV；改期/空 gaps/终态收敛（现网切片） |
 | [PRA-项目办事态机共识.md](./PRA-项目办事态机共识.md) | **项目办事总态 → 合法 SDA**；半截偏差 ∈ 去补救；INV-3 修订；**§4.6 写后重评** |
 | [PRA-项目办事态机迭代.md](./PRA-项目办事态机迭代.md) | PRA-WS1 实现/测/DoD（现网） |
@@ -1205,7 +1205,7 @@ Sense–Decide–Act 上用推进意图端到端推动项目。**1 Task ↔ 1 `d
 | **载荷最小** | `idempotency_key`、`occurred_at`、`project_id`、`change_kind`、实体 refs（阶段/门控/任务等） |
 | **依赖** | GE → Agent **只推**；Agent → GE 读真源 / 可选推水位副本；**禁止**读时问询 |
 
-细节见 [openapi/ge-observation-mount.md](./openapi/ge-observation-mount.md)；**合同以本表为准**。
+细节见 [openapi/ge-observation-mount.md](../../platform_docs/openapi/ge-observation-mount.md)；**合同以本表为准**。
 
 ### 5.3 里程碑（竖切）
 

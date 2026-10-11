@@ -13,9 +13,9 @@
 | [目标与执行及其组织支撑(需求).md](./目标与执行及其组织支撑(需求).md) | §3.3.5 · §3.3.9 · §3.4.5 · §4.9.4 |
 | [目标与执行-鉴权与API拓扑重构共识.md](./目标与执行-鉴权与API拓扑重构共识.md) | 谓词 · 能力矩阵 |
 | [目标与执行及其组织支撑(实现与测试).md](./目标与执行及其组织支撑(实现与测试).md) | §2.2 · §4 · **§10.48**（DoD 真源 · **v1.39.90**） |
-| [business-os共识.md](./business-os共识.md) | `goal_scope` · `owned` vs `staffed` |
+| [business-os共识.md](../../platform_docs/business-os共识.md) | `goal_scope` · `owned` vs `staffed` |
 | [PRA产品设计.md](./PRA产品设计.md) | `review_project` 拍板链 |
-| [组织PBC共识.md](./组织PBC共识.md) | **对照** HRBP C28（组织侧 · **不**自动映射 PMBP） |
+| [组织PBC共识.md](../../pbc/docs/组织PBC共识.md) | **对照** HRBP C28（组织侧 · **不**自动映射 PMBP） |
 
 > **相对现网新增**：Objective / Program 可选 **`pmbp_user_id`**（项目管理 BP）。**能办事 ≈ owner 子树 governor**；**问责身份仍仅 `owner_user_id`**。
 

@@ -17,7 +17,7 @@
 | [PRA-项目办事态机共识.md](./PRA-项目办事态机共识.md) | **§4.6 R8** 读路径禁止跑满 Sense+Decide |
 | [PRA-实现与测试.md](./PRA-实现与测试.md) | **§4.10** 验收表 B10+ |
 | [PRA-项目办事态机迭代.md](./PRA-项目办事态机迭代.md) | **WS-T07** 看板半截无票进延迟桶 |
-| Release | [migration/release-v29.00.44.md](./migration/release-v29.00.44.md) |
+| Release | [migration/release-v29.00.44.md](../../platform_docs/migration/release-v29.00.44.md) |
 
 > **一句话**：看板打「延迟」桶不再 per-project 拉 GE sense graph；`project_work_state` 在 **`scan_project` 唯一写入** 物化表，看板批量读 `in_delay`。
 

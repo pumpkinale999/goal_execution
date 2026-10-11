@@ -14,9 +14,9 @@
 | [目标与执行及其组织支撑(实现与测试).md](./目标与执行及其组织支撑(实现与测试).md) **§10.49** | DoD **现网** |
 | [openapi/ge-v1.yaml](./openapi/ge-v1.yaml) | **ge-v1 1.31.0**（Person 硬闸 · 错误码） |
 | [目标与执行-鉴权与API拓扑重构共识.md](./目标与执行-鉴权与API拓扑重构共识.md) | Actor uid = `str(users.id)`；本迭代对齐写路径 |
-| [Hermes与组织及目标执行的集成.md](./Hermes与组织及目标执行的集成.md) | **§6.4 已纠错**（v1.9.78）；inform §6.4.3 / M42-F2 |
+| [Hermes与组织及目标执行的集成.md](../../platform_docs/integration/hermes-goal_execution/Hermes与组织及目标执行的集成.md) | **§6.4 已纠错**（v1.9.78）；inform §6.4.3 / M42-F2 |
 | [Governance-Assistant产品设计.md](./Governance-Assistant产品设计.md) | GA mutate / create 落库身份 |
-| [数字员工与Actor身份共识.md](./数字员工与Actor身份共识.md) | Actor / Initiator 与 Person 列分离（本迭代不改数字员工） |
+| [数字员工与Actor身份共识.md](../../platform_docs/数字员工与Actor身份共识.md) | Actor / Initiator 与 Person 列分离（本迭代不改数字员工） |
 
 > **一句话**：GE 业务 Person 列只存 `str(users.id)`；写收口 + 双端硬闸同发；**零过渡、无双读**。
 

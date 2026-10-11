@@ -13,7 +13,7 @@
 | ---- | ---- |
 | [目标与执行及其组织支撑(需求).md](./目标与执行及其组织支撑(需求).md) | §13.6.5.1 材料行「展示 Note **标题**」· 材料选择器 P0 · 线框 W2 |
 | [目标与执行及其组织支撑(实现与测试).md](./目标与执行及其组织支撑(实现与测试).md) | §10.14a · **GE-T208～T211**（本迭代扩展示断言） |
-| [组织知识库.md](./组织知识库.md) | frontmatter `title` 必填 · `GET …/notes/by-id/{uuid}` 返回 `title` · stable id |
+| [组织知识库.md](../../knowledge_base/docs/组织知识库.md) | frontmatter `title` 必填 · `GET …/notes/by-id/{uuid}` 返回 `title` · stable id |
 | 进展成果列 | §4.9.7 标题解析：树 + by-id；**禁** uuid；实现 `progressNoteTreeTitles`「never path slug」 |
 | 实现 | `GateItemMaterialPicker.tsx` · `GateItemEvidenceField.tsx` · `projectNoteLink.ts` |
 

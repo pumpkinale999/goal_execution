@@ -3,7 +3,7 @@
 - **文档类型**：产品共识 + 体验规格 + **实现/测试规格**
 - **版本**：**v0.1.9**（2026-08-01 · **已签收**：PD-M1～M4；层 C Mac + **生产 Chrome PASS**；PD-M4 `agent_action` 生产抽样通过）
 - **里程碑**：**BO-M-PD**（Project Duplicate）
-- **状态**：**已签收 · 生产可用**（BFF / OpenAPI **0.1.1** / Skill **0.1.1** / plugin **≥0.20.1** · [PD-PLAN-signoff](./hermes-profiles/governance-assistant/PD-PLAN-signoff.md)）
+- **状态**：**已签收 · 生产可用**（BFF / OpenAPI **0.1.1** / Skill **0.1.1** / plugin **≥0.20.1** · [PD-PLAN-signoff](../../platform_docs/integration/hermes-skstudio/profiles/governance-assistant/PD-PLAN-signoff.md)）
 - **适用对象**：产品、GA / Hermes / skstudio 研发、QA
 
 **上位 / 关联**
@@ -12,11 +12,11 @@
 | ---- | ---- |
 | [Governance-Assistant产品设计.md](./Governance-Assistant产品设计.md) | 管域 Copilot 总册 |
 | [Governance-Assistant-project-create迭代.md](./Governance-Assistant-project-create迭代.md) | **对照能力**：全新建（create）；本能力不复用其共商长链；**fingerprint / commit / `next_action` 纪律对齐 PC** |
-| [hermes-profiles/governance-assistant/SOUL.md](./hermes-profiles/governance-assistant/SOUL.md) | 瘦路由（含复制闭环 · 听 `agent_action`） |
-| [hermes-profiles/governance-assistant/skills/governance/project-duplicate/SKILL.md](./hermes-profiles/governance-assistant/skills/governance/project-duplicate/SKILL.md) | **Agent 规程 · 0.1.1**（听 tool，不枚举失败剧本） |
+| [hermes-profiles/governance-assistant/SOUL.md](../../platform_docs/integration/hermes-skstudio/profiles/governance-assistant/SOUL.md) | 瘦路由（含复制闭环 · 听 `agent_action`） |
+| [hermes-profiles/governance-assistant/skills/governance/project-duplicate/SKILL.md](../../platform_docs/integration/hermes-skstudio/profiles/governance-assistant/skills/governance/project-duplicate/SKILL.md) | **Agent 规程 · 0.1.1**（听 tool，不枚举失败剧本） |
 | [openapi/ga-bo-m-pc-duplicate.openapi.yaml](./openapi/ga-bo-m-pc-duplicate.openapi.yaml) | preview + duplicate **0.1.1** |
-| [hermes-profiles/governance-assistant/PD-PLAN-signoff.md](./hermes-profiles/governance-assistant/PD-PLAN-signoff.md) | 签收清单 |
-| [hermes-profiles/governance-assistant/README.md](./hermes-profiles/governance-assistant/README.md) | profile 总览 |
+| [hermes-profiles/governance-assistant/PD-PLAN-signoff.md](../../platform_docs/integration/hermes-skstudio/profiles/governance-assistant/PD-PLAN-signoff.md) | 签收清单 |
+| [hermes-profiles/governance-assistant/README.md](../../platform_docs/integration/hermes-skstudio/profiles/governance-assistant/README.md) | profile 总览 |
 
 ## 0.1 DOC-SYNC（跨文档对齐表 · v0.1.9）
 
@@ -30,7 +30,7 @@
 | Plan store | 复用 `GaProjectCreatePlan`（duplicate_id=plan_id） | ✅ |
 | plugin `skstudio-governance` | **≥0.20.1** | ✅ |
 | AAP 入口 | 四键含「复制项目」 | ✅ |
-| 签收 / 冒烟 | PD-ACT-* ✅；静态+Mac+**生产** Chrome PASS | [PD-PLAN-signoff](./hermes-profiles/governance-assistant/PD-PLAN-signoff.md) 已签 |
+| 签收 / 冒烟 | PD-ACT-* ✅；静态+Mac+**生产** Chrome PASS | [PD-PLAN-signoff](../../platform_docs/integration/hermes-skstudio/profiles/governance-assistant/PD-PLAN-signoff.md) 已签 |
 
 ---
 
@@ -439,7 +439,7 @@ Skill **只**保留主路径 + 下列红线；**禁止**把 §2.3.2 失败目录
 | 执行器 | 复用 `commit_project_plan`；跳过 notify |
 | Plugin | `skstudio-governance` 两 tool（schema 随 D21） |
 | Profile | skill（**0.1.1** 薄）+ SOUL + install；AAP 四键 |
-| 测 | §11 矩阵含 PD-ACT-*；[PD-PLAN-signoff](./hermes-profiles/governance-assistant/PD-PLAN-signoff.md) |
+| 测 | §11 矩阵含 PD-ACT-*；[PD-PLAN-signoff](../../platform_docs/integration/hermes-skstudio/profiles/governance-assistant/PD-PLAN-signoff.md) |
 
 ---
 

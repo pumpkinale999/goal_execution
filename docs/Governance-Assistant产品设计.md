@@ -2,32 +2,32 @@
 
 - **文档类型**：产品共识 + **BO-M1 架构、实现与验收真源**
 - **版本**：**v0.8.111**
-- **状态**：**三件套现网** — **管理范围** · **拆解** · **全新建**（`governance_scope` · `governance_goal_dq` · `governance_goal_mutate` · `governance_project_plan_validate`/`_commit` · PC **仅** `mode=create`）· **已废止**：PQ / `project_mutate` / `org_mutate` / enrich_shell / `execution_footprint` / `open_org_embed` · Internal Bearer **`SKSTUDIO_INTERNAL_SERVICE_TOKEN`**（无 `GOAL_EXECUTION_SERVICE_TOKEN` alias）· TN-2 旧别名已卸 · DQ「评价 xxx」+ DQ-WR · BO-M-PC create-only · **无** 组织评价 · **无** `focus_ref` · **BO-M3a / Accept 已废止** · **lifecycle 迁移属 GE（D11）** · 历史 PQ/ORG/M-STRUCT 长文见各节脚注（**勿当现网入口**）· [SHIP-三件套](./hermes-profiles/governance-assistant/SHIP-三件套.md)
+- **状态**：**三件套现网** — **管理范围** · **拆解** · **全新建**（`governance_scope` · `governance_goal_dq` · `governance_goal_mutate` · `governance_project_plan_validate`/`_commit` · PC **仅** `mode=create`）· **已废止**：PQ / `project_mutate` / `org_mutate` / enrich_shell / `execution_footprint` / `open_org_embed` · Internal Bearer **`SKSTUDIO_INTERNAL_SERVICE_TOKEN`**（无 `GOAL_EXECUTION_SERVICE_TOKEN` alias）· TN-2 旧别名已卸 · DQ「评价 xxx」+ DQ-WR · BO-M-PC create-only · **无** 组织评价 · **无** `focus_ref` · **BO-M3a / Accept 已废止** · **lifecycle 迁移属 GE（D11）** · 历史 PQ/ORG/M-STRUCT 长文见各节脚注（**勿当现网入口**）· [SHIP-三件套](../../platform_docs/integration/hermes-skstudio/profiles/governance-assistant/SHIP-三件套.md)
 - **产品定位**：**管域 Copilot** — 对 **`governance_active`** 用户幂等提供管域私聊，由全局一条独立的 `governance-assistant` Gateway 承载；表述 **管理范围（`org_scope` ∪ `goal_scope`）**，承载拆解评价与全新建项目
-- **前置**：[business-os共识.md](./business-os共识.md) §3–§4、§11 · [hermes与skstudio集成(七期)](./hermes与skstudio集成(七期).md)（WSS / `gateway_register`）· [Personal-Assistant产品设计.md](./Personal-Assistant产品设计.md)（共享 Gateway + per-user thread 先例）
+- **前置**：[business-os共识.md](../../platform_docs/business-os共识.md) §3–§4、§11 · [hermes与skstudio集成(七期)](./hermes与skstudio集成(七期).md)（WSS / `gateway_register`）· [Personal-Assistant产品设计.md](../../platform_docs/hermes-self/Personal-Assistant产品设计.md)（共享 Gateway + per-user thread 先例）
 
 **关联文档**
 
 | 文档 | 用途 |
 | ---- | ---- |
-| [business-os共识.md](./business-os共识.md) | Business OS 上位 · **治理域定义** · BO-M1 边界 |
-| [Hermes与组织及目标执行的集成.md](./Hermes与组织及目标执行的集成.md) | **§13** `governance` toolset · `/internal/ga/scope` · I12/I13（PA `org`/`goal` 见 §12） |
-| [Personal-Assistant产品设计.md](./Personal-Assistant产品设计.md) | **`gateway_role` + `thread_kind` + singleton GW** 参照实现 |
-| [hermes-profiles/governance-assistant/](./hermes-profiles/governance-assistant/) | Profile 真源（SOUL · overlay · **已建**） |
+| [business-os共识.md](../../platform_docs/business-os共识.md) | Business OS 上位 · **治理域定义** · BO-M1 边界 |
+| [Hermes与组织及目标执行的集成.md](../../platform_docs/integration/hermes-goal_execution/Hermes与组织及目标执行的集成.md) | **§13** `governance` toolset · `/internal/ga/scope` · I12/I13（PA `org`/`goal` 见 §12） |
+| [Personal-Assistant产品设计.md](../../platform_docs/hermes-self/Personal-Assistant产品设计.md) | **`gateway_role` + `thread_kind` + singleton GW** 参照实现 |
+| [hermes-profiles/governance-assistant/](../../platform_docs/integration/hermes-skstudio/profiles/governance-assistant) | Profile 真源（SOUL · overlay · **已建**） |
 | [Governance-Assistant-project-create迭代.md](./Governance-Assistant-project-create迭代.md) | **BO-M-PC** 共商建项 · **C62 现网**（**v0.1.45** · Skill **0.5.6** · 纯文本深链 · wecom 样例 · Chrome 硬+软） |
 | [Governance-Assistant-project-duplicate迭代.md](./Governance-Assistant-project-duplicate迭代.md) | **BO-M-PD** 复制项目 · **v0.1.8**（M1～M4 · preview/duplicate + `agent_action`） |
 | [openapi/ga-bo-m1.openapi.yaml](./openapi/ga-bo-m1.openapi.yaml) | **OpenAPI 3.0** M1 scope |
 | ~~openapi/ga-bo-m2a / m2b / m2c / m2d / m-attention~~ | **已删除（MS-11）** · 四诊断+cross HTTP 废止；形分规则仍由库内 `build_ga_structure` 供 DQ |
-| ~~openapi/ga-bo-m3a-work-items~~ | **已删除（MS-8）** · 历史见 [business-os §11.10](./business-os共识.md#1110-bo-m3a-工作列表共识normative) |
+| ~~openapi/ga-bo-m3a-work-items~~ | **已删除（MS-8）** · 历史见 [business-os §11.10](../../platform_docs/business-os共识.md#1110-bo-m3a-工作列表共识normative) |
 | [openapi/ga-bo-m-dq.openapi.yaml](./openapi/ga-bo-m-dq.openapi.yaml) | **OpenAPI 3.0** BO-M-DQ（§21 · **0.1.9** · `thread_id` / 工作根 · **无** `focus_ref`） |
 | [openapi/ga-bo-m-pq.openapi.yaml](./openapi/ga-bo-m-pq.openapi.yaml) | **OpenAPI 3.0** BO-M-PQ（§22 · **0.1.10** · **已废止** · 考古契约） |
 | [openapi/ga-bo-m-pc-plan.openapi.yaml](./openapi/ga-bo-m-pc-plan.openapi.yaml) | **OpenAPI 3.0** BO-M-PC M7（**0.2.0** · validate + commit-once） |
 | [openapi/ga-bo-m-structure-mutate.openapi.yaml](./openapi/ga-bo-m-structure-mutate.openapi.yaml) | **OpenAPI 3.0** 目标链 mutate（§6.8.10.0 · **0.1.4 现网** · D8/D9/D10 · `owner_username`） |
 | [openapi/ga-bo-m-org-mutate.openapi.yaml](./openapi/ga-bo-m-org-mutate.openapi.yaml) | **OpenAPI 3.0** 组织 mutate（§4.2g · §6.8.11 · **0.1.3 · 已废止** · 考古契约） |
-| [本体领域模型.md](./本体领域模型.md) | WorkItem / Decision / Hint · **§1.6** · **§1.7 BO-M-DQ（半契约）** |
-| [business-os共识.md §11.10.13](./business-os共识.md#111013-ga-跟进看板落地共识normative--2026-07-14) | **已废止** · 历史跟进看板冻结（勿再当产品真源） |
-| [business-os共识.md §9](./business-os共识.md#9-演进与缺口) | **BO-M-DQ** / **BO-M-PQ** 演进入口（链本 §21 · §22） |
-| [运维-Hermes-skstudio-集成.md](./运维-Hermes-skstudio-集成.md) | Gateway systemd、WSS token、publish 白名单 |
+| [本体领域模型.md](../../platform_docs/本体领域模型.md) | WorkItem / Decision / Hint · **§1.6** · **§1.7 BO-M-DQ（半契约）** |
+| [business-os共识.md §11.10.13](../../platform_docs/business-os共识.md#111013-ga-跟进看板落地共识normative--2026-07-14) | **已废止** · 历史跟进看板冻结（勿再当产品真源） |
+| [business-os共识.md §9](../../platform_docs/business-os共识.md#9-演进与缺口) | **BO-M-DQ** / **BO-M-PQ** 演进入口（链本 §21 · §22） |
+| [运维-Hermes-skstudio-集成.md](../../platform_docs/运维-Hermes-skstudio-集成.md) | Gateway systemd、WSS token、publish 白名单 |
 
 ---
 
@@ -47,15 +47,15 @@
 | **附录 A** | **废止与历史**（四诊断 HTTP · M-HT · WI · §18–§20 考古） | 考古时 |
 | §14 | 修订记录 | 全员 |
 
-> **现网（三件套）**：`governance_scope` · `governance_goal_dq` · `governance_goal_mutate` · `governance_project_plan_validate`/`_commit`（仅 create）。**已废止**：PQ / org_mutate / project_mutate / enrich / footprint。§4.2b–e / §15–§20 / §22 等长文为历史（锚点可仍写旧名）；入口见 [附录 A](#附录-a--废止与历史ms-91112) · [SHIP-三件套](./hermes-profiles/governance-assistant/SHIP-三件套.md)。
+> **现网（三件套）**：`governance_scope` · `governance_goal_dq` · `governance_goal_mutate` · `governance_project_plan_validate`/`_commit`（仅 create）。**已废止**：PQ / org_mutate / project_mutate / enrich / footprint。§4.2b–e / §15–§20 / §22 等长文为历史（锚点可仍写旧名）；入口见 [附录 A](#附录-a--废止与历史ms-91112) · [SHIP-三件套](../../platform_docs/integration/hermes-skstudio/profiles/governance-assistant/SHIP-三件套.md)。
 
 ### 阅读路径
 
 | 角色 | 建议章节 |
 | ---- | -------- |
-| 产品 / QA | §0–§1、**§4.0.1**、**§6.8.10.0**、**§6.8.11**、§9、§12 C8a、**§21**、**§22**、[MS-T06](./hermes-profiles/governance-assistant/MS-T06-signoff.md) / [ORG-T06](./hermes-profiles/governance-assistant/ORG-T06-signoff.md) |
+| 产品 / QA | §0–§1、**§4.0.1**、**§6.8.10.0**、**§6.8.11**、§9、§12 C8a、**§21**、**§22**、[MS-T06](../../platform_docs/integration/hermes-skstudio/profiles/governance-assistant/MS-T06-signoff.md) / [ORG-T06](../../platform_docs/integration/hermes-skstudio/profiles/governance-assistant/ORG-T06-signoff.md) |
 | skstudio 后端 / 前端 | **§5.0 现网路由**、§8、§11、**§21**、**§22**；废止 API → 附录 A |
-| Hermes / profile | §4.0–4.2g / **§4.0.1** · SOUL · [Hermes 集成 §13](./Hermes与组织及目标执行的集成.md) |
+| Hermes / profile | §4.0–4.2g / **§4.0.1** · SOUL · [Hermes 集成 §13](../../platform_docs/integration/hermes-goal_execution/Hermes与组织及目标执行的集成.md) |
 | 前端 | §5.4、§6、**M-STRUCT** / **M-ORG** · **勿**再跟 work-list / chip / 分布 Tab |
 
 ---
@@ -141,7 +141,7 @@
 ### 1.2 产品原则（BO-M1）
 
 1. **管域专属载体**：自有 profile / SOUL；**不是** PA 的 lens 开关。
-2. **scope 先行**：M1 只答「管哪」；「怎么办」属 BO-M2+（[business-os §4.2](./business-os共识.md#42-边界口诀)）。
+2. **scope 先行**：M1 只答「管哪」；「怎么办」属 BO-M2+（[business-os §4.2](../../platform_docs/business-os共识.md#42-边界口诀)）。
 3. **双域并列**：`org_scope` 与 `goal_scope` **分栏叙述**；`execution_footprint` 仅作对照脚注。
 4. **隔离**：与 master / PA / Lab **零 Kanban 耦合**。
 5. **lazy 准入**：无管辖用户 **无** GA thread，避免全员空群。
@@ -151,7 +151,7 @@
 - 不替代 Master 编排、不替代 PA 个人待办
 - 不提供 inform 写、GE 结构写
 - 不做全公司组织 browse（继承 org scope 纪律）
-- 不在 M1 返回 steward 项目全量列表（仅 count，见 [business-os §11.4.1](./business-os共识.md#1141-scope-响应形状normative-摘要)）
+- 不在 M1 返回 steward 项目全量列表（仅 count，见 [business-os §11.4.1](../../platform_docs/business-os共识.md#1141-scope-响应形状normative-摘要)）
 
 ---
 
@@ -159,15 +159,15 @@
 
 | ID | 决策 | 理由 |
 | --- | --- | --- |
-| **D-GA-1** | Profile 名 **`governance-assistant`**；**不** 复用 `personal-assistant` 或 `default` | 与 PA 工具白名单、SOUL、WSS 路由分离（[business-os A6](./business-os共识.md#82-反模式禁止)） |
+| **D-GA-1** | Profile 名 **`governance-assistant`**；**不** 复用 `personal-assistant` 或 `default` | 与 PA 工具白名单、SOUL、WSS 路由分离（[business-os A6](../../platform_docs/business-os共识.md#82-反模式禁止)） |
 | **D-GA-2** | WSS 注册：**`gateway_role=governance`**，`agent_slug=governance-assistant` | 与 master / personal / agent_lab **四分注册** |
 | **D-GA-2b** | skstudio 新增 **`thread_kind=governance`**（协议 + DB + bridge） | 与 `production` / `agent_lab` / `personal` 并列 |
 | **D-GA-3** | **全局一条** Gateway 进程，服务所有管域 thread | 同 D-PA-3 / agent-builder 共享 GW |
 | **D-GA-4** | 每 **`governance_active`** 用户 **至多一个** 管域 thread | 路由键 = `thread_id`；registry **singleton governance Gateway** |
-| **D-GA-5** | Thread **lazy 创建**：首次管域入口或 GA 首次上行前调 `GET /internal/ga/scope` | 避免全量预建；与 [business-os §11.3](./business-os共识.md#113-governance-assistant-载体m3) 一致 |
+| **D-GA-5** | Thread **lazy 创建**：首次管域入口或 GA 首次上行前调 `GET /internal/ga/scope` | 避免全量预建；与 [business-os §11.3](../../platform_docs/business-os共识.md#113-governance-assistant-载体m3) 一致 |
 | **D-GA-6** | 上行 **跳过** Kanban / workflow 注入 | 同 `thread_kind=personal` 隔离原则 |
-| **D-GA-7** | M1 toolset **仅** `governance`（`governance_scope`）；禁用 kanban / delegation / messaging / inform / org / goal 等 | 强制单入口聚合（[business-os §11.8](./business-os共识.md#118-明确不做bo-m1)） |
-| **D-GA-8** | Internal API 前缀 **`/internal/ga/*`**，**非** `/internal/pa/*` | [business-os A7](./business-os共识.md#82-反模式禁止) |
+| **D-GA-7** | M1 toolset **仅** `governance`（`governance_scope`）；禁用 kanban / delegation / messaging / inform / org / goal 等 | 强制单入口聚合（[business-os §11.8](../../platform_docs/business-os共识.md#118-明确不做bo-m1)） |
+| **D-GA-8** | Internal API 前缀 **`/internal/ga/*`**，**非** `/internal/pa/*` | [business-os A7](../../platform_docs/business-os共识.md#82-反模式禁止) |
 | **D-GA-9** | Bot **显示名** · 群标题 · 侧栏入口 **统一为 `管理助手`**；侧栏 / IM **`testid`** 见 §6.3 | 与 PA **数坤坤** 区分；前端与 SOUL **统一** 用名，避免 @ 错 Bot |
 | **D-GA-10** | **`governance_active`** 判定 **以 `ga/scope` 为准**（`org_scope.active ∨ goal_scope.active`） | 与 business-os §11.2 同源 |
 | **D-GA-11** | 管域 thread 归属 **「我」Tab · 管域** 入口；**不** 放入 Agent Studio 分类 | 与 PA（Agent Studio / 数坤坤）入口分离；侧栏经 `nav-governance` 跳转 |
@@ -401,7 +401,7 @@ Read the caller's governance domain priority digest (steward-only L2 attention).
 <details>
 <summary>历史契约摘要（废止前 · 勿当现网规范）</summary>
 
-曾：`action=list|regenerate` · GET/POST `/internal/ga/work-items` · accept/complete/handoff 在 Web · 与 attention 分栏。详见 [business-os §11.10](./business-os共识.md#1110-bo-m3a-工作列表共识normative)（同标废止）。
+曾：`action=list|regenerate` · GET/POST `/internal/ga/work-items` · accept/complete/handoff 在 Web · 与 attention 分栏。详见 [business-os §11.10](../../platform_docs/business-os共识.md#1110-bo-m3a-工作列表共识normative)（同标废止）。
 
 </details>
 <a id="42f-toolgovernance_decomposition_qualitybo-m-dq--规划"></a>
@@ -438,13 +438,13 @@ Evaluate goal-decomposition quality for a node in the caller's goal_scope. User 
 | 项 | 约定 |
 | -- | ---- |
 | **名称** | ~~`governance_org_mutate`~~（**已废止** · 勿再注册） |
-| **状态** | **已废止** · 对话步签收仅作历史：[ORG-T06](./hermes-profiles/governance-assistant/ORG-T06-signoff.md) |
+| **状态** | **已废止** · 对话步签收仅作历史：[ORG-T06](../../platform_docs/integration/hermes-skstudio/profiles/governance-assistant/ORG-T06-signoff.md) |
 | **HTTP** | ~~`POST /internal/ga/org-mutate`~~ → **404** |
 | **OpenAPI** | [`ga-bo-m-org-mutate` 0.1.3](./openapi/ga-bo-m-org-mutate.openapi.yaml)（考古） |
 | **门闩** | 同 G29：本轮明确同意 + **`user_confirmed: true`** · **一次一项** |
 | **P0 entity_kind** | `department` · `team`（create / patch / archive） |
 | **fields** | 见 **§6.8.11 O9**：`title`→`name`（create **必填**）；负责人 **`manager_username` 可选**（有则映射；department → `manager_user_id`；team → `lead_user_id`） |
-| **结果面** | 成功回执 `interactions[]` · **`type=open_org_embed`** → Host **navigate** [`/org/structure/…`](./skstudio-壳层与导航UI迭代.md#45-组织--我)（对称 D9；**不** 用 `open_ge_embed`） |
+| **结果面** | 成功回执 `interactions[]` · **`type=open_org_embed`** → Host **navigate** [`/org/structure/…`](../../skstudio/docs/skstudio-壳层与导航UI迭代.md#45-组织--我)（对称 D9；**不** 用 `open_ge_embed`） |
 | **鉴权（P0）** | **`org_scope.active` +（GE 评审员 全树 OR 部门子树管家）**（与现网 `/api/v1/org/*` 结构写一致 · **§6.8.11 O8**） |
 | **非目标** | 组织评分卡 / 组织 overall / membership·任命批处理 / 复活 structure·allocation 诊断 Hermes tool；**不做** 组织版 DQ |
 | **与目标 mutate** | 目标上的 `owner` / `primary_department_id` 仍走 **`governance_structure_mutate`**（事挂人）；本 tool 管 **编制本身** |
@@ -492,10 +492,10 @@ Create, patch, or archive one org-scope entity (department|team) after the user 
 | --- | --- |
 | M1 scope | [`openapi/ga-bo-m1.openapi.yaml`](./openapi/ga-bo-m1.openapi.yaml) |
 | ~~M2a/M2b/M2c/M2d/M-ATT OpenAPI~~ | **MS-11 已删** |
-| ~~M3a work-items~~ | **已删除（MS-8）** · 见 [business-os §11.10](./business-os共识.md#1110-bo-m3a-工作列表共识normative) |
+| ~~M3a work-items~~ | **已删除（MS-8）** · 见 [business-os §11.10](../../platform_docs/business-os共识.md#1110-bo-m3a-工作列表共识normative) |
 | **BO-M-DQ** 拆解质量 | [`openapi/ga-bo-m-dq.openapi.yaml`](./openapi/ga-bo-m-dq.openapi.yaml) |
 
-**业务语义**：[business-os §11.2–§11.4](./business-os共识.md#112-治理域定义normative) · 结构 [§11.9](./business-os共识.md#119-bo-m2-演进结构先行)。
+**业务语义**：[business-os §11.2–§11.4](../../platform_docs/business-os共识.md#112-治理域定义normative) · 结构 [§11.9](../../platform_docs/business-os共识.md#119-bo-m2-演进结构先行)。
 
 ### 5.0 路由总览
 
@@ -562,7 +562,7 @@ OpenAPI：[`ga-bo-m-dq.openapi.yaml`](./openapi/ga-bo-m-dq.openapi.yaml) · 叙�
 
 - digest **仅** steward 读集内 findings（structure · allocation · process · achievement）
 - **禁止** ingest `GET /ge/me/queues` · **禁止** 与 PA personal attention **跨 OS 统一 rank**
-- 壳层可与 personal queues **并排 compose** · **不** merge 为单一列表（§6.8 · [business-os §8.2 A8](./business-os共识.md#82-反模式禁止)）
+- 壳层可与 personal queues **并排 compose** · **不** merge 为单一列表（§6.8 · [business-os §8.2 A8](../../platform_docs/business-os共识.md#82-反模式禁止)）
 
 #### 5.0.6 BO-M3a · 工作列表（**已废止 · MS-8 无路由**）
 
@@ -572,7 +572,7 @@ OpenAPI：[`ga-bo-m-dq.openapi.yaml`](./openapi/ga-bo-m-dq.openapi.yaml) · 叙�
 | -- | ---- | ---- |
 | **BFF / Internal** | ~~`…/work-items*`~~ | **无路由 · 404** |
 
-历史语义见 [business-os §11.10](./business-os共识.md#1110-bo-m3a-工作列表共识normative)（已废止）。
+历史语义见 [business-os §11.10](../../platform_docs/business-os共识.md#1110-bo-m3a-工作列表共识normative)（已废止）。
 
 #### 5.0.7 目标 / 组织 mutate 写路径（M-STRUCT **现网** · M-ORG **已废止**）
 
@@ -740,7 +740,7 @@ X-Sender-User-Id: wecom:ZhengChao
 
 ### 5.6 响应类型 `GaScopeResponse`（normative）
 
-与 [business-os §11.4.1](./business-os共识.md#1141-scope-响应形状normative-摘要) 及 OpenAPI `GaScopeResponse` **一致**。字段约束摘要：
+与 [business-os §11.4.1](../../platform_docs/business-os共识.md#1141-scope-响应形状normative-摘要) 及 OpenAPI `GaScopeResponse` **一致**。字段约束摘要：
 
 | 块 | 关键约束 |
 | --- | -------- |
@@ -781,7 +781,7 @@ app/schemas/ga_scope.py
 
 1. `POST /api/v1/me/governance/ensure-thread`（**推荐** · D-GA-12）
 2. 用户向已存在 governance thread **上行**（bridge 兜底；少见）
-3. **企微同步 reconcile**（2026-07-10）：评审员 `POST /api/v1/org/wecom/sync` 完成后，对活跃企微用户中 `governance_active=true` 者批量 `ensure_governance_assistant_for_user`（**仍非登录全员 seed**；见 [`skstudio-组织与企微同步.md`](./skstudio-组织与企微同步.md)）
+3. **企微同步 reconcile**（2026-07-10）：评审员 `POST /api/v1/org/wecom/sync` 完成后，对活跃企微用户中 `governance_active=true` 者批量 `ensure_governance_assistant_for_user`（**仍非登录全员 seed**；见 [`skstudio-组织与企微同步.md`](../../skstudio/docs/skstudio-组织与企微同步.md)）
 
 **流程**：
 
@@ -824,7 +824,7 @@ Web 乐观打开（v25.14.7 · 已有 thread · v26.10.10–11 消息区秒开�
 
 ### 5.11 `GET /internal/ga/structure`（BO-M2a · goal + org）
 
-**契约真源**：~~ga-bo-m2a OpenAPI~~（**MS-11 已删**） · 目标链 **§15** · 组织子树 **§16** · 业务 [business-os §11.9](./business-os共识.md#119-bo-m2-演进结构先行)。
+**契约真源**：~~ga-bo-m2a OpenAPI~~（**MS-11 已删**） · 目标链 **§15** · 组织子树 **§16** · 业务 [business-os §11.9](../../platform_docs/business-os共识.md#119-bo-m2-演进结构先行)。
 
 | 项 | 约定 |
 | --- | --- |
@@ -832,7 +832,7 @@ Web 乐观打开（v25.14.7 · 已有 thread · v26.10.10–11 消息区秒开�
 | **鉴权** | 与 **§5.1** 完全相同（Bearer + `X-Sender-User-Id`） |
 | **Query** | **无**（M2a 不引入 `?perspective=` 等过滤；全量 P0 checks） |
 | **读集 · goal** | 复用 M1 **`build_governance_stewardship_tree`**（子树 owner · 默认链过滤）；**不** 扩大评审员读集 |
-| **读集 · org** | 复用 M1 **`org_scope` 管辖 root** 及其子树（§11.2 · [business-os §11.9.3](./business-os共识.md#1193-组织子树结构检查bo-m2a-org--normative)） |
+| **读集 · org** | 复用 M1 **`org_scope` 管辖 root** 及其子树（§11.2 · [business-os §11.9.3](../../platform_docs/business-os共识.md#1193-组织子树结构检查bo-m2a-org--normative)） |
 | **处理顺序** | ① 鉴权 → ② `build_ga_scope()` → ③ goal checks → ④ org checks → ⑤ **cross checks**（若双域 active）→ ⑥ `ga_structure_read` |
 
 **响应类型 `GaStructureResponse`（normative 摘要 · M2a 双域 + M2b-1 cross 壳）**：
@@ -885,7 +885,7 @@ app/services/ga_org_structure.py      # 可选拆分 · org 读集与 BFS
 
 ### 5.12 `GET /internal/ga/process` · `GET /internal/ga/achievement`（BO-M2c/M2d · M-PR）
 
-**契约真源**：~~ga-bo-m2c~~（**MS-11 已删**） · ~~ga-bo-m2d~~（**MS-11 已删**） · 叙述 **§18–§19** · 业务 [business-os §11.9.7](./business-os共识.md#1197-过程运行与目标达成bo-m2c--bo-m2d--normative)。
+**契约真源**：~~ga-bo-m2c~~（**MS-11 已删**） · ~~ga-bo-m2d~~（**MS-11 已删**） · 叙述 **§18–§19** · 业务 [business-os §11.9.7](../../platform_docs/business-os共识.md#1197-过程运行与目标达成bo-m2c--bo-m2d--normative)。
 
 #### 5.12.0 共享 Finding 模型（normative）
 
@@ -947,7 +947,7 @@ app/services/ga_process_config.py  # max_graph_projects 等（§18.6）
 
 ### 5.13 `GET /internal/ga/attention`（BO-M-ATT · L2 管域 attention · 共识）
 
-**契约真源**：~~ga-bo-m-attention~~（**MS-11 已删**） · 叙述 **§20** · 业务 [business-os §2.3](./business-os共识.md#23-观测类型与-readiness-区分) · [§9.1](./business-os共识.md#91-建议下一迭代2026-07-11--非-normative)。
+**契约真源**：~~ga-bo-m-attention~~（**MS-11 已删**） · 叙述 **§20** · 业务 [business-os §2.3](../../platform_docs/business-os共识.md#23-观测类型与-readiness-区分) · [§9.1](../../platform_docs/business-os共识.md#91-建议下一迭代2026-07-11--非-normative)。
 
 #### 5.13.0 定位（normative）
 
@@ -965,7 +965,7 @@ app/services/ga_process_config.py  # max_graph_projects 等（§18.6）
 | **个人 OS（PA）** | `GET /ge/me/queues` | 我今天要推进什么 |
 | **管域 OS（GA）** | `GET /internal/ga/attention` | 我管的域现在最该关注什么 |
 
-壳层 **可** 在同一页 **并排** 展示二者 · **禁止** 合并为单一 rank 列表（[business-os A8](./business-os共识.md#82-反模式禁止)）。
+壳层 **可** 在同一页 **并排** 展示二者 · **禁止** 合并为单一 rank 列表（[business-os A8](../../platform_docs/business-os共识.md#82-反模式禁止)）。
 
 #### 5.13.1 端点
 
@@ -1291,7 +1291,7 @@ GA（调用 `governance_scope` 后）应包含：
 
 **URL 状态（normative）**：`?tab=allocation` · 可选 `allocation_view=dept|goal`（sub 强制 `goal`）· `highlight={node_id}` · `highlight_dept={department_id}` — **同页 Tab 内聚焦**（非跨节点跳转 · **M-HT-6**）
 
-**窄屏**：矩阵 **横向滚动** · 对照基数与 findings 列表 **纵向堆叠**（链 [壳层 §4.2.6](./skstudio-壳层与导航UI迭代.md#426-管域分布热力图执行力--normative--m-ht)）
+**窄屏**：矩阵 **横向滚动** · 对照基数与 findings 列表 **纵向堆叠**（链 [壳层 §4.2.6](../../skstudio/docs/skstudio-壳层与导航UI迭代.md#426-管域分布热力图执行力--normative--m-ht)）
 
 **findings 联动（M-HT-3 · 现网）**：`cross_findings` 列表 ↔ 矩阵双向高亮 · 映射优先 `evidence.primary_department_id` · `node.id` / `evidence.program_id` · 行内「查看」深链执行力 / **组织 › 结构**
 
@@ -1316,7 +1316,7 @@ GA（调用 `governance_scope` 后）应包含：
 
 **testid**：`execution-detail-tab-allocation` · … · `governance-allocation-thumbnail`（**未挂载** · fixture only）
 
-实现子里程碑：[§17.10](./Governance-Assistant产品设计.md#1710-跨域分布热力图-milestones-m-ht--normative) · 壳层 [§4.2.6](./skstudio-壳层与导航UI迭代.md#426-管域分布热力图执行力--normative--m-ht) — **UI 规格废止 · 组件保留**
+实现子里程碑：[§17.10](./Governance-Assistant产品设计.md#1710-跨域分布热力图-milestones-m-ht--normative) · 壳层 [§4.2.6](../../skstudio/docs/skstudio-壳层与导航UI迭代.md#426-管域分布热力图执行力--normative--m-ht) — **UI 规格废止 · 组件保留**
 
 ### 6.8 管域页信息架构（M-ATT · normative · BO-M3a 中心延伸）
 
@@ -1324,7 +1324,7 @@ GA（调用 `governance_scope` 后）应包含：
 
 | 表面 | 角色 | 状态 |
 | --- | --- | --- |
-| **AAP 中心 `/governance`** | **规范主表面**：**评价** + mutate 后 Host **`navigate` GE 深链**（结果面） | **§6.8.10.0** · 壳层 [§4.2.8](./skstudio-壳层与导航UI迭代.md#428-管域-aap-中心双-tabbo-m3a--normative) |
+| **AAP 中心 `/governance`** | **规范主表面**：**评价** + mutate 后 Host **`navigate` GE 深链**（结果面） | **§6.8.10.0** · 壳层 [§4.2.8](../../skstudio/docs/skstudio-壳层与导航UI迭代.md#428-管域-aap-中心双-tabbo-m3a--normative) |
 | **我 › 管域**（`MeGovernanceEntry`） | 薄入口 · 打开管理助手 | M-ATT 组件可留；**勿** 恢复双 Tab 工作列表 |
 
 #### 6.8.0 区块顺序（normative · 2026-07-11 · 评估区）
@@ -1342,7 +1342,7 @@ GA（调用 `governance_scope` 后）应包含：
 
 - **结构与分布合并为一 chip** — allocation（跨域分布）在业务上从属于「定义与挂靠」，与 structure 同读 `governance_structure` · **不** 单独第四 chip。
 - **管域关注列表行** 仍保留 `source_kind`（structure / allocation / process / achievement）供行内弱标签；chip 层为 **摘要 + 类内 top 3**（结构与分布 chip 行内仍显 `[结构]`/`[分布]`）。
-- **personal 待办** **不在** 本页 · 见 §6.8.4 · [business-os A8](./business-os共识.md#82-反模式禁止)。
+- **personal 待办** **不在** 本页 · 见 §6.8.4 · [business-os A8](../../platform_docs/business-os共识.md#82-反模式禁止)。
 
 **线框（normative）**：
 
@@ -1499,11 +1499,11 @@ P0 chip **仍无** 独立详情页 · 次要行动 **仅** 打开 GA · **不** 
 | 非目标 | 说明 |
 | --- | --- |
 | chip 摘要行点击进详情页 | P0 无 · 深链靠 attention / chip top 列表行 |
-| 管域页展示 personal 队列 | [business-os A8](./business-os共识.md#82-反模式禁止) |
+| 管域页展示 personal 队列 | [business-os A8](../../platform_docs/business-os共识.md#82-反模式禁止) |
 | 四 chip（结构/分布拆开） | allocation ⊂ 结构与分布 |
 | chip 展示全量 finding 列表 | 每类 **cap 3** · 余下靠 GA / 管域关注 |
 | 恢复 M-HT 矩阵 | GA-10 ✗ |
-| ~~BO-M3a 工作列表~~ | **已废止（v0.8.55）** · 历史见 [business-os §11.10](./business-os共识.md#1110-bo-m3a-工作列表共识normative) |
+| ~~BO-M3a 工作列表~~ | **已废止（v0.8.55）** · 历史见 [business-os §11.10](../../platform_docs/business-os共识.md#1110-bo-m3a-工作列表共识normative) |
 
 #### 6.8.8 testid 增补（M-ATT · normative）
 
@@ -1519,7 +1519,7 @@ P0 chip **仍无** 独立详情页 · 次要行动 **仅** 打开 GA · **不** 
 
 #### 6.8.9 AAP 中心壳与路由（**已废止：双 Tab / 会话板默认面** · 被 §6.8.10.0 取代）
 
-> **产品决策（v0.8.55）**：废止「默认面 = 本轮共识待办 list / Accept 会话板 / 双 Tab 评估\|工作列表」。现网中心 = **唯一「评价」+ 用法说明**；结果面 = Host **`navigate(deep_link)`**（§6.8.10.3b）。壳层不变量仍见 [§4.2.8](./skstudio-壳层与导航UI迭代.md#428-管域-aap-中心双-tabbo-m3a--normative)。
+> **产品决策（v0.8.55）**：废止「默认面 = 本轮共识待办 list / Accept 会话板 / 双 Tab 评估\|工作列表」。现网中心 = **唯一「评价」+ 用法说明**；结果面 = Host **`navigate(deep_link)`**（§6.8.10.3b）。壳层不变量仍见 [§4.2.8](../../skstudio/docs/skstudio-壳层与导航UI迭代.md#428-管域-aap-中心双-tabbo-m3a--normative)。
 
 | 项 | 现网约定 |
 | --- | ---- |
@@ -1823,7 +1823,7 @@ org-mutate 200
 | **ORG-T03** | CI | 静态 | SOUL/tools | G29 + org_mutate description 含同意门闩 / 一次一项 / reviewer / `manager_username`→lead / 禁组织打分 | `eval_governance_assistant` |
 | **ORG-T04** | CI | vitest | 消息含 `open_org_embed` | **壳层 Host** debounce **navigate** `deep_link`；invalidate **`ge-org-departments`**；**未** invalidate messages / 换会话；历史块不跳 | shell Host 测（对称 MS-T04） |
 | **ORG-T05** | CI | pytest | mock GE 409 | archive 有 teams → **409** `department_has_teams`；有主责 → **409** `department_has_primary_objectives`；有子部门 → **409** `department_has_children` | `test_ga_org_mutate` |
-| **ORG-T06** | 半自动 | E2E/手工 | Mac `victor`（须评审员） | 共商 → 同意 → org mutate → Host navigate「组织」→ 树见变更 | [签收清单](./hermes-profiles/governance-assistant/ORG-T06-signoff.md) · [runbook](#68111a-org-t06-竖切剧本runbook) |
+| **ORG-T06** | 半自动 | E2E/手工 | Mac `victor`（须评审员） | 共商 → 同意 → org mutate → Host navigate「组织」→ 树见变更 | [签收清单](../../platform_docs/integration/hermes-skstudio/profiles/governance-assistant/ORG-T06-signoff.md) · [runbook](#68111a-org-t06-竖切剧本runbook) |
 
 **负例（须显式 FAIL）**：
 
@@ -1847,7 +1847,7 @@ org-mutate 200
 ###### 6.8.11.1a ORG-T06 竖切剧本（runbook · ORG-4）
 
 > **性质**：半自动**验收**（非新产品能力）。照抄 MS-T06 形态；**无** 组织再评义务。  
-> **可勾清单**：[ORG-T06-signoff.md](./hermes-profiles/governance-assistant/ORG-T06-signoff.md) — **ORG-T06 绿 = 清单步 1～5 全勾**（或 blocker 明示）。
+> **可勾清单**：[ORG-T06-signoff.md](../../platform_docs/integration/hermes-skstudio/profiles/governance-assistant/ORG-T06-signoff.md) — **ORG-T06 绿 = 清单步 1～5 全勾**（或 blocker 明示）。
 
 **前置**：`governance_active` 且 **`org_scope.active`** · 账号为 **GE 评审员** · GA gateway active · 本机或生产 skstudio 健康 · **ORG-1～3 已绿**。  
 **账号**：Mac 开发默认 **`victor` / `p`**（须在 `group_creation_reviewers`）；生产同名企微账号须同为评审员。
@@ -2047,7 +2047,7 @@ org-mutate 200
 | **MS-T03** | CI | 静态 | SOUL/tools | G29 + mutate description 含同意门闩 / 一次一项 / D8 键名 | `eval_governance_assistant` |
 | **MS-T04** | CI | vitest | 消息含 `open_ge_embed` | **`OpenGeEmbedHost`（AppShell）** debounce **navigate** `deep_link`；同模块 `replace`；**未**为开结果面 invalidate messages / 换会话 | shell `OpenGeEmbedHost` 测 · E2E |
 | **MS-T05** | CI | vitest/pytest | 同根前后 scorecard | 再评对照钩含维分 delta / desired_outcome | 单测或 EVAL 结构 |
-| **MS-T06** | 半自动 | E2E/手工 | Mac `victor` | 评→共商→同意→mutate→Host navigate GE→同根再评 | [签收清单](./hermes-profiles/governance-assistant/MS-T06-signoff.md) · [runbook](#681070a-ms-t06-竖切剧本runbook--ms-10) |
+| **MS-T06** | 半自动 | E2E/手工 | Mac `victor` | 评→共商→同意→mutate→Host navigate GE→同根再评 | [签收清单](../../platform_docs/integration/hermes-skstudio/profiles/governance-assistant/MS-T06-signoff.md) · [runbook](#681070a-ms-t06-竖切剧本runbook--ms-10) |
 
 <a id="681070a-ms-t06-竖切剧本runbook--ms-10"></a>
 
@@ -2055,7 +2055,7 @@ org-mutate 200
 
 > **性质**：半自动**验收**（非新产品能力）。层 A = API 契约冒烟（可选脚本）；层 B/C = 管域对话 + Host 结果面。  
 > **纪律**：**禁止** 为绿而注册已卸 tool；**禁止** Accept / WI 冒充闭环。  
-> **可勾清单（MS-12）**：[MS-T06-signoff.md](./hermes-profiles/governance-assistant/MS-T06-signoff.md) — **MS-T06 绿 = 清单步 1～6 全勾**（或 blocker 明示）。
+> **可勾清单（MS-12）**：[MS-T06-signoff.md](../../platform_docs/integration/hermes-skstudio/profiles/governance-assistant/MS-T06-signoff.md) — **MS-T06 绿 = 清单步 1～6 全勾**（或 blocker 明示）。
 
 **前置**：`governance_active` · GA gateway active · DQ aux 已配（`GA_DQ_AUX_API_KEY` 或 `DEEPSEEK_API_KEY`）· 本机或生产 skstudio 健康。  
 **账号（MS-12）**：Mac 开发默认 **`victor` / `p`**（生产同名）；一般不必 Act-As；默认不强制上生产。
@@ -2071,7 +2071,7 @@ org-mutate 200
 
 **层 A（可选脚本）**：`skstudio/backend/scripts/ga_mstruct_slice.sh` — 默认 `GET /internal/ga/scope` + `GET …/decomposition-quality`（需 `GOAL_EXECUTION_SERVICE_TOKEN` · `GA_SLICE_SENDER=victor`）。`GA_SLICE_MUTATE=1` + JSON body 才跑 mutate 并断言 `open_ge_embed`。`GA_SLICE_RE_DQ=1`（MS-12）可在 mutate 后再评同根 DQ。不替代步 1～6 对话签收。
 
-**签收栏**（勾完即 MS-T06 绿 · 详见清单）：环境 ☑ Mac · ☑ **生产** · 日期 **2026-07-19** · 执行人 **agent** · 账号 Mac `victor` / 生产 `wecom:victor` · 层 A ☑ · 步 1～6 ☑（→ [清单](./hermes-profiles/governance-assistant/MS-T06-signoff.md)）
+**签收栏**（勾完即 MS-T06 绿 · 详见清单）：环境 ☑ Mac · ☑ **生产** · 日期 **2026-07-19** · 执行人 **agent** · 账号 Mac `victor` / 生产 `wecom:victor` · 层 A ☑ · 步 1～6 ☑（→ [清单](../../platform_docs/integration/hermes-skstudio/profiles/governance-assistant/MS-T06-signoff.md)）
 
 **DQ 可观测**：见 [§21.14](#2114-dq-degraded-可观测ms-10)（`ga_dq_result` · 运维脚本 `ga_dq_degraded_report.sh`）。
 
@@ -2238,7 +2238,7 @@ agent_reply / Message
 cd skstudio/backend && python scripts/install_governance_assistant_profile.py
 ```
 
-细则见 [hermes-profiles/governance-assistant/README.md](./hermes-profiles/governance-assistant/README.md)。生产由 `hermes-deploy` / post-deploy verify 调用同脚本（对标 `install_personal_assistant_profile.py`）。
+细则见 [hermes-profiles/governance-assistant/README.md](../../platform_docs/integration/hermes-skstudio/profiles/governance-assistant/README.md)。生产由 `hermes-deploy` / post-deploy verify 调用同脚本（对标 `install_personal_assistant_profile.py`）。
 
 ### 7.2 Gateway 启停
 
@@ -2251,7 +2251,7 @@ systemd 单元：`hermes-gateway-governance-assistant.service`（与 `hermes-gat
 
 ### 7.3 Publish 白名单
 
-`HERMES_PUBLISH_GATEWAY_PROFILES` / `p1-standard.yaml` **须追加** `governance-assistant`（与 master、personal-assistant 并列）—— **BO-M1 部署项**；具体 bundle 变更在实现 PR 中回写 [运维文档](./运维-Hermes-skstudio-集成.md)。
+`HERMES_PUBLISH_GATEWAY_PROFILES` / `p1-standard.yaml` **须追加** `governance-assistant`（与 master、personal-assistant 并列）—— **BO-M1 部署项**；具体 bundle 变更在实现 PR 中回写 [运维文档](../../platform_docs/运维-Hermes-skstudio-集成.md)。
 
 ### 7.4 环境变量
 
@@ -2311,7 +2311,7 @@ skstudio `.env` 须配置 **`SKSTUDIO_INTERNAL_SERVICE_TOKEN`**（Hermes → `/i
 | **GA-04** | lazy seed | `governance_active=true` 首次入口创建 thread；`false` 不创建 | T-GS-01～06 · GA-S-09～10 |
 | **GA-05** | E2E 对话 | GA 对「我的治理域」调用 `governance_scope`；分 org/goal 叙述；芦海星不误称 steward | T-GP-03～04 · §12.3 eval · 四人对话抽检 |
 | **GA-06** | 隔离 | governance 上行无 kanban 块；不写 kanban.db | T-GB-01 · T-GP-02 · T-GR-04 |
-| **GA-07**（M2a-goal） | 目标链 structure | `governance_structure` · **`goal_findings`**；Victor 无默认链；2H overload · **或** [Act-As Victor](./skstudio-评审员Act-As.md) | GA-ST-01～07 · T-GH-03 · **生产对话验收通过** |
+| **GA-07**（M2a-goal） | 目标链 structure | `governance_structure` · **`goal_findings`**；Victor 无默认链；2H overload · **或** [Act-As Victor](../../skstudio/docs/skstudio-评审员Act-As.md) | GA-ST-01～07 · T-GH-03 · **生产对话验收通过** |
 | **GA-08**（M2a-org） | 组织子树 structure | `governance_structure` · **`org_findings`** 非空（张雯）；双域 **分栏**（Victor）；`platform_unassigned` 为 **在职** 平台 count · **§12.3 #7～9** | GA-ST-08～13 · T-GH-05 · **生产对话验收通过** |
 | **GA-09**（M2b） | 跨域 distribution | `governance_structure` · **三分栏** goal/org/cross · `cross_map_metrics` · **§12.3 #10～12** | GA-ST-14～17 · T-GH-06 · **生产对话验收通过** |
 | **GA-10**（M-HT） | 执行力分布热力图 UI | **✗ 废止**（2026-07-11）· 跨域改验 **GA-09** | T-GF-10～23 · 组件 fixture only |
@@ -2321,7 +2321,7 @@ skstudio `.env` 须配置 **`SKSTUDIO_INTERNAL_SERVICE_TOKEN`**（Hermes → `/i
 
 ### 9.1 生产 personas 基线（GA-03 / GA-05 / GA-11 / GA-12）
 
-与 [business-os §11.6](./business-os共识.md#116-验收生产-personas--read-only-drill-基线) 相同：
+与 [business-os §11.6](../../platform_docs/business-os共识.md#116-验收生产-personas--read-only-drill-基线) 相同：
 
 | 用户 | `governance_active` | 要点 |
 | ---- | ------------------- | ---- |
@@ -2343,7 +2343,7 @@ skstudio `.env` 须配置 **`SKSTUDIO_INTERNAL_SERVICE_TOKEN`**（Hermes → `/i
 | **Q5** | `p1-standard` 是否装 governance GW？ | **是**（§11.11）；与 master · personal-assistant 并列 |
 | **Q6** | Bot / 群标题 | **统一为「管理助手」**（**D-GA-9**） |
 | **Q7** | M1 是否暴露 `org_*` / `goal_*`？ | **否** · 仅 `governance_scope`（**D-GA-7**） |
-| **Q8** | OpenAPI 字段契约放哪？ | [`openapi/ga-bo-m1.openapi.yaml`](./openapi/ga-bo-m1.openapi.yaml) · 叙述 **§5** · 摘要 [business-os §11.4.1](./business-os共识.md#1141-scope-响应形状normative-摘要) |
+| **Q8** | OpenAPI 字段契约放哪？ | [`openapi/ga-bo-m1.openapi.yaml`](./openapi/ga-bo-m1.openapi.yaml) · 叙述 **§5** · 摘要 [business-os §11.4.1](../../platform_docs/business-os共识.md#1141-scope-响应形状normative-摘要) |
 | **Q9** | `thread_kind=governance` DB | **须** Alembic 扩展 enum/CHECK（§11.6）；与 PA `personal` 无迁移 **不同** |
 | **Q10** | 回归脚本 | `scripts/run_governance_assistant_regression.sh`（§12.4）随 **包 C** PR 提交 |
 | **Q11** | M2a OpenAPI | ~~ga-bo-m2a OpenAPI~~（**MS-11 已删**） · 叙述 **§15** · 阈值 **§15.8** |
@@ -2421,7 +2421,7 @@ frontend/src/
 
 ### 11.2 `ga_scope.py`（聚合逻辑）
 
-**职责**：对 sender 组装 [business-os §11.4.1](./business-os共识.md#1141-scope-响应形状normative-摘要) JSON；**不** 新增 GE 表；**不** 调用 PA HTTP（直接调 service 层）。
+**职责**：对 sender 组装 [business-os §11.4.1](../../platform_docs/business-os共识.md#1141-scope-响应形状normative-摘要) JSON；**不** 新增 GE 表；**不** 调用 PA HTTP（直接调 service 层）。
 
 ```python
 def build_ga_scope(db: Session, *, sender_username: str) -> dict[str, Any]:
@@ -2448,7 +2448,7 @@ def build_ga_scope(db: Session, *, sender_username: str) -> dict[str, Any]:
 | **`managed_org_trees`** | maximal managed roots（parent 不在本用户其它 managed 内）→ BFS 嵌套全量子部门 · 每节点 `path` · **`manager_user_id` / `manager_username` / `manager_display_name`（ORG-R1；空=未设）** · 全局节点预算（默认 80）超限标 `truncated` |
 | 各 root 子树规模 | BFS 汇总 `department_count` / `team_count` / `member_count`（同 PA org 子树算法） |
 | `self.org_path` | 优先 GE profile；**404 / 空** 时回退 `list_org_members` + `org_path_for`（生产 drill 必测） |
-| `rollup` | 各 managed root 子树 id **并集去重** 后计数（[business-os rollup 注记](./business-os共识.md#1141-scope-响应形状normative-摘要)） |
+| `rollup` | 各 managed root 子树 id **并集去重** 后计数（[business-os rollup 注记](../../platform_docs/business-os共识.md#1141-scope-响应形状normative-摘要)） |
 | `active` | `len(managed_departments) > 0 or len(managed_teams) > 0` |
 
 **纪律**：仅 **direct** manager / lead root；**不** 把祖先 read 权限部门并入 `managed_departments`。组织层级叙述真源 = **`managed_org_trees`**（对齐 goal 侧 stewardship 嵌套）；扁平列表不得单独充当「无树」。
@@ -2707,7 +2707,7 @@ registry.register(
 
 ### 11.10 前端（薄入口 · BO-M1 · M-HT 组件保留）
 
-> **章节消歧**：本节 **GA §11.10** = 前端薄入口 / M-HT fixture。**工作列表（BO-M3a）** 历史真源为 **[business-os §11.10](./business-os共识.md#1110-bo-m3a-工作列表共识normative)** · 本文 **§5.0.6**（**MS-8 无路由**）。勿混用「§11.10」简称。
+> **章节消歧**：本节 **GA §11.10** = 前端薄入口 / M-HT fixture。**工作列表（BO-M3a）** 历史真源为 **[business-os §11.10](../../platform_docs/business-os共识.md#1110-bo-m3a-工作列表共识normative)** · 本文 **§5.0.6**（**MS-8 无路由**）。勿混用「§11.10」简称。
 
 | 组件 | 行为 |
 | ---- | ---- |
@@ -3243,7 +3243,7 @@ pytest hermes-skstudio-plugin/tests/test_gateway_register.py \
 | **GA-PQ-T23** | action_items 枚举 | `suggested_action` ∈ §22.10.2.E；缺 activate 字段 → 400 | M0/M2 |
 | **EVAL-PQ-01** | OpenAPI **0.1.3** + plugin | 含 progress-quality + project-mutate · Hermes 注册 | M4 |
 | **EVAL-PQ-02** | SOUL / schema | 意图「评价 xxx 的进展」；禁 goal_mutate 改执行 | M4 |
-| **EVAL-PQ-03** | 对话签收 | 报项目名 → 评分卡 → 主建议 → 确认 mutate · [EVAL-PQ-signoff](./hermes-profiles/governance-assistant/EVAL-PQ-signoff.md) | M4 |
+| **EVAL-PQ-03** | 对话签收 | 报项目名 → 评分卡 → 主建议 → 确认 mutate · [EVAL-PQ-signoff](../../platform_docs/integration/hermes-skstudio/profiles/governance-assistant/EVAL-PQ-signoff.md) | M4 |
 
 #### C9b · `test_ga_progress_quality_rollup*.py`（BO-M-PQ · PQ-4 · **规划**）
 
@@ -3310,7 +3310,7 @@ pytest hermes-skstudio-plugin/tests/test_gateway_register.py \
 | **MS-T03** | CI | SOUL G29 + tool description 门闩 | `eval_governance_assistant` | ☑ |
 | **MS-T04** | CI | `open_ge_embed` → Host **navigate** · 不 invalidate messages | `OpenGeEmbedHost` / shell | ☑ |
 | **MS-T05** | CI | 再评对照含 delta / desired_outcome | 单测或 EVAL | ☑ |
-| **MS-T06** | 半自动 | 评→共商→mutate→GE 真页→再评竖切 | [签收清单](./hermes-profiles/governance-assistant/MS-T06-signoff.md) | ☑（2026-07-19 Mac + **生产** `wecom:victor`） |
+| **MS-T06** | 半自动 | 评→共商→mutate→GE 真页→再评竖切 | [签收清单](../../platform_docs/integration/hermes-skstudio/profiles/governance-assistant/MS-T06-signoff.md) | ☑（2026-07-19 Mac + **生产** `wecom:victor`） |
 
 | # | 用户 prompt | 预期 Agent 行为 | 层 |
 | --- | --- | --- | --- |
@@ -3403,7 +3403,7 @@ bash deploy/ubuntu/tests/p1-standard-bundle_test.sh    # 含 governance-assistan
 
 ## 13. 附录 · 横切改动清单（M1 ☑ · M2a 增项）
 
-实现时 **`rg thread_kind`** / **`rg gateway_role`** / **`rg personal_gateway`** 并对下列路径勾选（漏改 = 联调必踩）。参照 [PA §13](./Personal-Assistant产品设计.md#13-附录-a--p0-横切改动清单i-pa-10)。
+实现时 **`rg thread_kind`** / **`rg gateway_role`** / **`rg personal_gateway`** 并对下列路径勾选（漏改 = 联调必踩）。参照 [PA §13](../../platform_docs/hermes-self/Personal-Assistant产品设计.md#13-附录-a--p0-横切改动清单i-pa-10)。
 
 ### M2a-org 增量（BO-M2a-org · 在 M2a 清单上追加）
 
@@ -3419,11 +3419,11 @@ bash deploy/ubuntu/tests/p1-standard-bundle_test.sh    # 含 governance-assistan
 | `hermes-profiles/governance-assistant/SOUL.md` | §4.2b 路由表 · org-only / 双域分栏 ☑ |
 | `backend/scripts/eval_governance_assistant.py` | §12.3 **#6～9** · TOOL-SCHEMA ☑ |
 | `tests/test_governance_assistant_profile.py` | **T-GP-06** ☑ |
-| [Hermes集成 §13.7](./Hermes与组织及目标执行的集成.md#137-m2a-org--governance_structure-双域扩展) | G9–G11 · tool 表修订 |
+| [Hermes集成 §13.7](../../platform_docs/integration/hermes-goal_execution/Hermes与组织及目标执行的集成.md#137-m2a-org--governance_structure-双域扩展) | G9–G11 · tool 表修订 |
 
 ### M2b 增量（BO-M2b · 三期 · ✅ 已落地）
 
-规格：[GA §17.9](./Governance-Assistant产品设计.md#179-bo-m2b-实现子里程碑normative--2026-07-11--已共识) · [business-os §11.9.6](./business-os共识.md#1196-跨域分布双向对照bo-m2b--normative)
+规格：[GA §17.9](./Governance-Assistant产品设计.md#179-bo-m2b-实现子里程碑normative--2026-07-11--已共识) · [business-os §11.9.6](../../platform_docs/business-os共识.md#1196-跨域分布双向对照bo-m2b--normative)
 
 #### M2b-1 · 契约与兼容壳（✅ 2026-07-11）
 
@@ -3458,13 +3458,13 @@ bash deploy/ubuntu/tests/p1-standard-bundle_test.sh    # 含 governance-assistan
 | `tests/plugins/test_skstudio_governance_plugin.py` | **T-GH-06** · **T-GH-06b** ☑ |
 | `tests/test_governance_assistant_profile.py` | **T-GP-07** ☑ |
 | `scripts/run_governance_assistant_regression.sh` | 纳入 eval ☑ |
-| [Hermes集成 §13.8](./Hermes与组织及目标执行的集成.md#138-m2b--governance_structure-跨域扩展) | **GA-09** ☑ |
+| [Hermes集成 §13.8](../../platform_docs/integration/hermes-goal_execution/Hermes与组织及目标执行的集成.md#138-m2b--governance_structure-跨域扩展) | **GA-09** ☑ |
 
 **GA-07/08/09**：**生产对话验收通过**（2026-07-11 · §12.3 层 A）。
 
 ### M-PR 增量（BO-M2c/M2d · 规划）
 
-规格：[GA §18.9](./Governance-Assistant产品设计.md#189-实现子里程碑m-pr--normative) · [business-os §11.9.7](./business-os共识.md#1197-过程运行与目标达成bo-m2c--bo-m2d--normative) · [TODO M-PR](./TODO.md#business-os--建议下一迭代bo-m2cd--m-pr)
+规格：[GA §18.9](./Governance-Assistant产品设计.md#189-实现子里程碑m-pr--normative) · [business-os §11.9.7](../../platform_docs/business-os共识.md#1197-过程运行与目标达成bo-m2c--bo-m2d--normative) · [TODO M-PR](../../platform_docs/TODO.md#business-os--建议下一迭代bo-m2cd--m-pr)
 
 #### M-PR-0 · 双端点契约壳
 
@@ -3513,7 +3513,7 @@ bash deploy/ubuntu/tests/p1-standard-bundle_test.sh    # 含 governance-assistan
 
 ### M-ATT 增量（BO-M-ATT · 现网已交付 · 考古清单）
 
-规格：[GA §20](./Governance-Assistant产品设计.md#20-bo-m-att--l2-管域-attention-共识) · [business-os §9.1](./business-os共识.md#91-建议下一迭代2026-07-11--非-normative) · [TODO M-ATT](./TODO.md#business-os--m-att-l2-attention)
+规格：[GA §20](./Governance-Assistant产品设计.md#20-bo-m-att--l2-管域-attention-共识) · [business-os §9.1](../../platform_docs/business-os共识.md#91-建议下一迭代2026-07-11--非-normative) · [TODO M-ATT](../../platform_docs/TODO.md#business-os--m-att-l2-attention)
 
 #### M-ATT-0 · 契约壳
 
@@ -3641,7 +3641,7 @@ bash deploy/ubuntu/tests/p1-standard-bundle_test.sh    # 含 governance-assistan
 
 **组织子树结构**（BO-M2a-org）见 **§16** — 与本章 **并列**，同端点扩展。
 
-**真源链**：[business-os §11.9.1](./business-os共识.md#1191-目标链结构检查的六个视角bo-m2a-goal) · 待办 [TODO.md § Business OS](./TODO.md#business-os--governance-assistantbo-m2) · OpenAPI ~~ga-bo-m2a~~（**MS-11 已删**） · API **§5.11** · 实现 **§11.12**。
+**真源链**：[business-os §11.9.1](../../platform_docs/business-os共识.md#1191-目标链结构检查的六个视角bo-m2a-goal) · 待办 [TODO.md § Business OS](../../platform_docs/TODO.md#business-os--governance-assistantbo-m2) · OpenAPI ~~ga-bo-m2a~~（**MS-11 已删**） · API **§5.11** · 实现 **§11.12**。
 
 ### 15.1 与 M1 / 后续里程碑的关系
 
@@ -3668,7 +3668,7 @@ BO-M3b/c 人 Web 完成核对 · Master/PA 移交（后置）
 **纪律**：
 
 1. 所有 structure 检查 **仅在 M1 确定的治理子树内** 运行（复用 `build_governance_stewardship_tree` · 子树 owner 逻辑）。
-2. Finding（`governance_structure` / process / achievement）**只陈述 L1 可核对事实** + `evidence`；**不** 用通用管理常识断言「战略上该不该这样拆」（[business-os A4](./business-os共识.md#82-反模式禁止)）。**例外**：**BO-M-DQ**（§21）允许在质量评分卡约束下评 **拆解逻辑**（相对陈述意图是否说得通）；**禁止**替老板定战略对错。
+2. Finding（`governance_structure` / process / achievement）**只陈述 L1 可核对事实** + `evidence`；**不** 用通用管理常识断言「战略上该不该这样拆」（[business-os A4](../../platform_docs/business-os共识.md#82-反模式禁止)）。**例外**：**BO-M-DQ**（§21）允许在质量评分卡约束下评 **拆解逻辑**（相对陈述意图是否说得通）；**禁止**替老板定战略对错。
 3. **org_scope 与 goal_scope 不互相推导**；组织主责检查为 **对照**（`primary_department_id` vs owner 组织归属），非合并 scope。
 4. GA M2a **仍** 走聚合 internal API + 单 tool 扩展（`governance_structure` 或 scope 同族 endpoint）；**不** 默认暴露 `org_*` / `goal_*`。
 
@@ -3772,7 +3772,7 @@ OpenAPI：~~ga-bo-m2a OpenAPI~~（**MS-11 已删**）（与 §15.3–§15.4 同�
 | --- | --- |
 | 各层 **数/态** rollup · kbase 印证 | **BO-M2d** · M-PR-2b+ |
 | 偏差 · blocked · 过程推进 | **BO-M2c 过程运行** · §18 |
-| 工作列表 · Master 移交 | **BO-M3a～c** · [business-os §11.10](./business-os共识.md#1110-bo-m3a-工作列表共识normative) |
+| 工作列表 · Master 移交 | **BO-M3a～c** · [business-os §11.10](../../platform_docs/business-os共识.md#1110-bo-m3a-工作列表共识normative) |
 | GE 结构写 · inform | **永远不做**（GA 红线） |
 
 ### 15.7 验收方向（待 GA-S 系列扩充）
@@ -3814,7 +3814,7 @@ pytest **断言行为**（给定 fixture 触发/不触发），**不断言** 全
 
 > **MS-9**：同 §15 — Hermes structure tool **已卸**；org findings 规则可留 BFF；Agent 不问 org 结构细查 tool。
 
-**里程碑定位**：BO-M2a-org 回答 **「我管的组织子树结构是否成立、是否卫生」** — 补齐 **org-only 管理者** 的 GA structure 价值（[business-os §11.9.3](./business-os共识.md#1193-组织子树结构检查bo-m2a-org--normative)）。
+**里程碑定位**：BO-M2a-org 回答 **「我管的组织子树结构是否成立、是否卫生」** — 补齐 **org-only 管理者** 的 GA structure 价值（[business-os §11.9.3](../../platform_docs/business-os共识.md#1193-组织子树结构检查bo-m2a-org--normative)）。
 
 **非本里程碑**：组织 **战略重组建议**（缺 L0 时不评）· 企微同步 **`org.process.sync_stale`**（M2c）· GE 组织 **结构写** · `org_*` tool 暴露。
 
@@ -3955,7 +3955,7 @@ pytest **断言行为**，不断言字面量变更。
 | **GA-ST-10** | 芦海星 · org-only + 繁忙 footprint | `org_structure_active` **不** 依赖 `execution_footprint` |
 | **GA-ST-10b** | `platform_unassigned` 阈值 | count ≥ `platform_unassigned_info_count` → `org.membership.platform_unassigned` info |
 | **GA-ST-11** | 嵌套 managed root rollup | org metrics 子树 id **并集** 去重（同 M1 rollup） |
-| **GA-ST-12** | 评审员 Act-As 张雯 | effective user 下 org findings 与本人一致（[Act-As](./skstudio-评审员Act-As.md)） |
+| **GA-ST-12** | 评审员 Act-As 张雯 | effective user 下 org findings 与本人一致（[Act-As](../../skstudio/docs/skstudio-评审员Act-As.md)） |
 | **GA-ST-13** | 双域别名一致性 | `findings` ≡ `goal_findings` · `tree_metrics` ≡ `goal_tree_metrics`；**禁止** `org_findings` 混入别名 |
 
 完整矩阵见 **§12.2 C2**。
@@ -3971,7 +3971,7 @@ pytest **断言行为**，不断言字面量变更。
 
 ### 16.7 已落地决策表（normative · 2026-07-11）
 
-与 [business-os §11.9.5](./business-os共识.md#1195-bo-m2a-org-已落地决策表normative) 同源；**M2a-org 三子里程碑已交付**（§16.8），本表保留为 **不可漂移** 的架构决策记录：
+与 [business-os §11.9.5](../../platform_docs/business-os共识.md#1195-bo-m2a-org-已落地决策表normative) 同源；**M2a-org 三子里程碑已交付**（§16.8），本表保留为 **不可漂移** 的架构决策记录：
 
 | ID | 决策 |
 | --- | ---- |
@@ -4008,7 +4008,7 @@ pytest **断言行为**，不断言字面量变更。
 
 > **MS-9**：cross 仍可由 BFF `/structure` 产出供 DQ 形分；Hermes **不** 再暴露 structure tool / 三分栏路由。
 
-**里程碑定位**：BO-M2b 回答 **「组织/人 ↔ 目标/项目」双向分布是否健康** — 在 M2a 之后、**BO-M2c 过程运行** 之前（[business-os §11.9.6](./business-os共识.md#1196-跨域分布双向对照bo-m2b--normative)）。
+**里程碑定位**：BO-M2b 回答 **「组织/人 ↔ 目标/项目」双向分布是否健康** — 在 M2a 之后、**BO-M2c 过程运行** 之前（[business-os §11.9.6](../../platform_docs/business-os共识.md#1196-跨域分布双向对照bo-m2b--normative)）。
 
 **口诀**：**M2a 看树能不能站；M2b 看人和事在树上摊得匀不均、挂得对不对。**
 
@@ -4496,7 +4496,7 @@ scope（可选）→ governance_decomposition_quality → 共商 →（同意后
 - 新 check 规则 · ~~工作列表 / Master 移交（→ BO-M3a～c）~~ **已废止** · 结构变更走 mutate |
 - M-HT 矩阵 UI 恢复
 
-**反模式**：[business-os A8](./business-os共识.md#82-反模式禁止) · [A9](./business-os共识.md#82-反模式禁止)
+**反模式**：[business-os A8](../../platform_docs/business-os共识.md#82-反模式禁止) · [A9](../../platform_docs/business-os共识.md#82-反模式禁止)
 
 ### 20.3 API 真源
 
@@ -4627,7 +4627,7 @@ flowchart LR
 | 项 | 说明 |
 | --- | --- |
 | 同 project 多 finding 折叠 | 列表 UI 去重 |
-| 壳层 personal ∥ 管域并排 compose | [business-os A9](./business-os共识.md#82-反模式禁止) · **禁止** merge rank |
+| 壳层 personal ∥ 管域并排 compose | [business-os A9](../../platform_docs/business-os共识.md#82-反模式禁止) · **禁止** merge rank |
 | chip 次要行动 | §6.8.3b · `governance-*-summary-ask-ga` |
 | BFF overview 聚合 | `GET /api/v1/me/governance/overview` · §5.13.11 · **v25.14.1 ☑** |
 | chip 类内 top 3 | `structure_top` / `process_top` / `achievement_top` · §6.8.2 · **v25.14.2 ☑** |
@@ -4653,7 +4653,7 @@ Week 2–3 M-ATT-1c（可选）·  M-ATT-2 合并 + GA-ATT-DRILL-01
 Backlog  M-ATT-3
 ```
 
-待办：[TODO.md § M-ATT](./TODO.md#business-os--m-att-l2-attention) · 横切：[§13 M-ATT 增量](./Governance-Assistant产品设计.md#m-att-增量bo-m-att--规划)
+待办：[TODO.md § M-ATT](../../platform_docs/TODO.md#business-os--m-att-l2-attention) · 横切：[§13 M-ATT 增量](./Governance-Assistant产品设计.md#m-att-增量bo-m-att--规划)
 
 ### 20.10 Web 信息架构（normative · 2026-07-11）
 
@@ -4666,7 +4666,7 @@ Backlog  M-ATT-3
 | 3 | 过程运行 chip | process **摘要 + top 3** |
 | 4 | 目标达成 chip | achievement **摘要 + top 3** |
 
-详见 **§6.8** · [壳层 §4.2.7](./skstudio-壳层与导航UI迭代.md#427-管域页-l2-attention--三-chip-m-att--normative)。
+详见 **§6.8** · [壳层 §4.2.7](../../skstudio/docs/skstudio-壳层与导航UI迭代.md#427-管域页-l2-attention--三-chip-m-att--normative)。
 
 ### 20.11 四拍 execution playbook（M-ATT · normative）
 
@@ -4707,7 +4707,7 @@ Backlog  M-ATT-3
 | 4 | 前端 **勿** 硬编码 tier/source 中文 · 用 `tier_label` / `source_kind_label` |
 | 5 | 合并前跑 `run_governance_assistant_regression.sh` |
 
-待办：[TODO.md § M-ATT](./TODO.md#business-os--m-att-l2-attention)
+待办：[TODO.md § M-ATT](../../platform_docs/TODO.md#business-os--m-att-l2-attention)
 
 横切清单：[§13 M-ATT 增量](./Governance-Assistant产品设计.md#m-att-增量bo-m-att--规划)
 
@@ -4717,7 +4717,7 @@ Backlog  M-ATT-3
 
 ## 21. BO-M-DQ · 目标拆解质量评价（normative · 现网）
 
-- **版本记入**：GA **v0.8.42** · OpenAPI **[`ga-bo-m-dq` 0.1.4](./openapi/ga-bo-m-dq.openapi.yaml)**（含 `DqRoleFit` · `interactions` · **默认根=直接 owned 子树根** · **DQ-M2 现网**）· 链 [business-os §9](./business-os共识.md#9-演进与缺口) · [本体 §1.7](./本体领域模型.md#17-bo-m-dq-目标拆解质量半契约v09)
+- **版本记入**：GA **v0.8.42** · OpenAPI **[`ga-bo-m-dq` 0.1.4](./openapi/ga-bo-m-dq.openapi.yaml)**（含 `DqRoleFit` · `interactions` · **默认根=直接 owned 子树根** · **DQ-M2 现网**）· 链 [business-os §9](../../platform_docs/business-os共识.md#9-演进与缺口) · [本体 §1.7](../../platform_docs/本体领域模型.md#17-bo-m-dq-目标拆解质量半契约v09)
 - **状态**：**产品共识冻结** · **M0+M1+DQ-M2 现网**（§21.10–§21.13）
 - **一句话**：管理助手能对 **goal_scope 内** 的战略/子目标（及专项薄评）给出 **1–5 质量评分卡**——**形式维**由 Finding 规则打分，**意涵维**（拆解逻辑 · **职能匹配**）由服务端辅模型在约束下评「相对意图是否说得通 / 组织职能面是否契合」；结构是质量的一部分，**不是**对立的另一套评价。
 
@@ -4977,7 +4977,7 @@ CREATE TABLE ga_dq_working_roots (
 
 **EVAL 静态子串（WR-2）**：SOUL / tool description 含「评价 xxx」·「管辖根」·「必报当前根」；**禁止** `focus_ref`；OpenAPI 文件含 `thread_id` / `reset_working_root`（**EVAL-DQ-06**）。
 
-**半自动签收（WR-3）**：可复用 [MS-T06](./hermes-profiles/governance-assistant/MS-T06-signoff.md) 骨架加三步——钉名子根 →「再评价一下」同 `root.name` →「回到管辖根」回 maximal owned；生产 Act-As 一次即可。
+**半自动签收（WR-3）**：可复用 [MS-T06](../../platform_docs/integration/hermes-skstudio/profiles/governance-assistant/MS-T06-signoff.md) 骨架加三步——钉名子根 →「再评价一下」同 `root.name` →「回到管辖根」回 maximal owned；生产 Act-As 一次即可。
 
 ### 21.4 权限（normative）
 
@@ -5010,7 +5010,7 @@ Hermes tool governance_decomposition_quality 只叙述；不改形分、不重�
 | **失败** | 意涵失败 → 该意维 `null` + 对应 `*_status=degraded`；**禁止**默认填 3；**禁止** 用意失败抹掉形分 |
 | **对 WI** | **禁止**默认 regenerate；共识进板须 **非 null `deep_link`**（§6.8.10.4）；`options[]` 可有 `web_follow` 镜像深链 |
 
-**A4**：[business-os A4](./business-os共识.md#82-反模式禁止) 约束 Finding；DQ 允许相对陈述意图评拆解逻辑且须挂子图节点。
+**A4**：[business-os A4](../../platform_docs/business-os共识.md#82-反模式禁止) 约束 Finding；DQ 允许相对陈述意图评拆解逻辑且须挂子图节点。
 
 ### 21.6 Agent 话术与输出（normative）
 
@@ -5130,7 +5130,7 @@ Hermes tool governance_decomposition_quality 只叙述；不改形分、不重�
 | 项 | 约定 |
 | -- | ---- |
 | **执行位置** | skstudio **服务端**（`build_ga_decomposition_quality` 内）；**不是** Hermes 主模型重算 |
-| **模型路由** | **DeepSeek Flash** · env：**`GA_DQ_AUX_BASE_URL=https://api.deepseek.com/v1`** · **`GA_DQ_AUX_MODEL=deepseek-v4-flash`** · 密钥 **`GA_DQ_AUX_API_KEY`** 或回退 **`DEEPSEEK_API_KEY`**（[推理模型配置共识 §3.3](./hermes-profiles/推理模型配置共识.md#33-bo-m-dq--skstudio-服务端辅模型ga_dq_aux_)）；未配置密钥 → `logic_status=degraded`；**禁止** Kimi |
+| **模型路由** | **DeepSeek Flash** · env：**`GA_DQ_AUX_BASE_URL=https://api.deepseek.com/v1`** · **`GA_DQ_AUX_MODEL=deepseek-v4-flash`** · 密钥 **`GA_DQ_AUX_API_KEY`** 或回退 **`DEEPSEEK_API_KEY`**（[推理模型配置共识 §3.3](../../platform_docs/integration/hermes-skstudio/profiles/推理模型配置共识.md#33-bo-m-dq--skstudio-服务端辅模型ga_dq_aux_)）；未配置密钥 → `logic_status=degraded`；**禁止** Kimi |
 | **超时** | 默认 **25s**（`GA_DQ_AUX_TIMEOUT_SEC`，上限 55）；超时 → degraded |
 | **输入** | 锚点 `name`（+描述若有）· `subtree_summary`（子节点 kind/name/id、专项下项目名列表，cap 例如每专项 12）· 形式维分数与 top evidence_refs · 可选软提示字符串（M2） |
 | **输出 JSON** | 与 OpenAPI `DqDecompositionLogic` 一致；`supports`/`mismatches.node` 的 id **必须 ⊆** 输入节点 id 集，否则服务端剥离非法项；若合法 mismatches∪gaps 皆空且 score≤2 → 仍允许但记 metrics |
@@ -5156,7 +5156,7 @@ Hermes tool governance_decomposition_quality 只叙述；不改形分、不重�
 
 ### 21.13 职能匹配 `role_fit`（normative · 共识冻结 · **现网 · DQ-M2**）
 
-> **共识日期**：2026-07-16 · GA **v0.8.28**。与 [§6.8.10.5.1](#681051-策略共商叙述g27-细化--normative--v0830) · [本体 §1.7](./本体领域模型.md#17-bo-m-dq-目标拆解质量半契约v09) · OpenAPI **[`ga-bo-m-dq` 0.1.3](./openapi/ga-bo-m-dq.openapi.yaml)**（`DqRoleFit` 自 **0.1.1**）对齐。
+> **共识日期**：2026-07-16 · GA **v0.8.28**。与 [§6.8.10.5.1](#681051-策略共商叙述g27-细化--normative--v0830) · [本体 §1.7](../../platform_docs/本体领域模型.md#17-bo-m-dq-目标拆解质量半契约v09) · OpenAPI **[`ga-bo-m-dq` 0.1.3](./openapi/ga-bo-m-dq.openapi.yaml)**（`DqRoleFit` 自 **0.1.1**）对齐。
 
 #### 21.13.1 定义（A∪B）
 
@@ -5252,7 +5252,7 @@ Hermes tool governance_decomposition_quality 只叙述；不改形分、不重�
 | **日志** | 每次 DQ 完成打结构化 INFO（**现网键** `ga_dq_result`）：`logic_status` · `role_fit_status` · `root_kind`/`root_id` · `overall` · `duration_ms` · `aux_configured` · `logic_reason` / `role_fit_reason`（`no_key` \| `timeout` \| `parse` \| `validate` \| `ok` \| `skipped` \| `error`） |
 | **告警直觉** | `aux_configured=false` 仍有流量 → 立即修密钥；`aux_configured=true` 且 logic degraded 持续偏高 → 查上游/超时；`skipped`（如 program 根）**不算**故障 |
 | **运维脚本（MS-12）** | `skstudio/backend/scripts/ga_dq_degraded_report.sh`：扫含 `ga_dq_result` 的行，输出 status/reason/`aux_configured` 计数。生产：`journalctl -u skstudio --since … \| ./ga_dq_degraded_report.sh`；Mac：文件路径或 stdin。`aux_configured=false` 且样本>0 → 非零退出。**不上** Prometheus / 新产品 admin UI |
-| **周报（MS-12+）** | 生产 systemd timer `skstudio-ga-dq-weekly.timer`（周一 01:00 UTC = 北京 09:00）：扫近 7 天 → **始终**向 `SKSTUDIO_GROUP_CREATION_REVIEWERS` 个人助理发简报（`POST /internal/ops/notify-reviewers`）。见 [运维 §9.5](./运维-Hermes-skstudio-集成.md) |
+| **周报（MS-12+）** | 生产 systemd timer `skstudio-ga-dq-weekly.timer`（周一 01:00 UTC = 北京 09:00）：扫近 7 天 → **始终**向 `SKSTUDIO_GROUP_CREATION_REVIEWERS` 个人助理发简报（`POST /internal/ops/notify-reviewers`）。见 [运维 §9.5](../../platform_docs/运维-Hermes-skstudio-集成.md) |
 | **非目标** | 不为监控新开 Hermes tool |
 | **实现落点** | `ga_decomposition_quality` 出口 + `ga_dq_aux` AuxOutcome（**MS-10-b ☑**）· 报告脚本 **MS-12-b** |
 
@@ -5262,7 +5262,7 @@ Hermes tool governance_decomposition_quality 只叙述；不改形分、不重�
 
 ## 22. BO-M-PQ · 进展评价（normative · 产品需求冻结）
 
-- **版本记入**：GA **v0.8.87** · 链 [business-os §9](./business-os共识.md#9-演进与缺口) · [Hermes 集成 §13.14](./Hermes与组织及目标执行的集成.md#1314-bo-m-pq--进展评价规划) · [本体 §1.8](./本体领域模型.md#18-bo-m-pq进展评价半契约) · OpenAPI [`ga-bo-m-pq` 0.1.4](./openapi/ga-bo-m-pq.openapi.yaml)
+- **版本记入**：GA **v0.8.87** · 链 [business-os §9](../../platform_docs/business-os共识.md#9-演进与缺口) · [Hermes 集成 §13.14](../../platform_docs/integration/hermes-goal_execution/Hermes与组织及目标执行的集成.md#1314-bo-m-pq--进展评价规划) · [本体 §1.8](../../platform_docs/本体领域模型.md#18-bo-m-pq进展评价半契约) · OpenAPI [`ga-bo-m-pq` 0.1.4](./openapi/ga-bo-m-pq.openapi.yaml)
 - **状态**：**单项目现网** · **PQ-4 上卷现网（§22.11 · v0.8.91）** · 纯函数 + Internal 读/写 API + Hermes `governance_goal_pq` / `governance_goal_pq_rollup` / `governance_project_mutate`
 - **一句话**：对用户有权管理的 **Project** 给出 **1–5 进展评分卡**；对治理子树内 **专项/子目标/战略** 给出 **worst-case + 分布 + Road-to-Green** 上卷；闭环仍经 **单项目 mutate**。
 - **探索脚本**：`skstudio/backend/scripts/ga_progress_spike.py`（单项目）· `ga_pq_rollup_spike.py`（上卷探索）
@@ -6128,7 +6128,7 @@ pool = flatten (card.overall, rank, action_item, project) 按 overall↑, rank�
 | 结构/跨域契约长文 | §5.11 · §15–§17 | 规则仍可服务 DQ；**HTTP 已删** |
 
 **运维**：[§21.14](#2114-dq-degraded-可观测ms-10) · `ga_dq_degraded_report.sh`。  
-**签收**：[MS-T06-signoff.md](./hermes-profiles/governance-assistant/MS-T06-signoff.md)。
+**签收**：[MS-T06-signoff.md](../../platform_docs/integration/hermes-skstudio/profiles/governance-assistant/MS-T06-signoff.md)。
 
 ---
 
@@ -6236,11 +6236,11 @@ pool = flatten (card.overall, rank, action_item, project) 按 overall↑, rank�
 | **v0.8.11** | 2026-07-14 | **§4.2e `governance_work_items`** · 链 business-os **v1.3.32 / §11.10.13** · 本体 **v0.8.0** |
 | **v0.8.10** | 2026-07-14 | 链 business-os **v1.3.31**（**§11.10.2a** 实现默认冻结）· OpenAPI **0.1.3** |
 | **v0.8.9** | 2026-07-14 | 链 business-os **v1.3.30**（模板覆盖 · 完成算法/409 · **WI-T\***）· OpenAPI **0.1.2** |
-| **v0.8.8** | 2026-07-14 | **BO-M3a 六段 Milestone** 链 [business-os §11.10.11](./business-os共识.md#111011-实现-milestone-表normative--2026-07-14) · §0.3 包 A/B/C · business-os **v1.3.29** |
+| **v0.8.8** | 2026-07-14 | **BO-M3a 六段 Milestone** 链 [business-os §11.10.11](../../platform_docs/business-os共识.md#111011-实现-milestone-表normative--2026-07-14) · §0.3 包 A/B/C · business-os **v1.3.29** |
 | **v0.8.7** | 2026-07-14 | **§6.8.9 AAP 中心双 Tab** · 落点演进表 · 链 business-os **§11.10.10** · 壳层 **§4.2.8** · business-os **v1.3.28** |
 | **v0.8.6** | 2026-07-14 | **BO-M3a 稳定 id** · §11.10 前端章消歧注记 · OpenAPI **0.1.1**（example · `outcome_satisfied`）· 链 business-os **v1.3.27** |
 | **v0.8.5** | 2026-07-14 | **BO-M3a OpenAPI** · §5.0.6 work-items 路由 · 链 [`ga-bo-m3a-work-items`](./openapi/ga-bo-m3a-work-items.openapi.yaml) · business-os **v1.3.26**（模板 · 完成回写） |
-| **v0.8.4** | 2026-07-14 | **BO-M3a 工作列表**：§0.3 里程碑拆 M3a/b/c · 链 [business-os §11.10](./business-os共识.md#1110-bo-m3a-工作列表共识normative) · business-os **v1.3.25** |
+| **v0.8.4** | 2026-07-14 | **BO-M3a 工作列表**：§0.3 里程碑拆 M3a/b/c · 链 [business-os §11.10](../../platform_docs/business-os共识.md#1110-bo-m3a-工作列表共识normative) · business-os **v1.3.25** |
 | **v0.8.3** | 2026-07-11 | **管域乐观打开**：§5.4.1 GET thread · ensure `include_footprint=false` · §5.8/§6.8/§11.10 · GA-S-11/12 · T-GE-ATT-04/05 · T-GS-07 · skstudio **v25.14.7** |
 | **v0.8.2** | 2026-07-11 | **管域关注 cap 3**（与 chip top3 对齐）· OpenAPI · §5.13/§6.8/§12 · skstudio **v25.14.3** |
 | **v0.8.1** | 2026-07-11 | **chip 摘要+top3**：§5.13.11 overview 现网 · §6.8.2/§6.8.3/§6.8.6/§20.10 同步 · skstudio **v25.14.2** |
@@ -6281,7 +6281,7 @@ pool = flatten (card.overall, rank, action_item, project) 按 overall↑, rank�
 | **v0.4.7** | 2026-07-11 | §11.12.2 org 读集冻结 · §16.3–§16.7 澄清（sync/unassigned/L0/summary）· M2c sync_stale 预留 |
 | **v0.4.6** | 2026-07-11 | **§16 BO-M2a-org** 组织子树结构六视角 · §5.11 双域响应 · §0.3/§15 分期 · OpenAPI v0.2.0 |
 | **v0.4.5** | 2026-07-10 | **企微同步 reconcile**：§5.8 增批量 lazy seed 触发；Q2 补同步路径 |
-| **v0.4.4** | 2026-07-09 | **GA-07** 可 [Act-As Victor](./skstudio-评审员Act-As.md) 等价验收 · 链 Act-As 真源 |
+| **v0.4.4** | 2026-07-09 | **GA-07** 可 [Act-As Victor](../../skstudio/docs/skstudio-评审员Act-As.md) 等价验收 · 链 Act-As 真源 |
 | **v0.4.3** | 2026-07-09 | **BO-M2a 代码落地**：§8 #10/#11 ☑ · GA-07 · §15.4 `sub_load_skew` |
 | **v0.4.2** | 2026-07-09 | **§5.11** structure API · **§11.12** check registry · **§4.2b** tool · §12.4 回归 · §13 M2a 增量 |
 | **v0.4.1** | 2026-07-09 | OpenAPI **ga-bo-m2a** · §12.6 GA-ST · §15.8 阈值 · M1.1 勾选 · Victor/Q4 勘误 |

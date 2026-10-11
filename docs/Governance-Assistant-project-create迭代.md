@@ -12,12 +12,12 @@
 | ---- | ---- |
 | [Governance-Assistant产品设计.md](./Governance-Assistant产品设计.md) | 管域 Copilot · G29 · mutate · `open_ge_embed`（**v0.8.108** 指针） |
 | [Governance-Assistant-project-duplicate迭代.md](./Governance-Assistant-project-duplicate迭代.md) | **对照**：复制项目（**v0.1.8**；与本 create 分流） |
-| [Hermes与组织及目标执行的集成.md](./Hermes与组织及目标执行的集成.md) §13.14 / §13.15 | governance toolset；**§13.15**（**v1.9.71** · C62 现网） |
-| [business-os共识.md](./business-os共识.md) §9 | 演进入口（**v1.3.98**） |
-| [hermes-profiles/governance-assistant/SOUL.md](./hermes-profiles/governance-assistant/SOUL.md) | 瘦路由（含 validate/commit · C62 纯文本深链 + wecom 样例） |
-| [hermes-profiles/governance-assistant/skills/governance/project-create/SKILL.md](./hermes-profiles/governance-assistant/skills/governance/project-create/SKILL.md) | **Agent 规程真源 · 0.5.7**（C65 专节 + 话术表） |
-| [hermes-profiles/governance-assistant/PC-T01-signoff.md](./hermes-profiles/governance-assistant/PC-T01-signoff.md) | 建图竖切签收（含 **M5** 边界边） |
-| [hermes-profiles/governance-assistant/PC-NOTIFY-signoff.md](./hermes-profiles/governance-assistant/PC-NOTIFY-signoff.md) | **M4** 成员欢迎 inform 签收 |
+| [Hermes与组织及目标执行的集成.md](../../platform_docs/integration/hermes-goal_execution/Hermes与组织及目标执行的集成.md) §13.14 / §13.15 | governance toolset；**§13.15**（**v1.9.71** · C62 现网） |
+| [business-os共识.md](../../platform_docs/business-os共识.md) §9 | 演进入口（**v1.3.98**） |
+| [hermes-profiles/governance-assistant/SOUL.md](../../platform_docs/integration/hermes-skstudio/profiles/governance-assistant/SOUL.md) | 瘦路由（含 validate/commit · C62 纯文本深链 + wecom 样例） |
+| [hermes-profiles/governance-assistant/skills/governance/project-create/SKILL.md](../../platform_docs/integration/hermes-skstudio/profiles/governance-assistant/skills/governance/project-create/SKILL.md) | **Agent 规程真源 · 0.5.7**（C65 专节 + 话术表） |
+| [hermes-profiles/governance-assistant/PC-T01-signoff.md](../../platform_docs/integration/hermes-skstudio/profiles/governance-assistant/PC-T01-signoff.md) | 建图竖切签收（含 **M5** 边界边） |
+| [hermes-profiles/governance-assistant/PC-NOTIFY-signoff.md](../../platform_docs/integration/hermes-skstudio/profiles/governance-assistant/PC-NOTIFY-signoff.md) | **M4** 成员欢迎 inform 签收 |
 | [openapi/ga-bo-m-pc-plan.openapi.yaml](./openapi/ga-bo-m-pc-plan.openapi.yaml) | **M7 + C57–C60** validate + commit（**0.2.5**） |
 | [openapi/ga-bo-m-pq.openapi.yaml](./openapi/ga-bo-m-pq.openapi.yaml) | `project_mutate` + notify；Plan 三 action **已删**（**0.1.11**） |
 | [openapi/ga-bo-m-structure-mutate.openapi.yaml](./openapi/ga-bo-m-structure-mutate.openapi.yaml) | `goal_mutate` 建壳（+`shell` 回执；PC 仅执行器内） |
@@ -416,7 +416,7 @@
 | 清 Jun10 headless Chrome / Jun14 kanban 僵尸 | ✅ |
 | systemd 去掉 `RestartMaxDelaySec` / `RestartSteps`（CLI + 现网 unit） | ✅ |
 | devops 只读 ACL → `governance-assistant/sessions/`；冒烟直 rsync（`/tmp/ga_sessions_pub` 仅 fallback） | ✅ |
-| 运维文档 | [运维-Hermes-skstudio-集成.md](./运维-Hermes-skstudio-集成.md) **§9.6** |
+| 运维文档 | [运维-Hermes-skstudio-集成.md](../../platform_docs/运维-Hermes-skstudio-集成.md) **§9.6** |
 
 ### 0.9 C64 展开（BFF · sender 短名别名）
 
@@ -437,7 +437,7 @@
 | -- | ---- |
 | 脚本 | `skstudio/frontend/scripts/ga_scope_dq_smoke.mjs` |
 | Hard | scope 无 `execution_footprint`；DQ 有 `overall`/`logic_status`；Chrome 时 tool 含 `governance_scope`/`governance_goal_dq` |
-| 签收表 | [SHIP-三件套](./hermes-profiles/governance-assistant/SHIP-三件套.md) 冒烟行 · [PC-PLAN-signoff](./hermes-profiles/governance-assistant/PC-PLAN-signoff.md) scope/DQ 行 |
+| 签收表 | [SHIP-三件套](../../platform_docs/integration/hermes-skstudio/profiles/governance-assistant/SHIP-三件套.md) 冒烟行 · [PC-PLAN-signoff](../../platform_docs/integration/hermes-skstudio/profiles/governance-assistant/PC-PLAN-signoff.md) scope/DQ 行 |
 
 ### 0.11 C65 Agent 展开（v0.1.48 · **与 v29.00.07 同发**）
 
@@ -912,7 +912,7 @@ recipients -= 本轮同意落库的调用方（sender）
 | **M1** | C13 `shell` + C14 `assignee_username` + C15/`patch_phase` + OpenAPI/Hermes + A 竖切 | PC-API-* · PC-T01 A |
 | **M2** | B + 拒绝 | PC-T01 B/R |
 | **M3** | 签收全勾 · 入口文档收口 · 可选 eval | PC-T01 全绿 |
-| **M4** | **PC-NOTIFY**：`notify_project_ready` + inform 投递 + 深链 | PC-NOTIFY-* · [PC-NOTIFY-signoff](./hermes-profiles/governance-assistant/PC-NOTIFY-signoff.md) |
+| **M4** | **PC-NOTIFY**：`notify_project_ready` + inform 投递 + 深链 | PC-NOTIFY-* · [PC-NOTIFY-signoff](../../platform_docs/integration/hermes-skstudio/profiles/governance-assistant/PC-NOTIFY-signoff.md) |
 | **M5** | **PC-BOUNDARY**：启动签收（PM）+ 结项 E1 前置 · skill/PC-T01 | PC-STATIC-04 · PC-T01 边界步 · **无**新 API |
 | **M6-0** | Harness：schema assert · fingerprint · confirmation markdown · C31/C32/C34 | PC-PLAN-01～03 |
 | **M6-1a** | Plan+Run 表 · `propose_plan` / `revise_plan` · 服务端出表 · 无写权 blocked | PC-PLAN-06 + propose/revise API |
@@ -1005,7 +1005,7 @@ BFF 在 `_create_project` 后读 GE graph（或 create 返回体）填充；**�
 
 ### 4.6.1 GA 建项与 Web 对齐（C65 · v29.00.07 · Normative）
 
-> 真源细则：[release-v29.00.07.md](./migration/release-v29.00.07.md)
+> 真源细则：[release-v29.00.07.md](../../platform_docs/migration/release-v29.00.07.md)
 
 | # | 规则 |
 | - | ---- |
@@ -1372,14 +1372,14 @@ PC 共商建/补完整执行图时，Agent **可见且可调**的写图相关入
 | PC-STATIC-03 | tool 文案区分 `patch_phase` vs `patch_phase_window`；含 `notify_project_ready`；含 propose/commit |
 | PC-STATIC-04 | SKILL/本文件：C23–C28 · §3.11 · 「禁动」允许边界 prereq · 示例 Plan 含 boundary |
 | PC-STATIC-05 | C29–C38 · §3.4 Plan · 表格确认单 · 禁自由文落库 |
-| PC-BD-01～05 | 读图：基线无边 vs M5 样例有 PM 启动签收 + E1（见 [PC-BOUNDARY-signoff](./hermes-profiles/governance-assistant/PC-BOUNDARY-signoff.md)） |
+| PC-BD-01～05 | 读图：基线无边 vs M5 样例有 PM 启动签收 + E1（见 [PC-BOUNDARY-signoff](../../platform_docs/integration/hermes-skstudio/profiles/governance-assistant/PC-BOUNDARY-signoff.md)） |
 | PC-BD-C1～C5 | Chrome 定义 tab：确认启动 / 结项复盘前置签收可见 |
 
 ### 5.3 层 C · PC-T01 / PC-NOTIFY / PC-BOUNDARY / PC-PLAN
 
-- 建图 + **M5 边界**：[PC-T01-signoff.md](./hermes-profiles/governance-assistant/PC-T01-signoff.md)  
-- 通知：[PC-NOTIFY-signoff.md](./hermes-profiles/governance-assistant/PC-NOTIFY-signoff.md)  
-- **M5 系统竖切**：[PC-BOUNDARY-signoff.md](./hermes-profiles/governance-assistant/PC-BOUNDARY-signoff.md)（读图 + Chrome + GA create/enrich_shell）  
+- 建图 + **M5 边界**：[PC-T01-signoff.md](../../platform_docs/integration/hermes-skstudio/profiles/governance-assistant/PC-T01-signoff.md)  
+- 通知：[PC-NOTIFY-signoff.md](../../platform_docs/integration/hermes-skstudio/profiles/governance-assistant/PC-NOTIFY-signoff.md)  
+- **M5 系统竖切**：[PC-BOUNDARY-signoff.md](../../platform_docs/integration/hermes-skstudio/profiles/governance-assistant/PC-BOUNDARY-signoff.md)（读图 + Chrome + GA create/enrich_shell）  
 - **M6-1a DoD**：propose/revise + PC-PLAN-06  
 - **M6-1b DoD**：PC-PLAN-01～09 CI 绿（§4.9.8）；对话竖切属 M6-2  
 - **M6-2**：`PC-PLAN-signoff.md` + SKILL 改口 + 门禁  
@@ -1401,7 +1401,7 @@ PC 共商建/补完整执行图时，Agent **可见且可调**的写图相关入
 - [x] M2：PC-T01 B + R  
 - [x] M3：PC-T01 全勾；入口文档收口  
 - [x] M4：PC-NOTIFY-01～04 + PC-NOTIFY 竖切；GA 仍无 inform toolset  
-- [x] **M5**：§3.11 写入 SKILL · PC-STATIC-04 · PC-T01 边界步 · **[PC-BOUNDARY](./hermes-profiles/governance-assistant/PC-BOUNDARY-signoff.md)** 层 A/B/C/D 绿（create + enrich_shell）  
+- [x] **M5**：§3.11 写入 SKILL · PC-STATIC-04 · PC-T01 边界步 · **[PC-BOUNDARY](../../platform_docs/integration/hermes-skstudio/profiles/governance-assistant/PC-BOUNDARY-signoff.md)** 层 A/B/C/D 绿（create + enrich_shell）  
 - [x] **M6-0**：Plan schema assert（C31/C32/C34）+ fingerprint + markdown · `test_ga_project_create_plan.py`  
 - [x] **M6-1a**：Plan+Run 表 · propose/revise · PC-PLAN-06  
 - [x] **M6-1b**：commit 执行器 · **PC-PLAN-04/05/07～09 CI 绿**（§4.9）  
@@ -1458,7 +1458,7 @@ PC 共商建/补完整执行图时，Agent **可见且可调**的写图相关入
 | v0.1.44 | 2026-08-01 | **C62-M2**：Skill/SOUL **0.5.6** · 纯文本深链红线 · 样例 `wecom:example` · profile 测 · 同发纪律：install 与冒烟同 M3 |
 | v0.1.45 | 2026-08-01 | **C62-M3 / C62 现网**：tag **v26.11.41** · install 0.5.6 · PC-PW-C62 hard+soft PASS（`PC-PW-C62-202608011735` · validate=1 · skill 17/17 · `/execution/projects/15f27f8e-…?tab=define` · GE active）· DOC-SYNC 全绿 |
 | v0.1.46 | 2026-08-01 | **C63** 运维卫生 + **C64** sender 短名别名（OpenAPI **0.2.6** · PC-ALIAS） + scope/DQ 短冒烟脚本（修订表曾误标 C65） |
-| v0.1.47 | 2026-08-23 | **C65 规格**：§4.6.1 GA/Web 建项同路径 · [release-v29.00.07](./migration/release-v29.00.07.md) · I4 更新 |
+| v0.1.47 | 2026-08-23 | **C65 规格**：§4.6.1 GA/Web 建项同路径 · [release-v29.00.07](../../platform_docs/migration/release-v29.00.07.md) · I4 更新 |
 | v0.1.48 | 2026-08-23 | **C65 Agent 文档齐**：Skill **0.5.7**（§C65 + 话术表）· SOUL/README/duplicate · eval C65-AGENT · §0.11 · **附录 K 评级** |
 | v0.1.49 | 2026-08-23 | **C65-M1 落地**：`ga_structure_mutate._create_project` → `create_project_with_note` · GA-PC-K27-T01～T03 · GE-T47（`test_ga_project_plan_k27.py`）pytest 绿 |
 
@@ -1646,7 +1646,7 @@ PC 共商建/补完整执行图时，Agent **可见且可调**的写图相关入
 
 **残留风险更新**：P3/P6 已由 §4.9.4 / §4.9.6 消化；P1 靠 M6-1 门禁落地验证。
 
-**下一步**：install sync skill **0.3.0** + gateway；勾 [PC-PLAN-signoff](./hermes-profiles/governance-assistant/PC-PLAN-signoff.md) 层 C 对话竖切（enrich + create）。
+**下一步**：install sync skill **0.3.0** + gateway；勾 [PC-PLAN-signoff](../../platform_docs/integration/hermes-skstudio/profiles/governance-assistant/PC-PLAN-signoff.md) 层 C 对话竖切（enrich + create）。
 
 ---
 
