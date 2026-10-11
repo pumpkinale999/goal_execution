@@ -1,5 +1,7 @@
 # goal_execution 文档
 
+> **跨仓链接说明**：本目录文档含跨仓引用（`../../platform_docs/`、`../其他项目/docs/`）。本地 clone 全部项目仓到同一父目录方可跳转；GitHub 单仓渲染时跨仓链接可能失效，请按下方索引浏览。
+
 goal_execution（目标与执行 · GE）项目文档。
 
 ## 文档列表
